@@ -198,7 +198,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## 👥 Authors
 
-- Your Name - Initial work
+- [Dhruv0306](https://github.com/Dhruv0306) - Initial work
 
 ## 🙏 Acknowledgments
 
