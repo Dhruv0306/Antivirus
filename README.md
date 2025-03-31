@@ -71,7 +71,7 @@ antivirus/
    ```bash
    npm start
    ```
-4. Frontend will be available at `http://localhost:3000`
+4. Frontend will be available at `http://localhost:5000`
 
 ## 🔧 Configuration
 
