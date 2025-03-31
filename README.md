@@ -5,12 +5,13 @@ A full-stack antivirus application built with Spring Boot (Backend) and React (F
 ## 🚀 Project Overview
 
 This project implements a comprehensive antivirus solution with the following key features:
-- Real-time file scanning
-- Quarantine management
-- System protection
-- Scan history tracking
-- User-friendly dashboard
-- File analysis and reporting
+- Real-time file scanning and monitoring
+- Quarantine management system
+- System protection and security
+- Scan history tracking and reporting
+- User-friendly dashboard interface
+- File analysis and threat detection
+- Database-driven virus signature management
 
 ## 🛠️ Tech Stack
 
@@ -19,23 +20,55 @@ This project implements a comprehensive antivirus solution with the following ke
 - **Database**: H2 Database
 - **Build Tool**: Maven
 - **Java Version**: 17+
+- **Key Dependencies**:
+  - Spring Web
+  - Spring Data JPA
+  - Spring Security
+  - H2 Database
+  - Lombok
+  - JUnit 5
 
 ### Frontend
 - **Framework**: React.js
 - **State Management**: React Hooks
 - **UI Library**: Material-UI
 - **Build Tool**: npm/yarn
+- **Key Dependencies**:
+  - React Router
+  - Axios
+  - Material-UI
+  - React Query
+  - Jest & React Testing Library
 
 ## 📁 Project Structure
 
 ```
 antivirus/
-├── src/                    # Backend source code
-├── frontend/              # Frontend React application
-├── quarantine/            # Quarantine storage
-├── logs/                  # Application logs
-├── flowchart/            # Project documentation
-└── pom.xml               # Maven configuration
+├── src/
+│   ├── main/
+│   │   ├── java/com/antivirus/
+│   │   │   ├── config/         # Configuration classes
+│   │   │   ├── controller/     # REST controllers
+│   │   │   ├── model/          # Data models
+│   │   │   ├── repository/     # JPA repositories
+│   │   │   ├── service/        # Business logic
+│   │   │   └── util/           # Utility classes
+│   │   └── resources/
+│   │       ├── application.properties
+│   │       └── static/         # Static resources
+│   └── test/
+│       └── java/com/antivirus/ # Test classes
+├── frontend/
+│   ├── src/
+│   │   ├── components/         # React components
+│   │   ├── pages/             # Page components
+│   │   ├── services/          # API services
+│   │   ├── utils/             # Utility functions
+│   │   └── App.js             # Main App component
+│   └── public/                # Static assets
+├── quarantine/                # Quarantine storage
+├── logs/                      # Application logs
+└── flowchart/                # Project documentation
 ```
 
 ## 🚀 Getting Started
@@ -57,6 +90,7 @@ antivirus/
    mvn spring-boot:run
    ```
 4. Backend will be available at `http://localhost:8080`
+5. H2 Console will be available at `http://localhost:8080/h2-console`
 
 ### Frontend Setup
 1. Navigate to the frontend directory:
@@ -78,10 +112,12 @@ antivirus/
 ### Backend Configuration
 - Database configuration: `src/main/resources/application.properties`
 - Logging configuration: `src/main/resources/logback.xml`
+- Security configuration: `src/main/java/com/antivirus/config/SecurityConfig.java`
 
 ### Frontend Configuration
 - API endpoint configuration: `frontend/src/config.js`
 - Environment variables: `frontend/.env`
+- Theme configuration: `frontend/src/theme.js`
 
 ## 📝 Development Guidelines
 
@@ -109,23 +145,34 @@ antivirus/
 
 ## 🔍 Key Features Implementation
 
-### File Scanning
-- Real-time file monitoring
-- Signature-based detection
-- Heuristic analysis
-- File quarantine system
+### File Scanning System
+- Real-time file monitoring using Java NIO
+- Signature-based detection using virus database
+- Heuristic analysis for unknown threats
+- File quarantine system with isolation
+- Scan history tracking and reporting
 
-### Dashboard
-- Real-time system status
-- Scan history
-- Quarantine management
+### Dashboard Features
+- Real-time system status monitoring
+- Scan history visualization
+- Quarantine management interface
 - System health metrics
+- Threat detection statistics
+
+### Security Features
+- Role-based access control
+- Secure file handling
+- Quarantine isolation
+- API authentication
+- Session management
 
 ## 📊 Logging and Monitoring
 
 - Application logs: `logs/` directory
 - Scan history: `scan_history.log`
 - Database logs: `antivirus_db.trace.db`
+- Performance metrics: Prometheus integration
+- Health checks: Actuator endpoints
 
 ## 🔒 Security Considerations
 
@@ -133,6 +180,9 @@ antivirus/
 - Quarantine isolation
 - API authentication
 - Secure file handling
+- Input validation
+- XSS protection
+- CSRF protection
 
 ## 🤝 Contributing
 
