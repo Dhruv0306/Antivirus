@@ -4,7 +4,7 @@ A full-stack antivirus application built with Spring Boot (Backend) and React (F
 
 ## 🚀 Project Overview
 
-This project implements a comprehensive antivirus solution with the following key features:
+This project implements a comprehensive antivirus solution following the X.800 security architecture standard, with the following key features:
 - Real-time file scanning and monitoring
 - Quarantine management system
 - System protection and security
