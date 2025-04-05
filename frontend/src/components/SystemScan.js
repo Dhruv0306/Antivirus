@@ -26,8 +26,88 @@ import {
   Error as ErrorIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
+import { styled } from '@mui/material/styles';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8080/api/antivirus';
+
+// Styled components with light theme
+const StyledPaper = styled(Paper)(({ theme }) => ({
+  backgroundColor: 'var(--background-paper)',
+  color: 'var(--text-primary)',
+  border: '1px solid var(--border-main)',
+  borderRadius: 'var(--border-radius-medium)',
+  padding: 'var(--spacing-lg)',
+  transition: 'all 0.2s ease-in-out',
+  '&:hover': {
+    borderColor: 'var(--primary-main)',
+    boxShadow: 'var(--shadow-medium)'
+  }
+}));
+
+const StyledButton = styled(Button)(({ theme, variant }) => ({
+  borderRadius: 'var(--border-radius-medium)',
+  padding: '8px 24px',
+  fontWeight: 600,
+  textTransform: 'none',
+  ...(variant === 'contained' ? {
+    backgroundColor: 'var(--button-primary)',
+    color: 'var(--button-text)',
+    '&:hover': {
+      backgroundColor: 'var(--primary-dark)',
+      boxShadow: 'var(--shadow-small)'
+    }
+  } : {
+    backgroundColor: 'var(--primary-transparent)',
+    color: 'var(--primary-main)',
+    '&:hover': {
+      backgroundColor: 'var(--primary-transparent-hover)'
+    }
+  })
+}));
+
+const StyledListItem = styled(ListItem)(({ theme }) => ({
+  borderRadius: 'var(--border-radius-medium)',
+  padding: 'var(--spacing-md)',
+  marginBottom: 'var(--spacing-sm)',
+  backgroundColor: 'var(--background-paper)',
+  border: '1px solid var(--border-main)',
+  '&:hover': {
+    backgroundColor: 'var(--primary-transparent)',
+    borderColor: 'var(--primary-main)'
+  }
+}));
+
+const StyledProgress = styled(LinearProgress)(({ theme }) => ({
+  height: 8,
+  borderRadius: 'var(--border-radius-full)',
+  backgroundColor: 'var(--background-dark)',
+  '& .MuiLinearProgress-bar': {
+    backgroundColor: 'var(--primary-main)',
+    borderRadius: 'var(--border-radius-full)'
+  }
+}));
+
+const StatusIcon = styled(Box)(({ status }) => ({
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: 40,
+  height: 40,
+  borderRadius: 'var(--border-radius-full)',
+  marginRight: 'var(--spacing-md)',
+  ...(status === 'success' && {
+    backgroundColor: 'var(--success-transparent)',
+    color: 'var(--success-main)'
+  }),
+  ...(status === 'warning' && {
+    backgroundColor: 'var(--warning-transparent)',
+    color: 'var(--warning-main)'
+  }),
+  ...(status === 'error' && {
+    backgroundColor: 'var(--error-transparent)',
+    color: 'var(--error-main)'
+  })
+}));
 
 function SystemScan() {
   const [scanning, setScanning] = useState(false);
@@ -142,176 +222,152 @@ function SystemScan() {
 
   return (
     <Box>
-      <Typography variant="h4" gutterBottom sx={{ mb: 4 }}>
+      <Typography 
+        variant="h4" 
+        gutterBottom 
+        sx={{ 
+          mb: 4,
+          color: 'var(--text-primary)',
+          fontWeight: 600 
+        }}
+      >
         System Scan
       </Typography>
 
       <Grid container spacing={3}>
         <Grid item xs={12}>
-          <Paper sx={{ p: 3 }}>
-            <Box display="flex" alignItems="center" gap={2}>
-              <Button
+          <StyledPaper>
+            <Box display="flex" alignItems="center" gap={2} mb={3}>
+              <StyledButton
                 variant="contained"
-                color="primary"
+                startIcon={scanning ? <CircularProgress size={20} color="inherit" /> : <SecurityIcon />}
                 onClick={handleScan}
                 disabled={scanning}
-                startIcon={<SecurityIcon />}
               >
-                {scanning ? (
-                  <>
-                    <CircularProgress size={24} sx={{ mr: 1 }} />
-                    Scanning...
-                  </>
-                ) : (
-                  'Start System Scan'
-                )}
-              </Button>
+                {scanning ? 'Scanning...' : 'Start System Scan'}
+              </StyledButton>
+              
               {scanning && (
-                <Button
-                  variant="contained"
-                  color="secondary"
-                  onClick={handleStop}
+                <StyledButton
+                  variant="outlined"
                   startIcon={<StopIcon />}
+                  onClick={handleStop}
+                  color="error"
                 >
                   Stop Scan
-                </Button>
+                </StyledButton>
               )}
             </Box>
 
-            {needsElevation && (
-              <Alert 
-                severity="warning" 
-                sx={{ mt: 2 }}
-                action={
-                  <Button 
-                    color="inherit" 
-                    size="small"
-                    onClick={() => {
-                      // Open instructions in a new window
-                      window.open('https://support.microsoft.com/en-us/windows/how-to-run-a-program-as-an-administrator-in-windows-10-11-a98c42f8-e5a3-4e1f-96b5-e32bed99a424', '_blank');
-                    }}
-                  >
-                    Learn More
-                  </Button>
-                }
-              >
-                <AlertTitle>Administrator Privileges Required</AlertTitle>
-                To perform a full system scan, please:
-                <ol style={{ marginTop: '8px', marginBottom: '0' }}>
-                  <li>Close this application</li>
-                  <li>Right-click the application shortcut</li>
-                  <li>Select "Run as administrator"</li>
-                  <li>Restart the scan</li>
-                </ol>
-              </Alert>
+            {scanning && (
+              <Box mb={3}>
+                <Typography variant="body2" color="textSecondary" gutterBottom>
+                  {currentActivity || 'Scanning system...'}
+                </Typography>
+                <StyledProgress variant="determinate" value={progress} />
+              </Box>
             )}
 
-            {error && !needsElevation && (
-              <Alert severity="error" sx={{ mt: 2 }}>
+            {error && (
+              <Alert 
+                severity={needsElevation ? "warning" : "error"}
+                sx={{ 
+                  mb: 3,
+                  borderRadius: 'var(--border-radius-medium)',
+                  backgroundColor: needsElevation ? 'var(--warning-transparent)' : 'var(--error-transparent)',
+                  color: needsElevation ? 'var(--warning-main)' : 'var(--error-main)',
+                  border: '1px solid',
+                  borderColor: needsElevation ? 'var(--warning-main)' : 'var(--error-main)'
+                }}
+              >
+                <AlertTitle>{needsElevation ? "Administrator Privileges Required" : "Error"}</AlertTitle>
                 {error}
               </Alert>
             )}
 
-            {scanning && (
-              <Box sx={{ width: '100%', mt: 2 }}>
-                <LinearProgress variant="determinate" value={progress} />
-                <Typography variant="body2" color="text.secondary" align="center" sx={{ mt: 1 }}>
-                  {progress}% Complete
+            {scanResults && (
+              <Box>
+                <Typography variant="h6" gutterBottom sx={{ color: 'var(--text-primary)', fontWeight: 600 }}>
+                  Scan Results
                 </Typography>
-              </Box>
-            )}
-          </Paper>
-        </Grid>
+                
+                {calculateScanSummary(scanResults) && (
+                  <Grid container spacing={2} sx={{ mb: 3 }}>
+                    <Grid item xs={3}>
+                      <StyledPaper>
+                        <StatusIcon status="success">
+                          <CheckCircleIcon />
+                        </StatusIcon>
+                        <Typography variant="h6">{calculateScanSummary(scanResults).clean}</Typography>
+                        <Typography variant="body2" color="textSecondary">Clean Files</Typography>
+                      </StyledPaper>
+                    </Grid>
+                    <Grid item xs={3}>
+                      <StyledPaper>
+                        <StatusIcon status="error">
+                          <ErrorIcon />
+                        </StatusIcon>
+                        <Typography variant="h6">{calculateScanSummary(scanResults).threats}</Typography>
+                        <Typography variant="body2" color="textSecondary">Threats Found</Typography>
+                      </StyledPaper>
+                    </Grid>
+                    <Grid item xs={3}>
+                      <StyledPaper>
+                        <StatusIcon status="warning">
+                          <WarningIcon />
+                        </StatusIcon>
+                        <Typography variant="h6">{calculateScanSummary(scanResults).errors}</Typography>
+                        <Typography variant="body2" color="textSecondary">Scan Errors</Typography>
+                      </StyledPaper>
+                    </Grid>
+                    <Grid item xs={3}>
+                      <StyledPaper>
+                        <StatusIcon>
+                          <FileIcon />
+                        </StatusIcon>
+                        <Typography variant="h6">{calculateScanSummary(scanResults).totalFiles}</Typography>
+                        <Typography variant="body2" color="textSecondary">Total Files</Typography>
+                      </StyledPaper>
+                    </Grid>
+                  </Grid>
+                )}
 
-        {scanResults && Array.isArray(scanResults) && scanResults.length > 0 && (
-          <>
-            <Grid item xs={12} md={6}>
-              <Paper sx={{ p: 3 }}>
-                <Typography variant="h6" gutterBottom>
-                  Scan Summary
-                </Typography>
                 <List>
-                  {(() => {
-                    const summary = calculateScanSummary(scanResults);
-                    return (
-                      <>
-                        <ListItem>
-                          <ListItemIcon>
-                            <FileIcon />
-                          </ListItemIcon>
-                          <ListItemText
-                            primary="Total Files Processed"
-                            secondary={summary.totalFiles}
-                          />
-                        </ListItem>
-                        <ListItem>
-                          <ListItemIcon>
-                            <ErrorIcon color={summary.threats > 0 ? "error" : "success"} />
-                          </ListItemIcon>
-                          <ListItemText
-                            primary="Threats Found"
-                            secondary={summary.threats}
-                          />
-                        </ListItem>
-                        <ListItem>
-                          <ListItemIcon>
-                            <WarningIcon color={summary.errors > 0 ? "warning" : "success"} />
-                          </ListItemIcon>
-                          <ListItemText
-                            primary="Errors/Skipped"
-                            secondary={summary.errors}
-                          />
-                        </ListItem>
-                        <ListItem>
-                          <ListItemIcon>
-                            <CheckCircleIcon color="success" />
-                          </ListItemIcon>
-                          <ListItemText
-                            primary="Clean Files"
-                            secondary={summary.clean}
-                          />
-                        </ListItem>
-                      </>
-                    );
-                  })()}
-                </List>
-              </Paper>
-            </Grid>
-
-            <Grid item xs={12} md={6}>
-              <Paper sx={{ p: 3 }}>
-                <Typography variant="h6" gutterBottom>
-                  Scan Details
-                </Typography>
-                <List sx={{ maxHeight: 400, overflow: 'auto' }}>
                   {scanResults.map((result, index) => (
-                    <ListItem key={index}>
-                      <ListItemIcon>
-                        {result.infected ? (
-                          <ErrorIcon color="error" />
-                        ) : result.threatType === 'ERROR' ? (
-                          <WarningIcon color="warning" />
-                        ) : (
-                          <CheckCircleIcon color="success" />
-                        )}
-                      </ListItemIcon>
-                      <ListItemText
-                        primary={result.filePath}
-                        secondary={
-                          result.infected 
-                            ? `Threat: ${result.threatType} - ${result.threatDetails}`
-                            : result.threatType === 'ERROR'
-                              ? result.threatDetails
-                              : 'Clean'
-                        }
-                      />
-                    </ListItem>
+                    <React.Fragment key={index}>
+                      <StyledListItem>
+                        <ListItemIcon>
+                          {result.infected ? (
+                            <ErrorIcon color="error" />
+                          ) : result.threatType === 'ERROR' ? (
+                            <WarningIcon color="warning" />
+                          ) : (
+                            <CheckCircleIcon color="success" />
+                          )}
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={result.filePath}
+                          secondary={result.threatDetails || 'No threats detected'}
+                          sx={{
+                            '& .MuiListItemText-primary': {
+                              color: 'var(--text-primary)',
+                              fontWeight: 500
+                            },
+                            '& .MuiListItemText-secondary': {
+                              color: result.infected ? 'var(--error-main)' : 
+                                     result.threatType === 'ERROR' ? 'var(--warning-main)' : 
+                                     'var(--text-secondary)'
+                            }
+                          }}
+                        />
+                      </StyledListItem>
+                    </React.Fragment>
                   ))}
                 </List>
-              </Paper>
-            </Grid>
-          </>
-        )}
+              </Box>
+            )}
+          </StyledPaper>
+        </Grid>
       </Grid>
     </Box>
   );

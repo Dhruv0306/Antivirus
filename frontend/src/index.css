@@ -1,19 +1,191 @@
+/* Import Inter font */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+/* CSS Variables */
+:root {
+  /* Primary colors */
+  --primary-main: #0068ff;
+  --primary-light: #33EEFF;
+  --primary-dark: #00B8CC;
+  --primary-contrast: #ffffff;
+  --primary-transparent: rgba(0, 229, 255, 0.1);
+  --primary-transparent-hover: rgba(0, 229, 255, 0.2);
+
+  /* Secondary colors */
+  --secondary-main: #00BFA5;
+  --secondary-light: #33CCBB;
+  --secondary-dark: #008C7A;
+  --secondary-contrast: #001324;
+
+  /* Background colors */
+  --background-default: #ffffff;
+  --background-paper: #ffffff;
+  --background-dark: #ffffff;
+  --background-card: #ffffff;
+
+  /* Text colors */
+  --text-primary: #00aaff;
+  --text-secondary: #199fe3;
+  --text-disabled: #65b3d7;
+
+  /* Status colors */
+  --success-main: #00E676;
+  --success-light: #33EB91;
+  --success-dark: #00B25C;
+  --success-transparent: rgba(0, 230, 118, 0.1);
+  
+  --error-main: #FF1744;
+  --error-light: #FF4569;
+  --error-dark: #CC0033;
+  --error-transparent: rgba(255, 23, 68, 0.1);
+  
+  --warning-main: #FFA726;
+  --warning-light: #FFB851;
+  --warning-dark: #CC861E;
+  --warning-transparent: rgba(255, 167, 38, 0.1);
+  
+  --info-main: #00E5FF;
+  --info-light: #33EEFF;
+  --info-dark: #00B8CC;
+  --info-transparent: rgba(0, 229, 255, 0.1);
+
+  /* Border colors */
+  --border-main: rgba(0, 0, 0, 0.1);
+  --border-light: rgba(255, 255, 255, 0.2);
+  --border-dark: rgba(255, 255, 255, 0.05);
+
+  /* Input colors */
+  --input-background: #ffffff;
+  --input-border: rgba(255, 255, 255, 0.1);
+  --input-focus: #00E5FF;
+  --input-placeholder: #546E7A;
+
+  /* Button colors */
+  --button-primary: #00E5FF;
+  --button-secondary: #00B8CC;
+  --button-text: #001324;
+
+  /* Chart colors */
+  --chart-primary: #00E5FF;
+  --chart-secondary: #00BFA5;
+  --chart-success: #00E676;
+  --chart-error: #FF1744;
+  --chart-warning: #FFA726;
+
+  /* Spacing */
+  --spacing-xs: 0.25rem;   /* 4px */
+  --spacing-sm: 0.5rem;    /* 8px */
+  --spacing-md: 1rem;      /* 16px */
+  --spacing-lg: 1.5rem;    /* 24px */
+  --spacing-xl: 2rem;      /* 32px */
+  --spacing-2xl: 2.5rem;   /* 40px */
+  --spacing-3xl: 3rem;     /* 48px */
+
+  /* Border radius */
+  --border-radius-none: 0;
+  --border-radius-small: 0.25rem;   /* 4px */
+  --border-radius-medium: 0.5rem;   /* 8px */
+  --border-radius-large: 1rem;      /* 16px */
+  --border-radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-none: none;
+  --shadow-small: 0 2px 4px rgba(0, 0, 0, 0.2);
+  --shadow-medium: 0 4px 6px rgba(0, 0, 0, 0.3);
+  --shadow-large: 0 10px 15px rgba(0, 0, 0, 0.4);
+  --shadow-xl: 0 20px 25px rgba(0, 229, 255, 0.1);
+
+  /* Typography */
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  
+  /* Font sizes */
+  --font-size-xs: 0.75rem;    /* 12px */
+  --font-size-sm: 0.875rem;   /* 14px */
+  --font-size-md: 1rem;       /* 16px */
+  --font-size-lg: 1.125rem;   /* 18px */
+  --font-size-xl: 1.25rem;    /* 20px */
+  --font-size-2xl: 1.5rem;    /* 24px */
+  --font-size-3xl: 1.875rem;  /* 30px */
+
+  /* Font weights */
+  --font-weight-light: 300;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  /* Line heights */
+  --line-height-tight: 1.25;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.75;
+}
+
+/* Base styles */
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  font-family: var(--font-family);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #121212;
+  background-color: var(--background-default);
+  color: var(--text-primary);
+  line-height: var(--line-height-normal);
 }
 
 code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
 }
 
-#root {
-  min-height: 100vh;
-  padding: 20px 0;
+/* Reset styles */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* Typography styles */
+h1, h2, h3, h4, h5, h6 {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+}
+
+p {
+  margin-bottom: var(--spacing-md);
+}
+
+/* Link styles */
+a {
+  color: var(--primary-main);
+  text-decoration: none;
+  transition: color 0.2s ease-in-out;
+}
+
+a:hover {
+  color: var(--primary-dark);
+}
+
+/* Focus styles */
+:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--primary-transparent);
+}
+
+/* Scrollbar styles */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--background-dark);
+  border-radius: var(--border-radius-full);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--primary-main);
+  border-radius: var(--border-radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary-dark);
 }

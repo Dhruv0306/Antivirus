@@ -24,6 +24,59 @@ import {
   Delete as DeleteIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
+import { styled } from '@mui/material/styles';
+
+// Styled components
+const StyledPaper = styled(Paper)(({ theme }) => ({
+  backgroundColor: 'var(--background-paper)',
+  color: 'var(--text-primary)',
+  border: '1px solid var(--border-main)',
+  borderRadius: 'var(--border-radius-medium)',
+  transition: 'all 0.2s ease-in-out',
+  '&:hover': {
+    borderColor: 'var(--primary-main)',
+    boxShadow: 'var(--shadow-large)'
+  }
+}));
+
+const StyledListItem = styled(ListItem)(({ theme }) => ({
+  borderRadius: 'var(--border-radius-small)',
+  '&:hover': {
+    backgroundColor: 'var(--background-dark)'
+  }
+}));
+
+const StyledSwitch = styled(Switch)(({ theme }) => ({
+  '& .MuiSwitch-switchBase.Mui-checked': {
+    color: 'var(--success-main)',
+    '& + .MuiSwitch-track': {
+      backgroundColor: 'var(--success-light)'
+    }
+  }
+}));
+
+const StyledChip = styled(Chip)(({ theme }) => ({
+  backgroundColor: 'var(--error-main)',
+  color: '#FFFFFF',
+  border: '1px solid var(--error-dark)',
+  '&:hover': {
+    backgroundColor: 'var(--error-dark)'
+  },
+  '& .MuiChip-deleteIcon': {
+    color: '#FFFFFF',
+    '&:hover': {
+      color: 'rgba(255, 255, 255, 0.7)'
+    }
+  }
+}));
+
+const StyledIconButton = styled(IconButton)(({ theme }) => ({
+  color: 'var(--warning-main)',
+  '&:hover': {
+    backgroundColor: 'var(--warning-transparent)',
+    color: 'var(--warning-dark)'
+  }
+}));
 
 function NetworkSecurity() {
   const [firewallEnabled, setFirewallEnabled] = useState(true);
@@ -90,152 +143,259 @@ function NetworkSecurity() {
 
   return (
     <Box>
-      <Typography variant="h4" gutterBottom sx={{ mb: 4 }}>
+      <Typography 
+        variant="h4" 
+        gutterBottom 
+        sx={{ 
+          mb: 4,
+          color: 'var(--text-primary)',
+          fontWeight: 600 
+        }}
+      >
         Network Security
       </Typography>
 
       {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
+        <Alert 
+          severity="error" 
+          sx={{ 
+            mb: 3,
+            backgroundColor: 'var(--error-main)',
+            color: '#FFFFFF',
+            '& .MuiAlert-icon': {
+              color: '#FFFFFF'
+            }
+          }}
+        >
           {error}
         </Alert>
       )}
 
       <Grid container spacing={3}>
         <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>
+          <StyledPaper sx={{ p: 3 }}>
+            <Typography 
+              variant="h6" 
+              gutterBottom
+              sx={{ 
+                color: 'var(--text-primary)',
+                fontWeight: 600 
+              }}
+            >
               Security Controls
             </Typography>
             <List>
-              <ListItem>
+              <StyledListItem>
                 <ListItemIcon>
-                  <SecurityIcon color={firewallEnabled ? "primary" : "disabled"} />
+                  <SecurityIcon sx={{ 
+                    color: firewallEnabled 
+                      ? 'var(--primary-main)' 
+                      : 'var(--text-disabled)' 
+                  }} />
                 </ListItemIcon>
                 <ListItemText
-                  primary="Firewall"
-                  secondary={firewallEnabled ? "Active protection enabled" : "Protection disabled"}
+                  primary={
+                    <Typography sx={{ color: 'var(--text-primary)' }}>
+                      Firewall
+                    </Typography>
+                  }
+                  secondary={
+                    <Typography sx={{ color: 'var(--text-secondary)' }}>
+                      {firewallEnabled ? "Active protection enabled" : "Protection disabled"}
+                    </Typography>
+                  }
                 />
                 <ListItemSecondaryAction>
                   <FormControlLabel
                     control={
-                      <Switch
+                      <StyledSwitch
                         checked={firewallEnabled}
                         onChange={handleFirewallToggle}
-                        color="primary"
                       />
                     }
                     label=""
                   />
                 </ListItemSecondaryAction>
-              </ListItem>
-              <ListItem>
+              </StyledListItem>
+              <StyledListItem>
                 <ListItemIcon>
-                  <WebIcon color={webProtectionEnabled ? "primary" : "disabled"} />
+                  <WebIcon sx={{ 
+                    color: webProtectionEnabled 
+                      ? 'var(--primary-main)' 
+                      : 'var(--text-disabled)' 
+                  }} />
                 </ListItemIcon>
                 <ListItemText
-                  primary="Web Protection"
-                  secondary={webProtectionEnabled ? "Browsing protection active" : "Protection disabled"}
+                  primary={
+                    <Typography sx={{ color: 'var(--text-primary)' }}>
+                      Web Protection
+                    </Typography>
+                  }
+                  secondary={
+                    <Typography sx={{ color: 'var(--text-secondary)' }}>
+                      {webProtectionEnabled ? "Browsing protection active" : "Protection disabled"}
+                    </Typography>
+                  }
                 />
                 <ListItemSecondaryAction>
                   <FormControlLabel
                     control={
-                      <Switch
+                      <StyledSwitch
                         checked={webProtectionEnabled}
                         onChange={handleWebProtectionToggle}
-                        color="primary"
                       />
                     }
                     label=""
                   />
                 </ListItemSecondaryAction>
-              </ListItem>
+              </StyledListItem>
             </List>
-          </Paper>
+          </StyledPaper>
         </Grid>
 
         <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>
+          <StyledPaper sx={{ p: 3 }}>
+            <Typography 
+              variant="h6" 
+              gutterBottom
+              sx={{ 
+                color: 'var(--text-primary)',
+                fontWeight: 600 
+              }}
+            >
               Network Status
             </Typography>
             <List>
-              <ListItem>
+              <StyledListItem>
                 <ListItemIcon>
-                  <WarningIcon color={networkStatus.threats > 0 ? "error" : "success"} />
+                  <WarningIcon sx={{ 
+                    color: networkStatus.threats > 0 
+                      ? 'var(--error-main)' 
+                      : 'var(--success-main)' 
+                  }} />
                 </ListItemIcon>
                 <ListItemText
-                  primary="Active Threats"
-                  secondary={networkStatus.threats}
+                  primary={
+                    <Typography sx={{ color: 'var(--text-primary)' }}>
+                      Active Threats
+                    </Typography>
+                  }
+                  secondary={
+                    <Typography sx={{ color: 'var(--text-secondary)' }}>
+                      {networkStatus.threats}
+                    </Typography>
+                  }
                 />
-              </ListItem>
-              <ListItem>
+              </StyledListItem>
+              <StyledListItem>
                 <ListItemIcon>
-                  <WebIcon />
+                  <WebIcon sx={{ color: 'var(--primary-main)' }} />
                 </ListItemIcon>
                 <ListItemText
-                  primary="Active Connections"
-                  secondary={networkStatus.connections}
+                  primary={
+                    <Typography sx={{ color: 'var(--text-primary)' }}>
+                      Active Connections
+                    </Typography>
+                  }
+                  secondary={
+                    <Typography sx={{ color: 'var(--text-secondary)' }}>
+                      {networkStatus.connections}
+                    </Typography>
+                  }
                 />
-              </ListItem>
-              <ListItem>
+              </StyledListItem>
+              <StyledListItem>
                 <ListItemIcon>
-                  <BlockIcon />
+                  <BlockIcon sx={{ color: 'var(--warning-main)' }} />
                 </ListItemIcon>
                 <ListItemText
-                  primary="Blocked Attempts"
-                  secondary={networkStatus.blockedAttempts}
+                  primary={
+                    <Typography sx={{ color: 'var(--text-primary)' }}>
+                      Blocked Attempts
+                    </Typography>
+                  }
+                  secondary={
+                    <Typography sx={{ color: 'var(--text-secondary)' }}>
+                      {networkStatus.blockedAttempts}
+                    </Typography>
+                  }
                 />
-              </ListItem>
+              </StyledListItem>
             </List>
-          </Paper>
+          </StyledPaper>
         </Grid>
 
         <Grid item xs={12}>
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>
+          <StyledPaper sx={{ p: 3 }}>
+            <Typography 
+              variant="h6" 
+              gutterBottom
+              sx={{ 
+                color: 'var(--text-primary)',
+                fontWeight: 600 
+              }}
+            >
               Blocked Domains
             </Typography>
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
               {blockedDomains && blockedDomains.map((domain) => (
-                <Chip
+                <StyledChip
                   key={domain}
                   label={domain}
                   onDelete={() => handleRemoveBlockedDomain(domain)}
-                  color="error"
                   variant="outlined"
                 />
               ))}
             </Box>
-          </Paper>
+          </StyledPaper>
         </Grid>
 
         <Grid item xs={12}>
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>
+          <StyledPaper sx={{ p: 3 }}>
+            <Typography 
+              variant="h6" 
+              gutterBottom
+              sx={{ 
+                color: 'var(--text-primary)',
+                fontWeight: 600 
+              }}
+            >
               Recent Connections
             </Typography>
             <List>
               {recentConnections.map((connection, index) => (
-                <ListItem key={index}>
+                <StyledListItem key={index}>
                   <ListItemIcon>
-                    {connection.secure ? <CheckCircleIcon color="success" /> : <WarningIcon color="warning" />}
+                    {connection.secure ? (
+                      <CheckCircleIcon sx={{ color: 'var(--success-main)' }} />
+                    ) : (
+                      <WarningIcon sx={{ color: 'var(--warning-main)' }} />
+                    )}
                   </ListItemIcon>
                   <ListItemText
-                    primary={connection.domain}
-                    secondary={`${connection.timestamp} - ${connection.protocol}`}
+                    primary={
+                      <Typography sx={{ color: 'var(--text-primary)' }}>
+                        {connection.domain}
+                      </Typography>
+                    }
+                    secondary={
+                      <Typography sx={{ color: 'var(--text-secondary)' }}>
+                        {connection.timestamp} - {connection.protocol}
+                      </Typography>
+                    }
                   />
                   <ListItemSecondaryAction>
-                    <IconButton
+                    <StyledIconButton
                       edge="end"
                       onClick={() => handleRemoveBlockedDomain(connection.domain)}
                     >
                       <BlockIcon />
-                    </IconButton>
+                    </StyledIconButton>
                   </ListItemSecondaryAction>
-                </ListItem>
+                </StyledListItem>
               ))}
             </List>
-          </Paper>
+          </StyledPaper>
         </Grid>
       </Grid>
     </Box>

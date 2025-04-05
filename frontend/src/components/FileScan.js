@@ -15,6 +15,40 @@ import {
 } from '@mui/material';
 import { CloudUpload as CloudUploadIcon } from '@mui/icons-material';
 import axios from 'axios';
+import { styled } from '@mui/material/styles';
+
+// Styled components
+const StyledPaper = styled(Paper)(({ theme }) => ({
+  backgroundColor: 'var(--background-paper)',
+  color: 'var(--text-primary)',
+  border: '1px solid var(--border-main)',
+  borderRadius: 'var(--border-radius-medium)',
+  transition: 'all 0.2s ease-in-out',
+  '&:hover': {
+    borderColor: 'var(--primary-main)',
+    boxShadow: 'var(--shadow-large)'
+  }
+}));
+
+const StyledButton = styled(Button)(({ theme }) => ({
+  backgroundColor: 'var(--button-primary)',
+  color: 'var(--button-text)',
+  '&:hover': {
+    backgroundColor: 'var(--primary-dark)',
+    boxShadow: 'var(--shadow-medium)'
+  }
+}));
+
+const StyledTableCell = styled(TableCell)(({ theme }) => ({
+  color: 'var(--text-primary)',
+  borderBottom: '1px solid var(--border-main)'
+}));
+
+const StyledTableRow = styled(TableRow)(({ theme }) => ({
+  '&:hover': {
+    backgroundColor: 'var(--background-dark)'
+  }
+}));
 
 function FileScan() {
   const [selectedFile, setSelectedFile] = useState(null);
@@ -75,14 +109,22 @@ function FileScan() {
 
   return (
     <Box sx={{ width: '100%', maxWidth: 1200, margin: '0 auto', p: 3 }}>
-      <Typography variant="h4" gutterBottom sx={{ mb: 4 }}>
+      <Typography 
+        variant="h4" 
+        gutterBottom 
+        sx={{ 
+          mb: 4,
+          color: 'var(--text-primary)',
+          fontWeight: 600 
+        }}
+      >
         File Scan
       </Typography>
 
-      <Paper sx={{ p: 3, mb: 3 }}>
+      <StyledPaper sx={{ p: 3, mb: 3 }}>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Button
+            <StyledButton
               variant="contained"
               component="label"
               startIcon={<CloudUploadIcon />}
@@ -95,74 +137,112 @@ function FileScan() {
                 onChange={handleFileSelect}
                 accept="*/*"
               />
-            </Button>
+            </StyledButton>
             {selectedFile && (
-              <Typography variant="body1" sx={{ flexGrow: 1, wordBreak: 'break-all' }}>
+              <Typography 
+                variant="body1" 
+                sx={{ 
+                  flexGrow: 1, 
+                  wordBreak: 'break-all',
+                  color: 'var(--text-secondary)' 
+                }}
+              >
                 Selected: {selectedFile.name}
               </Typography>
             )}
           </Box>
 
-          <Button
+          <StyledButton
             variant="contained"
-            color="primary"
             onClick={handleScan}
             disabled={!selectedFile || scanning}
             sx={{ alignSelf: 'flex-start' }}
           >
             {scanning ? (
               <>
-                <CircularProgress size={24} sx={{ mr: 1 }} color="inherit" />
+                <CircularProgress 
+                  size={24} 
+                  sx={{ 
+                    mr: 1,
+                    color: 'var(--primary-light)' 
+                  }} 
+                />
                 Scanning...
               </>
             ) : (
               'Scan File'
             )}
-          </Button>
+          </StyledButton>
 
           {error && (
-            <Alert severity="error" sx={{ mt: 2 }}>
+            <Alert 
+              severity="error" 
+              sx={{ 
+                mt: 2,
+                backgroundColor: 'var(--error-main)',
+                color: '#FFFFFF',
+                '& .MuiAlert-icon': {
+                  color: '#FFFFFF'
+                }
+              }}
+            >
               {error}
             </Alert>
           )}
         </Box>
-      </Paper>
+      </StyledPaper>
 
       {scanResult && (
-        <Paper sx={{ p: 3 }}>
-          <Typography variant="h6" gutterBottom>
+        <StyledPaper sx={{ p: 3 }}>
+          <Typography 
+            variant="h6" 
+            gutterBottom
+            sx={{ 
+              color: 'var(--text-primary)',
+              fontWeight: 600 
+            }}
+          >
             Scan Results
           </Typography>
           <TableContainer>
             <Table>
               <TableHead>
-                <TableRow>
-                  <TableCell>File Name</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>Threat Type</TableCell>
-                  <TableCell>Details</TableCell>
-                </TableRow>
+                <StyledTableRow>
+                  <StyledTableCell>File Name</StyledTableCell>
+                  <StyledTableCell>Status</StyledTableCell>
+                  <StyledTableCell>Threat Type</StyledTableCell>
+                  <StyledTableCell>Details</StyledTableCell>
+                </StyledTableRow>
               </TableHead>
               <TableBody>
-                <TableRow>
-                  <TableCell sx={{ maxWidth: 300, wordBreak: 'break-all' }}>
+                <StyledTableRow>
+                  <StyledTableCell sx={{ maxWidth: 300, wordBreak: 'break-all' }}>
                     {selectedFile.name}
-                  </TableCell>
-                  <TableCell>
+                  </StyledTableCell>
+                  <StyledTableCell>
                     <Alert
                       severity={scanResult.infected ? 'error' : 'success'}
-                      sx={{ display: 'inline-flex' }}
+                      sx={{ 
+                        display: 'inline-flex',
+                        backgroundColor: scanResult.infected 
+                          ? 'var(--error-main)' 
+                          : 'var(--success-main)',
+                        color: '#FFFFFF',
+                        '& .MuiAlert-icon': {
+                          color: '#FFFFFF'
+                        }
+                      }}
                     >
                       {scanResult.infected ? 'Infected' : 'Clean'}
                     </Alert>
-                  </TableCell>
-                  <TableCell>{scanResult.threatType || 'N/A'}</TableCell>
-                  <TableCell>{scanResult.threatDetails || 'No threats found'}</TableCell>
-                </TableRow>
+                  </StyledTableCell>
+                  <StyledTableCell>{scanResult.threatType || 'N/A'}</StyledTableCell>
+                  <StyledTableCell>{scanResult.threatDetails || 'No threats found'}</StyledTableCell>
+                </StyledTableRow>
               </TableBody>
             </Table>
           </TableContainer>
-        </Paper>
+        </StyledPaper>
       )}
     </Box>
   );

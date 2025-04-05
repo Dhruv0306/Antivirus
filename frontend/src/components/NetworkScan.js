@@ -36,11 +36,61 @@ import {
   Delete as DeleteIcon
 } from '@mui/icons-material';
 import axios from 'axios';
+import { styled } from '@mui/material/styles';
 
-// API base URL configuration
+// Styled components
+const StyledCard = styled(Card)(({ theme }) => ({
+  padding: 'var(--spacing-lg)',
+  backgroundColor: 'var(--background-paper)',
+  color: 'var(--text-primary)',
+  border: '1px solid var(--border-main)',
+  borderRadius: 'var(--border-radius-medium)',
+  transition: 'all 0.2s ease-in-out',
+  '&:hover': {
+    borderColor: 'var(--primary-main)',
+    boxShadow: 'var(--shadow-large)'
+  }
+}));
+
+const StyledButton = styled(Button)(({ theme }) => ({
+  backgroundColor: 'var(--button-primary)',
+  color: 'var(--button-text)',
+  '&:hover': {
+    backgroundColor: 'var(--primary-dark)',
+    boxShadow: 'var(--shadow-medium)'
+  }
+}));
+
+const StyledTextField = styled(TextField)(({ theme }) => ({
+  '& .MuiOutlinedInput-root': {
+    backgroundColor: 'var(--input-background)',
+    color: 'var(--text-primary)',
+    '& fieldset': {
+      borderColor: 'var(--input-border)'
+    },
+    '&:hover fieldset': {
+      borderColor: 'var(--primary-light)'
+    },
+    '&.Mui-focused fieldset': {
+      borderColor: 'var(--primary-main)'
+    }
+  },
+  '& .MuiInputLabel-root': {
+    color: 'var(--text-secondary)'
+  }
+}));
+
+const StyledChip = styled(Chip)(({ theme }) => ({
+  backgroundColor: 'var(--primary-main)',
+  color: 'var(--primary-contrast)',
+  '&:hover': {
+    backgroundColor: 'var(--primary-dark)'
+  }
+}));
+
+// API configuration
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8080/api/network-security';
 
-// Axios default configuration
 axios.defaults.withCredentials = true;
 axios.defaults.headers.common['Accept'] = 'application/json';
 axios.defaults.headers.common['Access-Control-Allow-Origin'] = 'http://localhost:5000';
@@ -189,222 +239,268 @@ function NetworkScan() {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Typography variant="h3" gutterBottom align="center" sx={{ color: 'white', mb: 4 }}>
+    <Box sx={{ p: 3, color: 'var(--text-primary)' }}>
+      <Typography 
+        variant="h3" 
+        gutterBottom 
+        align="center" 
+        sx={{ 
+          color: 'var(--text-primary)',
+          mb: 4,
+          fontWeight: 600
+        }}
+      >
         Network Security
       </Typography>
 
       <Grid container spacing={3}>
         {/* Security Controls Card */}
         <Grid item xs={12} md={6}>
-          <Card sx={{ p: 3, bgcolor: '#333', color: 'white' }}>
-            <Typography variant="h5" gutterBottom>
-              Security Controls
-            </Typography>
+          <StyledCard>
+            <Box sx={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              mb: 2 
+            }}>
+              <ShieldIcon sx={{ 
+                fontSize: 30, 
+                mr: 1, 
+                color: 'var(--primary-main)' 
+              }} />
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                Security Controls
+              </Typography>
+            </Box>
             <List>
               <ListItem>
                 <ListItemIcon>
-                  <SecurityIcon sx={{ color: '#1976d2' }} />
+                  <LockIcon sx={{ 
+                    color: networkStatus.firewallEnabled 
+                      ? 'var(--success-main)' 
+                      : 'var(--error-main)' 
+                  }} />
                 </ListItemIcon>
                 <ListItemText 
-                  primary="Firewall"
-                  secondary={networkStatus.firewallEnabled ? "Active protection enabled" : "Protection disabled"}
-                  secondaryTypographyProps={{ sx: { color: 'grey.500' } }}
+                  primary={
+                    <Typography sx={{ fontWeight: 500 }}>
+                      Firewall Protection
+                    </Typography>
+                  }
+                  secondary={
+                    <Typography sx={{ color: 'var(--text-secondary)' }}>
+                      {networkStatus.firewallEnabled ? 'Enabled' : 'Disabled'}
+                    </Typography>
+                  }
                 />
                 <Switch
                   checked={networkStatus.firewallEnabled}
                   onChange={toggleFirewall}
-                  color="primary"
+                  sx={{
+                    '& .MuiSwitch-switchBase.Mui-checked': {
+                      color: 'var(--success-main)',
+                      '& + .MuiSwitch-track': {
+                        backgroundColor: 'var(--success-light)'
+                      }
+                    }
+                  }}
                 />
               </ListItem>
               <ListItem>
                 <ListItemIcon>
-                  <LanguageIcon sx={{ color: '#1976d2' }} />
+                  <LanguageIcon sx={{ 
+                    color: networkStatus.webProtectionEnabled 
+                      ? 'var(--success-main)' 
+                      : 'var(--error-main)' 
+                  }} />
                 </ListItemIcon>
                 <ListItemText 
-                  primary="Web Protection"
-                  secondary={networkStatus.webProtectionEnabled ? "Browsing protection active" : "Protection disabled"}
-                  secondaryTypographyProps={{ sx: { color: 'grey.500' } }}
+                  primary={
+                    <Typography sx={{ fontWeight: 500 }}>
+                      Web Protection
+                    </Typography>
+                  }
+                  secondary={
+                    <Typography sx={{ color: 'var(--text-secondary)' }}>
+                      {networkStatus.webProtectionEnabled ? 'Enabled' : 'Disabled'}
+                    </Typography>
+                  }
                 />
                 <Switch
                   checked={networkStatus.webProtectionEnabled}
                   onChange={toggleWebProtection}
-                  color="primary"
+                  sx={{
+                    '& .MuiSwitch-switchBase.Mui-checked': {
+                      color: 'var(--success-main)',
+                      '& + .MuiSwitch-track': {
+                        backgroundColor: 'var(--success-light)'
+                      }
+                    }
+                  }}
                 />
               </ListItem>
             </List>
-          </Card>
+          </StyledCard>
         </Grid>
 
         {/* Network Status Card */}
         <Grid item xs={12} md={6}>
-          <Card sx={{ p: 3, bgcolor: '#333', color: 'white' }}>
-            <Typography variant="h5" gutterBottom>
-              Network Status
-            </Typography>
+          <StyledCard>
+            <Box sx={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              mb: 2 
+            }}>
+              <NetworkCheckIcon sx={{ 
+                fontSize: 30, 
+                mr: 1, 
+                color: 'var(--primary-main)' 
+              }} />
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                Network Status
+              </Typography>
+            </Box>
             <List>
               <ListItem>
                 <ListItemIcon>
-                  <WarningIcon sx={{ color: '#f44336' }} />
+                  <WifiIcon sx={{ color: 'var(--primary-main)' }} />
                 </ListItemIcon>
                 <ListItemText 
-                  primary="Active Threats"
-                  secondary={networkStatus.activeThreats}
-                  secondaryTypographyProps={{ sx: { color: 'grey.500' } }}
+                  primary={
+                    <Typography sx={{ fontWeight: 500 }}>
+                      Active Connections
+                    </Typography>
+                  }
+                  secondary={
+                    <Typography sx={{ color: 'var(--text-secondary)' }}>
+                      {networkStatus.activeConnections}
+                    </Typography>
+                  }
                 />
               </ListItem>
               <ListItem>
                 <ListItemIcon>
-                  <NetworkCheckIcon sx={{ color: '#4caf50' }} />
+                  <BlockIcon sx={{ color: 'var(--warning-main)' }} />
                 </ListItemIcon>
                 <ListItemText 
-                  primary="Active Connections"
-                  secondary={networkStatus.activeConnections}
-                  secondaryTypographyProps={{ sx: { color: 'grey.500' } }}
-                />
-              </ListItem>
-              <ListItem>
-                <ListItemIcon>
-                  <BlockIcon sx={{ color: '#ff9800' }} />
-                </ListItemIcon>
-                <ListItemText 
-                  primary="Blocked Attempts"
-                  secondary={networkStatus.blockedAttempts}
-                  secondaryTypographyProps={{ sx: { color: 'grey.500' } }}
+                  primary={
+                    <Typography sx={{ fontWeight: 500 }}>
+                      Blocked Attempts
+                    </Typography>
+                  }
+                  secondary={
+                    <Typography sx={{ color: 'var(--text-secondary)' }}>
+                      {networkStatus.blockedAttempts}
+                    </Typography>
+                  }
                 />
               </ListItem>
             </List>
-          </Card>
+          </StyledCard>
         </Grid>
 
         {/* Blocked Domains Card */}
         <Grid item xs={12}>
-          <Card sx={{ p: 3, bgcolor: '#333', color: 'white' }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="h5">
+          <StyledCard>
+            <Box sx={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              mb: 2 
+            }}>
+              <BlockIcon sx={{ 
+                fontSize: 30, 
+                mr: 1, 
+                color: 'var(--primary-main)' 
+              }} />
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>
                 Blocked Domains
               </Typography>
-              <Button
-                variant="contained"
-                color="primary"
-                startIcon={<AddIcon />}
-                onClick={() => document.getElementById('domain-input').focus()}
-              >
-                Add Domain
-              </Button>
             </Box>
-
-            {/* Domain Input */}
-            <Box sx={{ mb: 3 }}>
-              <TextField
-                id="domain-input"
+            <Box sx={{ mb: 2 }}>
+              <StyledTextField
                 fullWidth
-                variant="outlined"
-                size="small"
-                placeholder="Enter domain to block (e.g., malicious-site.com)"
+                label="Add Domain to Block"
                 value={newDomain}
                 onChange={(e) => setNewDomain(e.target.value)}
                 error={!!domainError}
                 helperText={domainError}
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter') {
-                    handleAddDomain();
-                  }
-                }}
-                sx={{
-                  '& .MuiOutlinedInput-root': {
-                    color: 'white',
-                    bgcolor: 'rgba(0, 0, 0, 0.2)',
-                    '& fieldset': {
-                      borderColor: 'rgba(255, 255, 255, 0.23)',
-                    },
-                    '&:hover fieldset': {
-                      borderColor: 'rgba(255, 255, 255, 0.5)',
-                    },
-                    '&.Mui-focused fieldset': {
-                      borderColor: '#1976d2',
-                    },
-                  },
-                  '& .MuiFormHelperText-root': {
-                    color: theme => domainError ? '#f44336' : 'grey.500',
-                  },
+                InputProps={{
+                  endAdornment: (
+                    <IconButton 
+                      onClick={handleAddDomain}
+                      sx={{ color: 'var(--primary-main)' }}
+                    >
+                      <AddIcon />
+                    </IconButton>
+                  ),
                 }}
               />
             </Box>
-
-            {/* Blocked Domains List */}
-            <Box sx={{ 
-              display: 'flex', 
-              flexWrap: 'wrap', 
-              gap: 1,
-              minHeight: 50
-            }}>
-              {networkStatus.blockedDomains.map((domain, index) => (
-                <Chip
-                  key={index}
+            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+              {networkStatus.blockedDomains.map((domain) => (
+                <StyledChip
+                  key={domain}
                   label={domain}
                   onDelete={() => handleRemoveDomain(domain)}
-                  icon={<BlockIcon />}
-                  sx={{
-                    bgcolor: 'rgba(255, 87, 34, 0.15)',
-                    color: '#ff9800',
-                    '& .MuiChip-icon': {
-                      color: '#ff9800',
-                    },
-                    '& .MuiChip-deleteIcon': {
-                      color: '#ff9800',
-                      '&:hover': {
-                        color: '#f57c00',
-                      },
-                    },
-                  }}
+                  deleteIcon={<DeleteIcon />}
                 />
               ))}
-              {networkStatus.blockedDomains.length === 0 && (
-                <Typography 
-                  variant="body2" 
-                  sx={{ 
-                    color: 'grey.500',
-                    fontStyle: 'italic',
-                    width: '100%',
-                    textAlign: 'center',
-                    py: 2
-                  }}
-                >
-                  No domains blocked
-                </Typography>
-              )}
-            </Box>
-          </Card>
+            </Stack>
+          </StyledCard>
         </Grid>
 
-        {/* Recent Connections Card */}
-        <Grid item xs={12}>
-          <Card sx={{ p: 3, bgcolor: '#333', color: 'white' }}>
-            <Typography variant="h5" gutterBottom>
-              Recent Connections
-            </Typography>
-            <List>
-              {networkStatus.recentConnections.map((connection, index) => (
-                <ListItem key={index}>
-                  <ListItemIcon>
-                    <NetworkCheckIcon sx={{ color: '#4caf50' }} />
-                  </ListItemIcon>
-                  <ListItemText 
-                    primary={connection.domain}
-                    secondary={`${connection.ip} - ${connection.timestamp}`}
-                    secondaryTypographyProps={{ sx: { color: 'grey.500' } }}
-                  />
-                </ListItem>
-              ))}
-              {networkStatus.recentConnections.length === 0 && (
-                <ListItem>
-                  <ListItemText primary="No recent connections" sx={{ color: 'grey.500' }} />
-                </ListItem>
-              )}
-            </List>
-          </Card>
+        {/* Scan Button */}
+        <Grid item xs={12} sx={{ textAlign: 'center', mt: 2 }}>
+          <StyledButton
+            variant="contained"
+            size="large"
+            onClick={handleScan}
+            disabled={scanning}
+            startIcon={scanning ? <CircularProgress size={20} /> : <SecurityIcon />}
+          >
+            {scanning ? 'Scanning Network...' : 'Start Network Scan'}
+          </StyledButton>
         </Grid>
+
+        {/* Error Alert */}
+        {error && (
+          <Grid item xs={12}>
+            <Alert 
+              severity="error" 
+              sx={{ 
+                backgroundColor: 'var(--error-main)',
+                color: '#FFFFFF',
+                '& .MuiAlert-icon': {
+                  color: '#FFFFFF'
+                }
+              }}
+            >
+              {error}
+            </Alert>
+          </Grid>
+        )}
+
+        {/* Scan Results */}
+        {scanResult && (
+          <Grid item xs={12}>
+            <StyledCard>
+              <Box sx={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                mb: 2 
+              }}>
+                <CheckCircleIcon sx={{ 
+                  fontSize: 30, 
+                  mr: 1, 
+                  color: 'var(--success-main)' 
+                }} />
+                <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                  Scan Results
+                </Typography>
+              </Box>
+              {/* Add your scan results display here */}
+            </StyledCard>
+          </Grid>
+        )}
       </Grid>
     </Box>
   );

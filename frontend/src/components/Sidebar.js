@@ -16,6 +16,90 @@ import {
   Computer as ComputerIcon,
   Security as SecurityIcon,
 } from '@mui/icons-material';
+import { styled } from '@mui/material/styles';
+
+// Styled components
+const StyledPaper = styled(Paper)(({ theme }) => ({
+  width: 240,
+  backgroundColor: 'var(--background-paper)',
+  color: 'var(--text-primary)',
+  borderRadius: 'var(--border-radius-large)',
+  margin: 16,
+  overflow: 'hidden',
+  border: '1px solid var(--border-main)',
+  boxShadow: 'var(--shadow-large)',
+  height: 'fit-content',
+  position: 'sticky',
+  top: 16,
+  transition: 'all 0.2s ease-in-out',
+  '&:hover': {
+    boxShadow: 'var(--shadow-xlarge)'
+  }
+}));
+
+const LogoContainer = styled(Box)(({ theme }) => ({
+  padding: '12px',
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  borderBottom: '1px solid var(--border-main)',
+  background: 'linear-gradient(145deg, var(--background-dark), var(--background-paper))'
+}));
+
+const LogoIcon = styled(SecurityIcon)(({ theme }) => ({
+  color: 'var(--primary-main)',
+  fontSize: '1.5rem',
+  animation: 'pulse 2s infinite',
+  '@keyframes pulse': {
+    '0%': { opacity: 0.6 },
+    '50%': { opacity: 1 },
+    '100%': { opacity: 0.6 }
+  }
+}));
+
+const LogoText = styled(Typography)(({ theme }) => ({
+  color: 'var(--text-primary)',
+  fontSize: '1.2rem',
+  fontWeight: 600,
+  background: 'linear-gradient(45deg, var(--primary-main), var(--primary-light))',
+  WebkitBackgroundClip: 'text',
+  WebkitTextFillColor: 'transparent'
+}));
+
+const StyledListItem = styled(ListItem)(({ theme, active }) => ({
+  color: 'var(--text-primary)',
+  backgroundColor: active ? 'var(--primary-transparent)' : 'transparent',
+  '&:hover': {
+    backgroundColor: 'var(--primary-transparent-hover)',
+    '& .MuiListItemIcon-root': {
+      color: 'var(--primary-main)'
+    }
+  },
+  transition: 'all 0.2s ease',
+  borderRadius: 'var(--border-radius-medium)',
+  margin: '4px 8px',
+  marginBottom: 4,
+  padding: '6px',
+  minHeight: '40px'
+}));
+
+const StyledListItemIcon = styled(ListItemIcon)(({ theme, active }) => ({
+  color: active ? 'var(--primary-main)' : 'var(--text-secondary)',
+  transition: 'color 0.2s ease',
+  minWidth: '35px',
+  '& .MuiSvgIcon-root': {
+    fontSize: '1.3rem'
+  }
+}));
+
+const StyledListItemText = styled(ListItemText)(({ theme, active }) => ({
+  margin: 0,
+  '& .MuiTypography-root': {
+    fontWeight: active ? 600 : 400,
+    fontSize: '0.9rem',
+    color: active ? 'var(--text-primary)' : 'var(--text-secondary)'
+  }
+}));
 
 function Sidebar() {
   const location = useLocation();
@@ -29,87 +113,32 @@ function Sidebar() {
   ];
 
   return (
-    <Paper
-      elevation={3}
-      sx={{
-        width: 240,
-        bgcolor: 'background.paper',
-        borderRadius: '12px',
-        m: 2,
-        overflow: 'hidden',
-        border: '1px solid rgba(0, 255, 255, 0.1)',
-        boxShadow: '0 4px 15px rgba(0, 255, 255, 0.15)',
-        height: 'fit-content',
-        position: 'sticky',
-        top: 16,
-      }}
-    >
-      <Box 
-        sx={{ 
-          p: 1.5, 
-          display: 'flex', 
-          alignItems: 'center', 
-          gap: 1,
-          borderBottom: '1px solid rgba(0, 255, 255, 0.1)',
-          background: 'linear-gradient(145deg, rgba(0, 33, 64, 0.9), rgba(0, 21, 41, 0.9))',
-        }}
-      >
-        <SecurityIcon sx={{ color: '#00ffff', fontSize: '1.5rem' }} />
-        <Typography variant="h6" component="div" sx={{ color: '#ffffff', fontSize: '1.2rem' }}>
+    <StyledPaper elevation={3}>
+      <LogoContainer>
+        <LogoIcon />
+        <LogoText variant="h6" component="div">
           SecureGuard
-        </Typography>
-      </Box>
+        </LogoText>
+      </LogoContainer>
       <List sx={{ py: 0.5 }}>
         {menuItems.map((item) => (
-          <ListItem
+          <StyledListItem
             key={item.text}
             component={Link}
             to={item.path}
-            sx={{
-              color: 'white',
-              bgcolor: location.pathname === item.path 
-                ? 'rgba(0, 255, 255, 0.1)' 
-                : 'transparent',
-              '&:hover': {
-                bgcolor: 'rgba(0, 255, 255, 0.05)',
-                '& .MuiListItemIcon-root': {
-                  color: '#00ffff',
-                },
-              },
-              transition: 'all 0.2s ease',
-              borderRadius: '8px',
-              mx: 1,
-              mb: 0.5,
-              py: 0.75,
-              minHeight: '40px',
-            }}
+            active={location.pathname === item.path}
           >
-            <ListItemIcon 
-              sx={{ 
-                color: location.pathname === item.path ? '#00ffff' : 'rgba(255, 255, 255, 0.7)',
-                transition: 'color 0.2s ease',
-                minWidth: '35px',
-                '& .MuiSvgIcon-root': {
-                  fontSize: '1.3rem',
-                },
-              }}
-            >
+            <StyledListItemIcon active={location.pathname === item.path}>
               {item.icon}
-            </ListItemIcon>
-            <ListItemText 
+            </StyledListItemIcon>
+            <StyledListItemText 
               primary={item.text} 
-              sx={{
-                margin: 0,
-                '& .MuiTypography-root': {
-                  fontWeight: location.pathname === item.path ? 600 : 400,
-                  fontSize: '0.9rem',
-                }
-              }}
+              active={location.pathname === item.path}
             />
-          </ListItem>
+          </StyledListItem>
         ))}
       </List>
-    </Paper>
+    </StyledPaper>
   );
 }
 

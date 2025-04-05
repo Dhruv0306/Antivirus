@@ -151,3 +151,6 @@ htmlcov/
 .Trashes
 ehthumbs.db
 Thumbs.db 
+
+#Refrence images
+/refrenceImages

@@ -24,6 +24,54 @@ import {
   Warning as WarningIcon
 } from '@mui/icons-material';
 import axios from 'axios';
+import { styled } from '@mui/material/styles';
+
+// Styled components
+const StyledPaper = styled(Paper)(({ theme }) => ({
+  backgroundColor: 'var(--background-paper)',
+  color: 'var(--text-primary)',
+  border: '1px solid var(--border-main)',
+  borderRadius: 'var(--border-radius-medium)',
+  transition: 'all 0.2s ease-in-out',
+  '&:hover': {
+    borderColor: 'var(--primary-main)',
+    boxShadow: 'var(--shadow-large)'
+  }
+}));
+
+const StyledButton = styled(Button)(({ theme }) => ({
+  backgroundColor: 'var(--button-primary)',
+  color: 'var(--button-text)',
+  '&:hover': {
+    backgroundColor: 'var(--primary-dark)',
+    boxShadow: 'var(--shadow-medium)'
+  }
+}));
+
+const StyledListItem = styled(ListItem)(({ theme }) => ({
+  borderRadius: 'var(--border-radius-small)',
+  '&:hover': {
+    backgroundColor: 'var(--background-dark)'
+  }
+}));
+
+const StyledSwitch = styled(Switch)(({ theme }) => ({
+  '& .MuiSwitch-switchBase.Mui-checked': {
+    color: 'var(--success-main)',
+    '& + .MuiSwitch-track': {
+      backgroundColor: 'var(--success-light)'
+    }
+  }
+}));
+
+const StyledProgress = styled(LinearProgress)(({ theme }) => ({
+  height: 8,
+  borderRadius: 'var(--border-radius-small)',
+  backgroundColor: 'var(--background-dark)',
+  '& .MuiLinearProgress-bar': {
+    backgroundColor: 'var(--primary-main)'
+  }
+}));
 
 function DirectoryScan() {
   const [selectedDirectory, setSelectedDirectory] = useState('');
@@ -118,143 +166,244 @@ function DirectoryScan() {
 
   return (
     <Box sx={{ width: '100%', maxWidth: 1200, margin: '0 auto', p: 3 }}>
-      <Typography variant="h4" gutterBottom sx={{ mb: 4 }}>
+      <Typography 
+        variant="h4" 
+        gutterBottom 
+        sx={{ 
+          mb: 4,
+          color: 'var(--text-primary)',
+          fontWeight: 600 
+        }}
+      >
         Directory Scan
       </Typography>
 
       <Grid container spacing={3}>
         <Grid item xs={12}>
-          <Paper sx={{ p: 3 }}>
+          <StyledPaper sx={{ p: 3 }}>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                <Button
+                <StyledButton
                   variant="contained"
                   startIcon={<FolderIcon />}
                   onClick={handleDirectorySelect}
                   disabled={scanning}
                 >
                   Select Directory
-                </Button>
-                <Button
+                </StyledButton>
+                <StyledButton
                   variant="contained"
-                  color="primary"
                   startIcon={<SecurityIcon />}
                   onClick={handleScan}
                   disabled={!selectedDirectory || scanning}
                 >
                   {scanning ? (
                     <>
-                      <CircularProgress size={24} sx={{ mr: 1 }} color="inherit" />
+                      <CircularProgress 
+                        size={24} 
+                        sx={{ 
+                          mr: 1,
+                          color: 'var(--primary-light)' 
+                        }} 
+                      />
                       Scanning...
                     </>
                   ) : (
                     'Start Scan'
                   )}
-                </Button>
+                </StyledButton>
                 <FormControlLabel
                   control={
-                    <Switch
+                    <StyledSwitch
                       checked={recursive}
                       onChange={(e) => setRecursive(e.target.checked)}
                       disabled={scanning}
                     />
                   }
-                  label="Include Subdirectories"
+                  label={
+                    <Typography sx={{ color: 'var(--text-primary)' }}>
+                      Include Subdirectories
+                    </Typography>
+                  }
                 />
               </Box>
 
               {selectedDirectory && (
-                <Typography variant="body2" color="text.secondary">
+                <Typography 
+                  variant="body2" 
+                  sx={{ color: 'var(--text-secondary)' }}
+                >
                   Selected Directory: {selectedDirectory}
                 </Typography>
               )}
 
               {scanning && (
                 <Box sx={{ width: '100%', mt: 2 }}>
-                  <LinearProgress variant="determinate" value={progress} />
-                  <Typography variant="body2" color="text.secondary" align="center" sx={{ mt: 1 }}>
+                  <StyledProgress variant="determinate" value={progress} />
+                  <Typography 
+                    variant="body2" 
+                    sx={{ 
+                      mt: 1,
+                      color: 'var(--text-secondary)',
+                      textAlign: 'center' 
+                    }}
+                  >
                     {Math.round(progress)}% Complete
                   </Typography>
                 </Box>
               )}
 
               {error && (
-                <Alert severity="error" sx={{ mt: 2 }}>
+                <Alert 
+                  severity="error" 
+                  sx={{ 
+                    mt: 2,
+                    backgroundColor: 'var(--error-main)',
+                    color: '#FFFFFF',
+                    '& .MuiAlert-icon': {
+                      color: '#FFFFFF'
+                    }
+                  }}
+                >
                   {error}
                 </Alert>
               )}
             </Box>
-          </Paper>
+          </StyledPaper>
         </Grid>
 
         {scanResult && (
           <>
             <Grid item xs={12} md={6}>
-              <Paper sx={{ p: 3 }}>
-                <Typography variant="h6" gutterBottom>
+              <StyledPaper sx={{ p: 3 }}>
+                <Typography 
+                  variant="h6" 
+                  gutterBottom
+                  sx={{ 
+                    color: 'var(--text-primary)',
+                    fontWeight: 600 
+                  }}
+                >
                   Scan Summary
                 </Typography>
                 <List>
-                  <ListItem>
+                  <StyledListItem>
                     <ListItemIcon>
-                      <FolderIcon />
+                      <FolderIcon sx={{ color: 'var(--primary-main)' }} />
                     </ListItemIcon>
                     <ListItemText
-                      primary="Total Files Scanned"
-                      secondary={scanResult.totalFiles || 0}
-                    />
-                  </ListItem>
-                  <ListItem>
-                    <ListItemIcon>
-                      <CheckCircleIcon color="success" />
-                    </ListItemIcon>
-                    <ListItemText
-                      primary="Clean Files"
-                      secondary={scanResult.totalFiles - (scanResult.infectedFiles + scanResult.skippedFiles) || 0}
-                    />
-                  </ListItem>
-                  <ListItem>
-                    <ListItemIcon>
-                      <ErrorIcon color="error" />
-                    </ListItemIcon>
-                    <ListItemText
-                      primary="Infected Files"
-                      secondary={scanResult.infectedFiles || 0}
-                    />
-                  </ListItem>
-                  <ListItem>
-                    <ListItemIcon>
-                      <WarningIcon color="warning" />
-                    </ListItemIcon>
-                    <ListItemText
-                      primary="Skipped/Error Files"
-                      secondary={scanResult.skippedFiles || 0}
-                    />
-                  </ListItem>
-                  <Divider />
-                  <ListItem>
-                    <ListItemIcon>
-                      <CheckCircleIcon color={scanResult.infectedFiles > 0 ? "error" : "success"} />
-                    </ListItemIcon>
-                    <ListItemText
-                      primary="Directory Status"
+                      primary={
+                        <Typography sx={{ color: 'var(--text-primary)' }}>
+                          Total Files Scanned
+                        </Typography>
+                      }
                       secondary={
-                        scanResult.infectedFiles > 0 
-                          ? `Threats Found (${scanResult.infectedFiles} infected files)` 
-                          : "Clean"
+                        <Typography sx={{ color: 'var(--text-secondary)' }}>
+                          {scanResult.totalFiles || 0}
+                        </Typography>
                       }
                     />
-                  </ListItem>
+                  </StyledListItem>
+                  <StyledListItem>
+                    <ListItemIcon>
+                      <CheckCircleIcon sx={{ color: 'var(--success-main)' }} />
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={
+                        <Typography sx={{ color: 'var(--text-primary)' }}>
+                          Clean Files
+                        </Typography>
+                      }
+                      secondary={
+                        <Typography sx={{ color: 'var(--text-secondary)' }}>
+                          {scanResult.totalFiles - (scanResult.infectedFiles + scanResult.skippedFiles) || 0}
+                        </Typography>
+                      }
+                    />
+                  </StyledListItem>
+                  <StyledListItem>
+                    <ListItemIcon>
+                      <ErrorIcon sx={{ color: 'var(--error-main)' }} />
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={
+                        <Typography sx={{ color: 'var(--text-primary)' }}>
+                          Infected Files
+                        </Typography>
+                      }
+                      secondary={
+                        <Typography sx={{ color: 'var(--text-secondary)' }}>
+                          {scanResult.infectedFiles || 0}
+                        </Typography>
+                      }
+                    />
+                  </StyledListItem>
+                  <StyledListItem>
+                    <ListItemIcon>
+                      <WarningIcon sx={{ color: 'var(--warning-main)' }} />
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={
+                        <Typography sx={{ color: 'var(--text-primary)' }}>
+                          Skipped/Error Files
+                        </Typography>
+                      }
+                      secondary={
+                        <Typography sx={{ color: 'var(--text-secondary)' }}>
+                          {scanResult.skippedFiles || 0}
+                        </Typography>
+                      }
+                    />
+                  </StyledListItem>
+                  <Divider sx={{ borderColor: 'var(--border-main)' }} />
+                  <StyledListItem>
+                    <ListItemIcon>
+                      <CheckCircleIcon 
+                        sx={{ 
+                          color: scanResult.infectedFiles > 0 
+                            ? 'var(--error-main)' 
+                            : 'var(--success-main)' 
+                        }} 
+                      />
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={
+                        <Typography sx={{ color: 'var(--text-primary)' }}>
+                          Directory Status
+                        </Typography>
+                      }
+                      secondary={
+                        <Typography sx={{ color: 'var(--text-secondary)' }}>
+                          {scanResult.infectedFiles > 0 
+                            ? `Threats Found (${scanResult.infectedFiles} infected files)` 
+                            : "Clean"}
+                        </Typography>
+                      }
+                    />
+                  </StyledListItem>
                 </List>
-              </Paper>
+              </StyledPaper>
             </Grid>
 
             <Grid item xs={12} md={6}>
-              <Paper sx={{ p: 3 }}>
-                <Typography variant="h6" gutterBottom>
+              <StyledPaper sx={{ p: 3 }}>
+                <Typography 
+                  variant="h6" 
+                  gutterBottom
+                  sx={{ 
+                    color: 'var(--text-primary)',
+                    fontWeight: 600 
+                  }}
+                >
                   Scan Details
                 </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                <Typography 
+                  variant="body2" 
+                  sx={{ 
+                    mb: 2,
+                    color: 'var(--text-secondary)' 
+                  }}
+                >
                   {scanResult.infectedFiles > 0 
                     ? "Showing only infected and error files" 
                     : "No threats found in this directory"}
@@ -264,40 +413,63 @@ function DirectoryScan() {
                     .filter(result => result.infected || result.threatType === "ERROR")
                     .map((result, index) => (
                     <React.Fragment key={index}>
-                      <ListItem>
+                      <StyledListItem>
                         <ListItemIcon>
                           {result.infected ? (
-                            <ErrorIcon color="error" />
+                            <ErrorIcon sx={{ color: 'var(--error-main)' }} />
                           ) : (
-                            <WarningIcon color="warning" />
+                            <WarningIcon sx={{ color: 'var(--warning-main)' }} />
                           )}
                         </ListItemIcon>
                         <ListItemText
-                          primary={result.filePath}
+                          primary={
+                            <Typography 
+                              sx={{ 
+                                color: 'var(--text-primary)',
+                                wordBreak: 'break-all' 
+                              }}
+                            >
+                              {result.filePath}
+                            </Typography>
+                          }
                           secondary={
-                            <>
-                              <Typography component="span" variant="body2" color="text.primary">
+                            <Box>
+                              <Typography 
+                                component="span" 
+                                variant="body2" 
+                                sx={{ color: 'var(--text-primary)' }}
+                              >
                                 Status: {result.infected ? 'Infected' : 'Error'}
                               </Typography>
                               {result.threatType && (
-                                <Typography component="span" variant="body2" color="text.secondary">
+                                <Typography 
+                                  component="span" 
+                                  variant="body2" 
+                                  sx={{ color: 'var(--text-secondary)' }}
+                                >
                                   {' | Type: ' + result.threatType}
                                 </Typography>
                               )}
                               {result.threatDetails && (
-                                <Typography component="span" variant="body2" color="text.secondary">
+                                <Typography 
+                                  component="span" 
+                                  variant="body2" 
+                                  sx={{ color: 'var(--text-secondary)' }}
+                                >
                                   {' | ' + result.threatDetails}
                                 </Typography>
                               )}
-                            </>
+                            </Box>
                           }
                         />
-                      </ListItem>
-                      {index < scanResult.results.filter(r => r.infected || r.threatType === "ERROR").length - 1 && <Divider />}
+                      </StyledListItem>
+                      {index < scanResult.results.filter(r => r.infected || r.threatType === "ERROR").length - 1 && (
+                        <Divider sx={{ borderColor: 'var(--border-main)' }} />
+                      )}
                     </React.Fragment>
                   ))}
                 </List>
-              </Paper>
+              </StyledPaper>
             </Grid>
           </>
         )}

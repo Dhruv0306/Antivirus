@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
   Box,
-  Paper,
   Typography,
   Grid,
   List,
@@ -26,14 +25,59 @@ import {
 import {
   Security as SecurityIcon,
   CheckCircle as CheckCircleIcon,
-  Warning as WarningIcon,
-  Memory as MemoryIcon,
   Storage as StorageIcon,
   Speed as SpeedIcon,
   Refresh as RefreshIcon,
   Info as InfoIcon,
 } from '@mui/icons-material';
 import axios from 'axios';
+import { styled } from '@mui/material/styles';
+
+// Styled components using our theme
+const StyledCard = styled(Card)(({ theme }) => ({
+  backgroundColor: 'var(--background-paper)',
+  borderRadius: 'var(--border-radius-medium)',
+  border: '2px solid var(--border-main)',
+  boxShadow: 'var(--shadow-medium)',
+  transition: 'all 0.2s ease-in-out',
+  '&:hover': {
+    borderColor: 'var(--primary-main)',
+    boxShadow: 'var(--shadow-large)',
+    transform: 'translateY(-2px)'
+  }
+}));
+
+const StyledAlert = styled(Alert)(({ theme }) => ({
+  borderRadius: 'var(--border-radius-medium)',
+  '&.MuiAlert-standardError': {
+    backgroundColor: 'var(--error-main)',
+    color: '#FFFFFF'
+  },
+  '&.MuiAlert-standardSuccess': {
+    backgroundColor: 'var(--success-main)',
+    color: '#FFFFFF'
+  },
+  '&.MuiAlert-standardWarning': {
+    backgroundColor: 'var(--warning-main)',
+    color: '#FFFFFF'
+  }
+}));
+
+const StyledProgress = styled(LinearProgress)(({ theme }) => ({
+  height: 8,
+  borderRadius: 'var(--border-radius-small)',
+  backgroundColor: 'var(--background-dark)',
+  '& .MuiLinearProgress-bar': {
+    backgroundColor: 'var(--primary-main)'
+  }
+}));
+
+const StyledIconButton = styled(IconButton)(({ theme }) => ({
+  color: 'var(--primary-main)',
+  '&:hover': {
+    backgroundColor: 'rgba(33, 150, 243, 0.1)'
+  }
+}));
 
 function Dashboard() {
   const [systemStatus, setSystemStatus] = useState({
@@ -108,89 +152,169 @@ function Dashboard() {
   };
 
   return (
-    <Box sx={{ width: '100%', maxWidth: 1200, margin: '0 auto', p: 1 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h4" sx={{ fontWeight: 600 }}>
+    <Box sx={{ 
+      width: '100%', 
+      maxWidth: 1200, 
+      margin: '0 auto', 
+      p: 1,
+      color: 'var(--text-primary)'
+    }}>
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        mb: 2 
+      }}>
+        <Typography 
+          variant="h4" 
+          sx={{ 
+            fontWeight: 600,
+            color: 'var(--text-primary)'
+          }}
+        >
           System Dashboard
         </Typography>
-        <Tooltip title="Refresh Data">
-          <IconButton 
-            onClick={handleRefresh} 
-            disabled={refreshing}
-            sx={{ 
-              transition: 'transform 0.2s',
-              '&:hover': { transform: 'rotate(180deg)' }
-            }}
-          >
-            <RefreshIcon className={refreshing ? 'loading-spinner' : ''} />
-          </IconButton>
-        </Tooltip>
+        <StyledIconButton
+          onClick={handleRefresh}
+          disabled={refreshing}
+          sx={{
+            transition: 'transform 0.2s',
+            '&:hover': { transform: 'rotate(180deg)' }
+          }}
+        >
+          <RefreshIcon className={refreshing ? 'loading-spinner' : ''} />
+        </StyledIconButton>
       </Box>
 
       {error && (
-        <Alert 
+        <StyledAlert 
           severity="error" 
-          sx={{ 
-            mb: 3,
-            '& .MuiAlert-icon': { fontSize: '2rem' }
-          }}
+          sx={{ mb: 3 }}
         >
           {error}
-        </Alert>
+        </StyledAlert>
       )}
 
       {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
-          <CircularProgress size={60} />
+        <Box sx={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          alignItems: 'center', 
+          minHeight: '400px' 
+        }}>
+          <CircularProgress 
+            size={60} 
+            sx={{ color: 'var(--primary-main)' }}
+          />
         </Box>
       ) : (
         <Grid container spacing={3}>
           {/* System Status Card */}
           <Grid item xs={12} md={6}>
             <Fade in timeout={500}>
-              <Card className="card-hover glass-effect">
+              <StyledCard>
                 <CardContent>
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                    <SecurityIcon sx={{ fontSize: 30, mr: 1, color: 'primary.main' }} />
-                    <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                  <Box sx={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    mb: 2 
+                  }}>
+                    <SecurityIcon sx={{ 
+                      fontSize: 30, 
+                      mr: 1, 
+                      color: 'var(--primary-main)' 
+                    }} />
+                    <Typography 
+                      variant="h6" 
+                      sx={{ 
+                        fontWeight: 600,
+                        color: 'var(--text-primary)'
+                      }}
+                    >
                       System Status
                     </Typography>
                   </Box>
                   <List>
                     <ListItem>
                       <ListItemIcon>
-                        <SecurityIcon color={systemStatus.systemProtected ? "success" : "error"} />
+                        <SecurityIcon sx={{ 
+                          color: systemStatus.systemProtected 
+                            ? 'var(--success-main)' 
+                            : 'var(--error-main)' 
+                        }} />
                       </ListItemIcon>
                       <ListItemText
-                        primary="System Protection"
-                        secondary={systemStatus.systemProtected ? "Protected" : "At Risk"}
-                        primaryTypographyProps={{ fontWeight: 500 }}
+                        primary={
+                          <Typography sx={{ 
+                            fontWeight: 500,
+                            color: 'var(--text-primary)'
+                          }}>
+                            System Protection
+                          </Typography>
+                        }
+                        secondary={
+                          <Typography sx={{ 
+                            color: 'var(--text-secondary)'
+                          }}>
+                            {systemStatus.systemProtected ? "Protected" : "At Risk"}
+                          </Typography>
+                        }
                       />
                     </ListItem>
                     <ListItem>
                       <ListItemIcon>
-                        <CheckCircleIcon color={systemStatus.realtimeProtection ? "success" : "error"} />
+                        <CheckCircleIcon sx={{ 
+                          color: systemStatus.realtimeProtection 
+                            ? 'var(--success-main)' 
+                            : 'var(--error-main)' 
+                        }} />
                       </ListItemIcon>
                       <ListItemText
-                        primary="Realtime Protection"
-                        secondary={systemStatus.realtimeProtection ? "Active" : "Disabled"}
-                        primaryTypographyProps={{ fontWeight: 500 }}
+                        primary={
+                          <Typography sx={{ 
+                            fontWeight: 500,
+                            color: 'var(--text-primary)'
+                          }}>
+                            Realtime Protection
+                          </Typography>
+                        }
+                        secondary={
+                          <Typography sx={{ 
+                            color: 'var(--text-secondary)'
+                          }}>
+                            {systemStatus.realtimeProtection ? "Active" : "Disabled"}
+                          </Typography>
+                        }
                       />
                     </ListItem>
                   </List>
                 </CardContent>
-              </Card>
+              </StyledCard>
             </Fade>
           </Grid>
 
           {/* Storage Status Card */}
           <Grid item xs={12} md={6}>
             <Fade in timeout={500} style={{ transitionDelay: '100ms' }}>
-              <Card className="card-hover glass-effect">
+              <StyledCard>
                 <CardContent>
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                    <StorageIcon sx={{ fontSize: 30, mr: 1, color: 'primary.main' }} />
-                    <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                  <Box sx={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    mb: 2 
+                  }}>
+                    <StorageIcon sx={{ 
+                      fontSize: 30, 
+                      mr: 1, 
+                      color: 'var(--primary-main)' 
+                    }} />
+                    <Typography 
+                      variant="h6" 
+                      sx={{ 
+                        fontWeight: 600,
+                        color: 'var(--text-primary)'
+                      }}
+                    >
                       Storage Status
                     </Typography>
                   </Box>
@@ -198,33 +322,51 @@ function Dashboard() {
                     {systemStatus.diskUsage && systemStatus.diskUsage.map((disk, index) => (
                       <ListItem key={index}>
                         <ListItemIcon>
-                          <StorageIcon color="primary" />
+                          <StorageIcon sx={{ color: 'var(--primary-main)' }} />
                         </ListItemIcon>
                         <ListItemText
-                          primary={disk.name}
-                          secondary={`${formatBytes(disk.used)} / ${formatBytes(disk.total)}`}
-                          primaryTypographyProps={{ fontWeight: 500 }}
+                          primary={
+                            <Typography sx={{ 
+                              fontWeight: 500,
+                              color: 'var(--text-primary)'
+                            }}>
+                              {disk.drive}
+                            </Typography>
+                          }
+                          secondary={
+                            <Box sx={{ width: '100%', mt: 1 }}>
+                              <Box sx={{ 
+                                display: 'flex', 
+                                justifyContent: 'space-between', 
+                                mb: 0.5,
+                                color: 'var(--text-secondary)'
+                              }}>
+                                <Typography variant="body2">
+                                  {formatBytes(disk.used)} used of {formatBytes(disk.total)}
+                                </Typography>
+                                <Typography variant="body2">
+                                  {Math.round((disk.used / disk.total) * 100)}%
+                                </Typography>
+                              </Box>
+                              <StyledProgress
+                                variant="determinate"
+                                value={(disk.used / disk.total) * 100}
+                              />
+                            </Box>
+                          }
                         />
-                        <Box sx={{ width: '100px', ml: 2 }}>
-                          <LinearProgress
-                            variant="determinate"
-                            value={(disk.used / disk.total) * 100}
-                            color={(disk.used / disk.total) > 0.9 ? "error" : "primary"}
-                            sx={{ height: 8, borderRadius: 4 }}
-                          />
-                        </Box>
                       </ListItem>
                     ))}
                   </List>
                 </CardContent>
-              </Card>
+              </StyledCard>
             </Fade>
           </Grid>
 
           {/* Scan History Card */}
           <Grid item xs={12}>
             <Fade in timeout={500} style={{ transitionDelay: '200ms' }}>
-              <Card className="card-hover glass-effect">
+              <StyledCard>
                 <CardContent>
                   <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                     <SpeedIcon sx={{ fontSize: 30, mr: 1, color: 'primary.main' }} />
@@ -293,7 +435,7 @@ function Dashboard() {
                     </Table>
                   </TableContainer>
                 </CardContent>
-              </Card>
+              </StyledCard>
             </Fade>
           </Grid>
         </Grid>

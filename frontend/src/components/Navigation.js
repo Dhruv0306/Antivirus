@@ -19,8 +19,54 @@ import {
   Computer as ComputerIcon,
   Security as SecurityIcon,
 } from '@mui/icons-material';
+import { styled } from '@mui/material/styles';
 
 const drawerWidth = 240;
+
+// Styled components
+const StyledDrawer = styled(Drawer)(({ theme }) => ({
+  width: drawerWidth,
+  flexShrink: 0,
+  '& .MuiDrawer-paper': {
+    width: drawerWidth,
+    boxSizing: 'border-box',
+    backgroundColor: 'var(--background-paper)',
+    borderRight: '1px solid var(--border-main)',
+    color: 'var(--text-primary)'
+  }
+}));
+
+const StyledListItemButton = styled(ListItemButton)(({ theme }) => ({
+  '&.Mui-selected': {
+    backgroundColor: 'rgba(33, 150, 243, 0.1)',
+    '&:hover': {
+      backgroundColor: 'rgba(33, 150, 243, 0.2)',
+    }
+  },
+  '&:hover': {
+    backgroundColor: 'rgba(33, 150, 243, 0.05)',
+  }
+}));
+
+const LogoIcon = styled(SecurityIcon)(({ theme }) => ({
+  fontSize: 32,
+  marginRight: 8,
+  color: 'var(--primary-main)',
+  animation: 'pulse 2s infinite',
+  '@keyframes pulse': {
+    '0%': { opacity: 0.6 },
+    '50%': { opacity: 1 },
+    '100%': { opacity: 0.6 }
+  }
+}));
+
+const LogoText = styled(Typography)(({ theme }) => ({
+  fontWeight: 'bold',
+  letterSpacing: '0.5px',
+  background: 'linear-gradient(45deg, var(--primary-main) 30%, var(--primary-light) 90%)',
+  WebkitBackgroundClip: 'text',
+  WebkitTextFillColor: 'transparent'
+}));
 
 const menuItems = [
   { text: 'Dashboard', icon: <DashboardIcon />, path: '/' },
@@ -37,19 +83,7 @@ function Navigation() {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   return (
-    <Drawer
-      variant={isMobile ? "temporary" : "permanent"}
-      sx={{
-        width: drawerWidth,
-        flexShrink: 0,
-        '& .MuiDrawer-paper': {
-          width: drawerWidth,
-          boxSizing: 'border-box',
-          backgroundColor: 'background.paper',
-          borderRight: '1px solid rgba(255, 255, 255, 0.12)',
-        },
-      }}
-    >
+    <StyledDrawer variant={isMobile ? "temporary" : "permanent"}>
       <Box sx={{ 
         overflow: 'auto',
         display: 'flex',
@@ -60,49 +94,24 @@ function Navigation() {
           display: 'flex', 
           alignItems: 'center', 
           p: 2,
-          borderBottom: '1px solid rgba(255, 255, 255, 0.12)'
+          borderBottom: `1px solid var(--border-main)`
         }}>
-          <SecurityIcon sx={{ 
-            fontSize: 32,
-            mr: 1,
-            color: 'primary.main',
-            animation: 'pulse 2s infinite',
-            '@keyframes pulse': {
-              '0%': { opacity: 0.6 },
-              '50%': { opacity: 1 },
-              '100%': { opacity: 0.6 }
-            }
-          }} />
-          <Typography variant="h6" color="primary" sx={{ 
-            fontWeight: 'bold',
-            letterSpacing: '0.5px',
-            background: 'linear-gradient(45deg, #2196f3 30%, #21CBF3 90%)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent'
-          }}>
+          <LogoIcon />
+          <LogoText variant="h6">
             SecureGuard
-          </Typography>
+          </LogoText>
         </Box>
         <List sx={{ flexGrow: 1 }}>
           {menuItems.map((item) => (
             <ListItem key={item.text} disablePadding>
-              <ListItemButton
+              <StyledListItemButton
                 selected={location.pathname === item.path}
                 onClick={() => navigate(item.path)}
-                sx={{
-                  '&.Mui-selected': {
-                    backgroundColor: 'rgba(33, 150, 243, 0.1)',
-                    '&:hover': {
-                      backgroundColor: 'rgba(33, 150, 243, 0.2)',
-                    }
-                  },
-                  '&:hover': {
-                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                  }
-                }}
               >
                 <ListItemIcon sx={{ 
-                  color: location.pathname === item.path ? 'primary.main' : 'inherit',
+                  color: location.pathname === item.path 
+                    ? 'var(--primary-main)' 
+                    : 'var(--text-secondary)',
                   minWidth: 40,
                   ml: 1
                 }}>
@@ -112,16 +121,19 @@ function Navigation() {
                   primary={item.text} 
                   sx={{
                     '& .MuiTypography-root': {
-                      fontWeight: location.pathname === item.path ? 600 : 400
+                      fontWeight: location.pathname === item.path ? 600 : 400,
+                      color: location.pathname === item.path 
+                        ? 'var(--text-primary)' 
+                        : 'var(--text-secondary)'
                     }
                   }}
                 />
-              </ListItemButton>
+              </StyledListItemButton>
             </ListItem>
           ))}
         </List>
       </Box>
-    </Drawer>
+    </StyledDrawer>
   );
 }
 
