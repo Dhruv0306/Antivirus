@@ -221,7 +221,7 @@ function DirectoryScan() {
                     />
                   }
                   label={
-                    <Typography sx={{ color: 'var(--text-primary)' }}>
+                    <Typography component="div" sx={{ color: 'var(--text-primary)' }}>
                       Include Subdirectories
                     </Typography>
                   }
@@ -293,12 +293,12 @@ function DirectoryScan() {
                     </ListItemIcon>
                     <ListItemText
                       primary={
-                        <Typography sx={{ color: 'var(--text-primary)' }}>
+                        <Typography component="div" sx={{ color: 'var(--text-primary)' }}>
                           Total Files Scanned
                         </Typography>
                       }
                       secondary={
-                        <Typography sx={{ color: 'var(--text-secondary)' }}>
+                        <Typography component="div" sx={{ color: 'var(--text-secondary)' }}>
                           {scanResult.totalFiles || 0}
                         </Typography>
                       }
@@ -310,12 +310,12 @@ function DirectoryScan() {
                     </ListItemIcon>
                     <ListItemText
                       primary={
-                        <Typography sx={{ color: 'var(--text-primary)' }}>
+                        <Typography component="div" sx={{ color: 'var(--text-primary)' }}>
                           Clean Files
                         </Typography>
                       }
                       secondary={
-                        <Typography sx={{ color: 'var(--text-secondary)' }}>
+                        <Typography component="div" sx={{ color: 'var(--text-secondary)' }}>
                           {scanResult.totalFiles - (scanResult.infectedFiles + scanResult.skippedFiles) || 0}
                         </Typography>
                       }
@@ -327,12 +327,12 @@ function DirectoryScan() {
                     </ListItemIcon>
                     <ListItemText
                       primary={
-                        <Typography sx={{ color: 'var(--text-primary)' }}>
+                        <Typography component="div" sx={{ color: 'var(--text-primary)' }}>
                           Infected Files
                         </Typography>
                       }
                       secondary={
-                        <Typography sx={{ color: 'var(--text-secondary)' }}>
+                        <Typography component="div" sx={{ color: 'var(--text-secondary)' }}>
                           {scanResult.infectedFiles || 0}
                         </Typography>
                       }
@@ -344,12 +344,12 @@ function DirectoryScan() {
                     </ListItemIcon>
                     <ListItemText
                       primary={
-                        <Typography sx={{ color: 'var(--text-primary)' }}>
+                        <Typography component="div" sx={{ color: 'var(--text-primary)' }}>
                           Skipped/Error Files
                         </Typography>
                       }
                       secondary={
-                        <Typography sx={{ color: 'var(--text-secondary)' }}>
+                        <Typography component="div" sx={{ color: 'var(--text-secondary)' }}>
                           {scanResult.skippedFiles || 0}
                         </Typography>
                       }
@@ -368,12 +368,12 @@ function DirectoryScan() {
                     </ListItemIcon>
                     <ListItemText
                       primary={
-                        <Typography sx={{ color: 'var(--text-primary)' }}>
+                        <Typography component="div" sx={{ color: 'var(--text-primary)' }}>
                           Directory Status
                         </Typography>
                       }
                       secondary={
-                        <Typography sx={{ color: 'var(--text-secondary)' }}>
+                        <Typography component="div" sx={{ color: 'var(--text-secondary)' }}>
                           {scanResult.infectedFiles > 0 
                             ? `Threats Found (${scanResult.infectedFiles} infected files)` 
                             : "Clean"}
@@ -399,6 +399,7 @@ function DirectoryScan() {
                 </Typography>
                 <Typography 
                   variant="body2" 
+                  component="div"
                   sx={{ 
                     mb: 2,
                     color: 'var(--text-secondary)' 
@@ -424,6 +425,7 @@ function DirectoryScan() {
                         <ListItemText
                           primary={
                             <Typography 
+                              component="div"
                               sx={{ 
                                 color: 'var(--text-primary)',
                                 wordBreak: 'break-all' 
@@ -435,7 +437,7 @@ function DirectoryScan() {
                           secondary={
                             <Box>
                               <Typography 
-                                component="span" 
+                                component="div" 
                                 variant="body2" 
                                 sx={{ color: 'var(--text-primary)' }}
                               >
@@ -443,7 +445,7 @@ function DirectoryScan() {
                               </Typography>
                               {result.threatType && (
                                 <Typography 
-                                  component="span" 
+                                  component="div" 
                                   variant="body2" 
                                   sx={{ color: 'var(--text-secondary)' }}
                                 >
@@ -452,7 +454,7 @@ function DirectoryScan() {
                               )}
                               {result.threatDetails && (
                                 <Typography 
-                                  component="span" 
+                                  component="div" 
                                   variant="body2" 
                                   sx={{ color: 'var(--text-secondary)' }}
                                 >

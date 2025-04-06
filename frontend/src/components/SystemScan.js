@@ -336,17 +336,17 @@ function SystemScan() {
                   {scanResults.map((result, index) => (
                     <React.Fragment key={index}>
                       <StyledListItem>
-                        <ListItemIcon>
-                          {result.infected ? (
-                            <ErrorIcon color="error" />
-                          ) : result.threatType === 'ERROR' ? (
-                            <WarningIcon color="warning" />
-                          ) : (
-                            <CheckCircleIcon color="success" />
-                          )}
-                        </ListItemIcon>
-                        <ListItemText
-                          primary={result.filePath}
+                      <ListItemIcon>
+                        {result.infected ? (
+                          <ErrorIcon color="error" />
+                        ) : result.threatType === 'ERROR' ? (
+                          <WarningIcon color="warning" />
+                        ) : (
+                          <CheckCircleIcon color="success" />
+                        )}
+                      </ListItemIcon>
+                      <ListItemText
+                        primary={result.filePath}
                           secondary={result.threatDetails || 'No threats detected'}
                           sx={{
                             '& .MuiListItemText-primary': {
@@ -367,7 +367,7 @@ function SystemScan() {
               </Box>
             )}
           </StyledPaper>
-        </Grid>
+            </Grid>
       </Grid>
     </Box>
   );

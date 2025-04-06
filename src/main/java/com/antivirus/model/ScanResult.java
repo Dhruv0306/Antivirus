@@ -9,11 +9,8 @@ import java.time.LocalDateTime;
 /**
  * Model class representing the result of an antivirus scan
  */
-@Data
 @Entity
 @Table(name = "scan_results")
-@Getter
-@Setter
 public class ScanResult {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -43,5 +40,70 @@ public class ScanResult {
     @PrePersist
     protected void onCreate() {
         scanDateTime = LocalDateTime.now();
+    }
+    
+    // Getters and Setters
+    public Long getId() {
+        return id;
+    }
+    
+    public void setId(Long id) {
+        this.id = id;
+    }
+    
+    public String getFilePath() {
+        return filePath;
+    }
+    
+    public void setFilePath(String filePath) {
+        this.filePath = filePath;
+    }
+    
+    public String getThreatType() {
+        return threatType;
+    }
+    
+    public void setThreatType(String threatType) {
+        this.threatType = threatType;
+    }
+    
+    public boolean isInfected() {
+        return infected;
+    }
+    
+    public void setInfected(boolean infected) {
+        this.infected = infected;
+    }
+    
+    public String getThreatDetails() {
+        return threatDetails;
+    }
+    
+    public void setThreatDetails(String threatDetails) {
+        this.threatDetails = threatDetails;
+    }
+    
+    public LocalDateTime getScanDateTime() {
+        return scanDateTime;
+    }
+    
+    public void setScanDateTime(LocalDateTime scanDateTime) {
+        this.scanDateTime = scanDateTime;
+    }
+    
+    public String getScanType() {
+        return scanType;
+    }
+    
+    public void setScanType(String scanType) {
+        this.scanType = scanType;
+    }
+    
+    public String getActionTaken() {
+        return actionTaken;
+    }
+    
+    public void setActionTaken(String actionTaken) {
+        this.actionTaken = actionTaken;
     }
 } 

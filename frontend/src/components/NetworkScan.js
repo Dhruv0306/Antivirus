@@ -33,7 +33,8 @@ import {
   Block as BlockIcon,
   NetworkCheck as NetworkCheckIcon,
   Add as AddIcon,
-  Delete as DeleteIcon
+  Delete as DeleteIcon,
+  Info as InfoIcon
 } from '@mui/icons-material';
 import axios from 'axios';
 import { styled } from '@mui/material/styles';
@@ -91,17 +92,18 @@ const StyledChip = styled(Chip)(({ theme }) => ({
 // API configuration
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8080/api/network-security';
 
+// Configure axios defaults
 axios.defaults.withCredentials = true;
 axios.defaults.headers.common['Accept'] = 'application/json';
-axios.defaults.headers.common['Access-Control-Allow-Origin'] = 'http://localhost:5000';
+axios.defaults.headers.common['Content-Type'] = 'application/json';
 
 function NetworkScan() {
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState(null);
   const [error, setError] = useState(null);
   const [networkStatus, setNetworkStatus] = useState({
-    firewallEnabled: true,
-    webProtectionEnabled: true,
+    firewallEnabled: false,
+    webProtectionEnabled: false,
     activeThreats: 0,
     activeConnections: 0,
     blockedAttempts: 0,
@@ -120,19 +122,36 @@ function NetworkScan() {
 
   const fetchNetworkStatus = async () => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/status`, {
-        withCredentials: true,
-        headers: {
-          'Content-Type': 'application/json'
-        }
+      console.log('Fetching network status from:', `${API_BASE_URL}/status`);
+      const response = await axios.get(`${API_BASE_URL}/status`);
+      console.log('Network status response:', response.data);
+      
+      // Ensure blockedDomains is always an array
+      const blockedDomains = Array.isArray(response.data.blockedDomains) 
+        ? response.data.blockedDomains 
+        : [];
+        
+      setNetworkStatus({
+        ...response.data,
+        blockedDomains,
+        firewallEnabled: Boolean(response.data.securityControls?.firewallEnabled),
+        webProtectionEnabled: Boolean(response.data.securityControls?.webProtectionEnabled)
       });
-      setNetworkStatus(response.data);
     } catch (error) {
       console.error('Error fetching network status:', error);
+      console.error('Error details:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        headers: error.response?.headers
+      });
+      
       if (error.response?.status === 403) {
         setError('Access denied. Please check server configuration.');
+      } else if (error.code === 'ERR_NETWORK') {
+        setError('Could not connect to the server. Please ensure the server is running and accessible.');
       } else {
-        setError('Error connecting to server. Please ensure the server is running.');
+        setError('Error connecting to server: ' + (error.response?.data?.message || error.message));
       }
     }
   };
@@ -143,12 +162,7 @@ function NetworkScan() {
     setScanResult(null);
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/scan`, {}, {
-        withCredentials: true,
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
+      const response = await axios.post(`${API_BASE_URL}/scan`);
       setScanResult(response.data);
       await fetchNetworkStatus();
     } catch (err) {
@@ -161,34 +175,68 @@ function NetworkScan() {
 
   const toggleFirewall = async () => {
     try {
-      await axios.post(`${API_BASE_URL}/firewall/toggle`, {
+      console.log('Toggling firewall. Current state:', networkStatus.firewallEnabled);
+      const response = await axios.post(`${API_BASE_URL}/firewall/toggle`, {
         enabled: !networkStatus.firewallEnabled
-      }, {
-        withCredentials: true,
-        headers: {
-          'Content-Type': 'application/json'
-        }
       });
+      console.log('Firewall toggle response:', response.data);
+      
+      // Update local state immediately for better UX
+      setNetworkStatus(prevStatus => ({
+        ...prevStatus,
+        firewallEnabled: !prevStatus.firewallEnabled
+      }));
+      
+      // Fetch updated status from server
       await fetchNetworkStatus();
     } catch (error) {
       console.error('Error toggling firewall:', error);
+      console.error('Error details:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status
+      });
+      
+      // Revert the local state if the API call failed
+      setNetworkStatus(prevStatus => ({
+        ...prevStatus,
+        firewallEnabled: !prevStatus.firewallEnabled
+      }));
+      
       setError('Error toggling firewall: ' + (error.response?.data?.error || error.message));
     }
   };
 
   const toggleWebProtection = async () => {
     try {
-      await axios.post(`${API_BASE_URL}/web-protection/toggle`, {
+      console.log('Toggling web protection. Current state:', networkStatus.webProtectionEnabled);
+      const response = await axios.post(`${API_BASE_URL}/web-protection/toggle`, {
         enabled: !networkStatus.webProtectionEnabled
-      }, {
-        withCredentials: true,
-        headers: {
-          'Content-Type': 'application/json'
-        }
       });
+      console.log('Web protection toggle response:', response.data);
+      
+      // Update local state immediately for better UX
+      setNetworkStatus(prevStatus => ({
+        ...prevStatus,
+        webProtectionEnabled: !prevStatus.webProtectionEnabled
+      }));
+      
+      // Fetch updated status from server
       await fetchNetworkStatus();
     } catch (error) {
       console.error('Error toggling web protection:', error);
+      console.error('Error details:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status
+      });
+      
+      // Revert the local state if the API call failed
+      setNetworkStatus(prevStatus => ({
+        ...prevStatus,
+        webProtectionEnabled: !prevStatus.webProtectionEnabled
+      }));
+      
       setError('Error toggling web protection: ' + (error.response?.data?.error || error.message));
     }
   };
@@ -206,30 +254,37 @@ function NetworkScan() {
     }
 
     try {
-      await axios.post(`${API_BASE_URL}/domains/block`, {
-        domain: newDomain
-      }, {
-        withCredentials: true,
-        headers: {
-          'Content-Type': 'application/json'
-        }
+      console.log('Blocking domain:', newDomain);
+      const response = await axios.post(`${API_BASE_URL}/block`, {
+        domain: newDomain,
+        reason: 'Manually blocked by user'
       });
+      console.log('Block domain response:', response.data);
+      
       await fetchNetworkStatus();
       setNewDomain('');
       setDomainError('');
     } catch (error) {
       console.error('Error blocking domain:', error);
-      setDomainError('Error blocking domain: ' + (error.response?.data?.message || error.message));
+      console.error('Error details:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        headers: error.response?.headers
+      });
+      
+      if (error.code === 'ERR_NETWORK') {
+        setDomainError('Could not connect to the server. Please ensure the server is running.');
+      } else {
+        setDomainError('Error blocking domain: ' + (error.response?.data?.message || error.message));
+      }
     }
   };
 
   const handleRemoveDomain = async (domain) => {
     try {
-      await axios.delete(`${API_BASE_URL}/domains/${domain}`, {
-        withCredentials: true,
-        headers: {
-          'Content-Type': 'application/json'
-        }
+      await axios.post(`${API_BASE_URL}/unblock`, {
+        domain: domain
       });
       await fetchNetworkStatus();
     } catch (error) {
@@ -282,19 +337,20 @@ function NetworkScan() {
                 </ListItemIcon>
                 <ListItemText 
                   primary={
-                    <Typography sx={{ fontWeight: 500 }}>
+                    <Typography component="div" sx={{ fontWeight: 500 }}>
                       Firewall Protection
                     </Typography>
                   }
                   secondary={
-                    <Typography sx={{ color: 'var(--text-secondary)' }}>
+                    <Typography component="div" sx={{ color: 'var(--text-secondary)' }}>
                       {networkStatus.firewallEnabled ? 'Enabled' : 'Disabled'}
                     </Typography>
                   }
                 />
                 <Switch
-                  checked={networkStatus.firewallEnabled}
+                  checked={Boolean(networkStatus.firewallEnabled)}
                   onChange={toggleFirewall}
+                  inputProps={{ 'aria-label': 'Firewall toggle' }}
                   sx={{
                     '& .MuiSwitch-switchBase.Mui-checked': {
                       color: 'var(--success-main)',
@@ -315,19 +371,20 @@ function NetworkScan() {
                 </ListItemIcon>
                 <ListItemText 
                   primary={
-                    <Typography sx={{ fontWeight: 500 }}>
+                    <Typography component="div" sx={{ fontWeight: 500 }}>
                       Web Protection
                     </Typography>
                   }
                   secondary={
-                    <Typography sx={{ color: 'var(--text-secondary)' }}>
+                    <Typography component="div" sx={{ color: 'var(--text-secondary)' }}>
                       {networkStatus.webProtectionEnabled ? 'Enabled' : 'Disabled'}
                     </Typography>
                   }
                 />
                 <Switch
-                  checked={networkStatus.webProtectionEnabled}
+                  checked={Boolean(networkStatus.webProtectionEnabled)}
                   onChange={toggleWebProtection}
+                  inputProps={{ 'aria-label': 'Web protection toggle' }}
                   sx={{
                     '& .MuiSwitch-switchBase.Mui-checked': {
                       color: 'var(--success-main)',
@@ -366,12 +423,12 @@ function NetworkScan() {
                 </ListItemIcon>
                 <ListItemText 
                   primary={
-                    <Typography sx={{ fontWeight: 500 }}>
+                    <Typography component="div" sx={{ fontWeight: 500 }}>
                       Active Connections
                     </Typography>
                   }
                   secondary={
-                    <Typography sx={{ color: 'var(--text-secondary)' }}>
+                    <Typography component="div" sx={{ color: 'var(--text-secondary)' }}>
                       {networkStatus.activeConnections}
                     </Typography>
                   }
@@ -383,12 +440,12 @@ function NetworkScan() {
                 </ListItemIcon>
                 <ListItemText 
                   primary={
-                    <Typography sx={{ fontWeight: 500 }}>
+                    <Typography component="div" sx={{ fontWeight: 500 }}>
                       Blocked Attempts
                     </Typography>
                   }
                   secondary={
-                    <Typography sx={{ color: 'var(--text-secondary)' }}>
+                    <Typography component="div" sx={{ color: 'var(--text-secondary)' }}>
                       {networkStatus.blockedAttempts}
                     </Typography>
                   }
@@ -436,14 +493,19 @@ function NetworkScan() {
               />
             </Box>
             <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-              {networkStatus.blockedDomains.map((domain) => (
-                <StyledChip
-                  key={domain}
-                  label={domain}
-                  onDelete={() => handleRemoveDomain(domain)}
-                  deleteIcon={<DeleteIcon />}
-                />
-              ))}
+              {networkStatus.blockedDomains?.map((item) => {
+                // Convert the domain item to string if it's an object
+                const domain = typeof item === 'object' ? item.domain : item;
+                return domain ? (
+                  <StyledChip
+                    key={domain}
+                    label={domain}
+                    onDelete={() => handleRemoveDomain(domain)}
+                    deleteIcon={<DeleteIcon />}
+                    sx={{ m: 0.5 }}
+                  />
+                ) : null;
+              })}
             </Stack>
           </StyledCard>
         </Grid>
@@ -488,16 +550,235 @@ function NetworkScan() {
                 alignItems: 'center', 
                 mb: 2 
               }}>
-                <CheckCircleIcon sx={{ 
-                  fontSize: 30, 
-                  mr: 1, 
-                  color: 'var(--success-main)' 
-                }} />
+                {scanResult.threats > 0 ? (
+                  <ErrorIcon sx={{ 
+                    fontSize: 30, 
+                    mr: 1, 
+                    color: 'var(--error-main)' 
+                  }} />
+                ) : (
+                  <CheckCircleIcon sx={{ 
+                    fontSize: 30, 
+                    mr: 1, 
+                    color: 'var(--success-main)' 
+                  }} />
+                )}
                 <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                  Scan Results
+                  Network Scan Report
                 </Typography>
               </Box>
-              {/* Add your scan results display here */}
+              
+              {/* Scan Summary */}
+              <Box sx={{ mb: 3, p: 2, bgcolor: 'var(--background-default)', borderRadius: 1 }}>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6} md={3}>
+                    <Box sx={{ textAlign: 'center' }}>
+                      <Typography variant="h4" sx={{ 
+                        color: scanResult.threats > 0 ? 'var(--error-main)' : 'var(--success-main)',
+                        fontWeight: 'bold'
+                      }}>
+                        {scanResult.threats}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Threats Detected
+                      </Typography>
+                    </Box>
+                  </Grid>
+                  <Grid item xs={12} sm={6} md={3}>
+                    <Box sx={{ textAlign: 'center' }}>
+                      <Typography variant="h4" sx={{ color: 'var(--primary-main)', fontWeight: 'bold' }}>
+                        {scanResult.activeThreats}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Active Threats
+                      </Typography>
+                    </Box>
+                  </Grid>
+                  <Grid item xs={12} sm={6} md={3}>
+                    <Box sx={{ textAlign: 'center' }}>
+                      <Typography variant="h4" sx={{ color: 'var(--warning-main)', fontWeight: 'bold' }}>
+                        {scanResult.blockedAttempts}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Blocked Attempts
+                      </Typography>
+                    </Box>
+                  </Grid>
+                  <Grid item xs={12} sm={6} md={3}>
+                    <Box sx={{ textAlign: 'center' }}>
+                      <Typography variant="h4" sx={{ color: 'var(--info-main)', fontWeight: 'bold' }}>
+                        {scanResult.openPorts?.length || 0}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Open Ports
+                      </Typography>
+                    </Box>
+                  </Grid>
+                </Grid>
+              </Box>
+              
+              {/* Scan Details */}
+              <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
+                Scan Details
+              </Typography>
+              <Box sx={{ mb: 3 }}>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="body2" color="text.secondary">
+                      Scan Time: {new Date(scanResult.scanTime).toLocaleString()}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="body2" color="text.secondary">
+                      Status: <Chip 
+                        label={scanResult.status} 
+                        size="small" 
+                        color={scanResult.status === 'COMPLETED' ? 'success' : 'warning'} 
+                      />
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="body2" color="text.secondary">
+                      Firewall: <Chip 
+                        label={scanResult.firewallEnabled ? 'Enabled' : 'Disabled'} 
+                        size="small" 
+                        color={scanResult.firewallEnabled ? 'success' : 'error'} 
+                      />
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="body2" color="text.secondary">
+                      Web Protection: <Chip 
+                        label={scanResult.webProtectionEnabled ? 'Enabled' : 'Disabled'} 
+                        size="small" 
+                        color={scanResult.webProtectionEnabled ? 'success' : 'error'} 
+                      />
+                    </Typography>
+                  </Grid>
+                </Grid>
+              </Box>
+              
+              {/* Vulnerabilities */}
+              {scanResult.vulnerabilities && scanResult.vulnerabilities.length > 0 && (
+                <>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
+                    Vulnerabilities
+                  </Typography>
+                  <Box sx={{ mb: 3 }}>
+                    {scanResult.vulnerabilities.map((vuln, index) => (
+                      <Paper 
+                        key={index} 
+                        sx={{ 
+                          p: 2, 
+                          mb: 1, 
+                          bgcolor: 'var(--background-default)',
+                          borderLeft: `4px solid ${
+                            vuln.severity === 'CRITICAL' ? 'var(--error-main)' :
+                            vuln.severity === 'HIGH' ? 'var(--error-light)' :
+                            vuln.severity === 'MEDIUM' ? 'var(--warning-main)' :
+                            'var(--info-main)'
+                          }`
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', alignItems: 'flex-start' }}>
+                          <Box sx={{ mr: 1 }}>
+                            {vuln.severity === 'CRITICAL' || vuln.severity === 'HIGH' ? (
+                              <ErrorIcon sx={{ color: 'var(--error-main)' }} />
+                            ) : vuln.severity === 'MEDIUM' ? (
+                              <WarningIcon sx={{ color: 'var(--warning-main)' }} />
+                            ) : (
+                              <InfoIcon sx={{ color: 'var(--info-main)' }} />
+                            )}
+                          </Box>
+                          <Box sx={{ flex: 1 }}>
+                            <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                              {vuln.type.replace(/_/g, ' ')}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              {vuln.description}
+                            </Typography>
+                            <Typography variant="body2" sx={{ mt: 1, color: 'var(--primary-main)' }}>
+                              <strong>Recommendation:</strong> {vuln.recommendation}
+                            </Typography>
+                          </Box>
+                          <Chip 
+                            label={vuln.severity} 
+                            size="small" 
+                            color={
+                              vuln.severity === 'CRITICAL' || vuln.severity === 'HIGH' ? 'error' :
+                              vuln.severity === 'MEDIUM' ? 'warning' : 'info'
+                            } 
+                          />
+                        </Box>
+                      </Paper>
+                    ))}
+                  </Box>
+                </>
+              )}
+              
+              {/* Open Ports */}
+              {scanResult.openPorts && scanResult.openPorts.length > 0 && (
+                <>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
+                    Open Ports
+                  </Typography>
+                  <Box sx={{ mb: 3 }}>
+                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                      {scanResult.openPorts.map((port, index) => (
+                        <Chip 
+                          key={index}
+                          label={`Port ${port}`}
+                          color="warning"
+                          variant="outlined"
+                          sx={{ m: 0.5 }}
+                        />
+                      ))}
+                    </Stack>
+                  </Box>
+                </>
+              )}
+              
+              {/* Suspicious Connections */}
+              {scanResult.suspiciousConnections && scanResult.suspiciousConnections.length > 0 && (
+                <>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
+                    Suspicious Connections
+                  </Typography>
+                  <Box sx={{ mb: 3 }}>
+                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                      {scanResult.suspiciousConnections.map((ip, index) => (
+                        <Chip 
+                          key={index}
+                          label={ip}
+                          color="error"
+                          icon={<BlockIcon />}
+                          sx={{ m: 0.5 }}
+                        />
+                      ))}
+                    </Stack>
+                  </Box>
+                </>
+              )}
+              
+              {/* Action Buttons */}
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
+                <Button 
+                  variant="outlined" 
+                  color="primary" 
+                  onClick={() => setScanResult(null)}
+                  sx={{ mr: 1 }}
+                >
+                  Close Report
+                </Button>
+                <Button 
+                  variant="contained" 
+                  color="primary" 
+                  onClick={handleScan}
+                  startIcon={<SecurityIcon />}
+                >
+                  Run New Scan
+                </Button>
+              </Box>
             </StyledCard>
           </Grid>
         )}

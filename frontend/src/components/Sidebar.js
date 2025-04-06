@@ -66,9 +66,8 @@ const LogoText = styled(Typography)(({ theme }) => ({
   WebkitTextFillColor: 'transparent'
 }));
 
-const StyledListItem = styled(ListItem)(({ theme, active }) => ({
+const StyledListItem = styled(ListItem)(({ theme }) => ({
   color: 'var(--text-primary)',
-  backgroundColor: active ? 'var(--primary-transparent)' : 'transparent',
   '&:hover': {
     backgroundColor: 'var(--primary-transparent-hover)',
     '& .MuiListItemIcon-root': {
@@ -80,11 +79,21 @@ const StyledListItem = styled(ListItem)(({ theme, active }) => ({
   margin: '4px 8px',
   marginBottom: 4,
   padding: '6px',
-  minHeight: '40px'
+  minHeight: '40px',
+  '&.active': {
+    backgroundColor: 'var(--primary-transparent)',
+    '& .MuiListItemIcon-root': {
+      color: 'var(--primary-main)'
+    },
+    '& .MuiListItemText-root .MuiTypography-root': {
+      fontWeight: 600,
+      color: 'var(--text-primary)'
+    }
+  }
 }));
 
-const StyledListItemIcon = styled(ListItemIcon)(({ theme, active }) => ({
-  color: active ? 'var(--primary-main)' : 'var(--text-secondary)',
+const StyledListItemIcon = styled(ListItemIcon)(({ theme }) => ({
+  color: 'var(--text-secondary)',
   transition: 'color 0.2s ease',
   minWidth: '35px',
   '& .MuiSvgIcon-root': {
@@ -92,12 +101,12 @@ const StyledListItemIcon = styled(ListItemIcon)(({ theme, active }) => ({
   }
 }));
 
-const StyledListItemText = styled(ListItemText)(({ theme, active }) => ({
+const StyledListItemText = styled(ListItemText)(({ theme }) => ({
   margin: 0,
   '& .MuiTypography-root': {
-    fontWeight: active ? 600 : 400,
+    fontWeight: 400,
     fontSize: '0.9rem',
-    color: active ? 'var(--text-primary)' : 'var(--text-secondary)'
+    color: 'var(--text-secondary)'
   }
 }));
 
@@ -121,22 +130,24 @@ function Sidebar() {
         </LogoText>
       </LogoContainer>
       <List sx={{ py: 0.5 }}>
-        {menuItems.map((item) => (
-          <StyledListItem
-            key={item.text}
-            component={Link}
-            to={item.path}
-            active={location.pathname === item.path}
-          >
-            <StyledListItemIcon active={location.pathname === item.path}>
-              {item.icon}
-            </StyledListItemIcon>
-            <StyledListItemText 
-              primary={item.text} 
-              active={location.pathname === item.path}
-            />
-          </StyledListItem>
-        ))}
+        {menuItems.map((item) => {
+          const isActive = location.pathname === item.path;
+          return (
+            <StyledListItem
+              key={item.text}
+              component={Link}
+              to={item.path}
+              className={isActive ? 'active' : ''}
+            >
+              <StyledListItemIcon>
+                {item.icon}
+              </StyledListItemIcon>
+              <StyledListItemText 
+                primary={item.text}
+              />
+            </StyledListItem>
+          );
+        })}
       </List>
     </StyledPaper>
   );

@@ -167,6 +167,7 @@ function Dashboard() {
       }}>
         <Typography 
           variant="h4" 
+          component="div"
           sx={{ 
             fontWeight: 600,
             color: 'var(--text-primary)'
@@ -226,6 +227,7 @@ function Dashboard() {
                     }} />
                     <Typography 
                       variant="h6" 
+                      component="div"
                       sx={{ 
                         fontWeight: 600,
                         color: 'var(--text-primary)'
@@ -245,7 +247,7 @@ function Dashboard() {
                       </ListItemIcon>
                       <ListItemText
                         primary={
-                          <Typography sx={{ 
+                          <Typography component="div" sx={{ 
                             fontWeight: 500,
                             color: 'var(--text-primary)'
                           }}>
@@ -253,7 +255,7 @@ function Dashboard() {
                           </Typography>
                         }
                         secondary={
-                          <Typography sx={{ 
+                          <Typography component="div" sx={{ 
                             color: 'var(--text-secondary)'
                           }}>
                             {systemStatus.systemProtected ? "Protected" : "At Risk"}
@@ -271,7 +273,7 @@ function Dashboard() {
                       </ListItemIcon>
                       <ListItemText
                         primary={
-                          <Typography sx={{ 
+                          <Typography component="div" sx={{ 
                             fontWeight: 500,
                             color: 'var(--text-primary)'
                           }}>
@@ -279,7 +281,7 @@ function Dashboard() {
                           </Typography>
                         }
                         secondary={
-                          <Typography sx={{ 
+                          <Typography component="div" sx={{ 
                             color: 'var(--text-secondary)'
                           }}>
                             {systemStatus.realtimeProtection ? "Active" : "Disabled"}
@@ -310,6 +312,7 @@ function Dashboard() {
                     }} />
                     <Typography 
                       variant="h6" 
+                      component="div"
                       sx={{ 
                         fontWeight: 600,
                         color: 'var(--text-primary)'
@@ -326,7 +329,7 @@ function Dashboard() {
                         </ListItemIcon>
                         <ListItemText
                           primary={
-                            <Typography sx={{ 
+                            <Typography component="div" sx={{ 
                               fontWeight: 500,
                               color: 'var(--text-primary)'
                             }}>
@@ -334,25 +337,30 @@ function Dashboard() {
                             </Typography>
                           }
                           secondary={
-                            <Box sx={{ width: '100%', mt: 1 }}>
-                              <Box sx={{ 
-                                display: 'flex', 
-                                justifyContent: 'space-between', 
-                                mb: 0.5,
-                                color: 'var(--text-secondary)'
-                              }}>
-                                <Typography variant="body2">
-                                  {formatBytes(disk.used)} used of {formatBytes(disk.total)}
-                                </Typography>
-                                <Typography variant="body2">
-                                  {Math.round((disk.used / disk.total) * 100)}%
-                                </Typography>
+                            <Typography 
+                              component="div" 
+                              sx={{ 
+                                color: 'var(--text-secondary)',
+                                mt: 1 
+                              }}
+                            >
+                              <Box 
+                                component="span" 
+                                sx={{ 
+                                  display: 'flex', 
+                                  justifyContent: 'space-between', 
+                                  mb: 0.5,
+                                  color: 'var(--text-secondary)'
+                                }}
+                              >
+                                <span>{formatBytes(disk.used)} used of {formatBytes(disk.total)}</span>
+                                <span>{Math.round((disk.used / disk.total) * 100)}%</span>
                               </Box>
                               <StyledProgress
                                 variant="determinate"
                                 value={(disk.used / disk.total) * 100}
                               />
-                            </Box>
+                            </Typography>
                           }
                         />
                       </ListItem>
@@ -370,7 +378,14 @@ function Dashboard() {
                 <CardContent>
                   <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                     <SpeedIcon sx={{ fontSize: 30, mr: 1, color: 'primary.main' }} />
-                    <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                    <Typography 
+                      variant="h6" 
+                      component="div"
+                      sx={{ 
+                        fontWeight: 600,
+                        color: 'var(--text-primary)'
+                      }}
+                    >
                       Recent Scan History
                     </Typography>
                   </Box>
@@ -415,19 +430,21 @@ function Dashboard() {
                             </TableCell>
                             <TableCell>{scan.threatType || 'N/A'}</TableCell>
                             <TableCell>
-                              <Tooltip title={scan.threatDetails || 'No threats found'}>
-                                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                <Typography component="div" sx={{ display: 'flex', alignItems: 'center' }}>
                                   {scan.threatDetails || 'No threats found'}
                                   <InfoIcon sx={{ ml: 1, fontSize: 16, opacity: 0.7 }} />
-                                </Box>
-                              </Tooltip>
+                                </Typography>
+                              </Box>
                             </TableCell>
                           </TableRow>
                         ))}
                         {scanHistory.length === 0 && (
                           <TableRow>
-                            <TableCell colSpan={5} align="center">
-                              No scan history available
+                            <TableCell colSpan={5}>
+                              <Typography component="div" align="center">
+                                No scan history available
+                              </Typography>
                             </TableCell>
                           </TableRow>
                         )}
