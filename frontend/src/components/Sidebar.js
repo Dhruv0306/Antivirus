@@ -15,6 +15,7 @@ import {
   Folder as FolderIcon,
   Computer as ComputerIcon,
   Security as SecurityIcon,
+  Schedule as ScheduleIcon,
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
 
@@ -119,6 +120,7 @@ function Sidebar() {
     { text: 'Directory Scan', icon: <FolderIcon />, path: '/directory-scan' },
     { text: 'System Scan', icon: <ComputerIcon />, path: '/system-scan' },
     { text: 'Network Security', icon: <SecurityIcon />, path: '/network-security' },
+    { text: 'Auto Scan Guide', icon: <ScheduleIcon />, path: '/auto-scan-guide' },
   ];
 
   return (

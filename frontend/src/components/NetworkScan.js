@@ -629,7 +629,7 @@ function NetworkScan() {
                     </Typography>
                   </Grid>
                   <Grid item xs={12} sm={6}>
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography variant="body2" color="text.secondary" component="div">
                       Status: <Chip 
                         label={scanResult.status} 
                         size="small" 
@@ -638,7 +638,7 @@ function NetworkScan() {
                     </Typography>
                   </Grid>
                   <Grid item xs={12} sm={6}>
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography variant="body2" color="text.secondary" component="div">
                       Firewall: <Chip 
                         label={scanResult.firewallEnabled ? 'Enabled' : 'Disabled'} 
                         size="small" 
@@ -647,7 +647,7 @@ function NetworkScan() {
                     </Typography>
                   </Grid>
                   <Grid item xs={12} sm={6}>
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography variant="body2" color="text.secondary" component="div">
                       Web Protection: <Chip 
                         label={scanResult.webProtectionEnabled ? 'Enabled' : 'Disabled'} 
                         size="small" 

@@ -12,6 +12,7 @@ import FileScan from './components/FileScan';
 import DirectoryScan from './components/DirectoryScan';
 import SystemScan from './components/SystemScan';
 import NetworkScan from './components/NetworkScan';
+import AutoScanGuide from './components/AutoScanGuide';
 import Sidebar from './components/Sidebar';
 
 function App() {
@@ -128,6 +129,7 @@ function App() {
                   <Route path="/directory-scan" element={<DirectoryScan />} />
                   <Route path="/system-scan" element={<SystemScan />} />
                   <Route path="/network-security" element={<NetworkScan />} />
+                  <Route path="/auto-scan-guide" element={<AutoScanGuide />} />
                 </Routes>
               </Container>
             </Box>
