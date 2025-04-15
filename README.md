@@ -199,6 +199,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ## 👥 Authors
 
 - [Dhruv0306](https://github.com/Dhruv0306) - Initial work
+- [Sameer7188](https://github.com/Sameer7188) - Front-End work
 
 ## 🙏 Acknowledgments
 
