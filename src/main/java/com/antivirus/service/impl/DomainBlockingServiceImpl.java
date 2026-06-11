@@ -95,19 +95,19 @@ public class DomainBlockingServiceImpl implements DomainBlockingService {
     @Override
     @Transactional
     public void unblockDomain(String domain) {
-        domain = DomainValidator.validateAndNormalize(domain);
-        blockedDomainRepository.findByDomain(domain).ifPresent(blockedDomain -> {
+        final String normalizedDomain = DomainValidator.validateAndNormalize(domain);
+        blockedDomainRepository.findByDomain(normalizedDomain).ifPresent(blockedDomain -> {
             blockedDomainRepository.delete(blockedDomain);
             // Only try to update hosts file if we have admin privileges
             if (hasAdminPrivileges && hostsFileAccessible) {
                 try {
                     updateHostsFile();
                 } catch (IOException e) {
-                    logger.error("Failed to update hosts file while unblocking domain: " + domain, e);
+                    logger.error("Failed to update hosts file while unblocking domain: " + normalizedDomain, e);
                     // Don't throw exception, just log the error
                 }
             } else {
-                logger.warn("Domain {} will be unblocked in database only (no admin privileges or hosts file not accessible)", domain);
+                logger.warn("Domain {} will be unblocked in database only (no admin privileges or hosts file not accessible)", normalizedDomain);
             }
         });
     }
