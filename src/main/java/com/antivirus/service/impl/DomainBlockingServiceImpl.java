@@ -3,6 +3,7 @@ package com.antivirus.service.impl;
 import com.antivirus.model.BlockedDomain;
 import com.antivirus.repository.BlockedDomainRepository;
 import com.antivirus.service.DomainBlockingService;
+import com.antivirus.util.DomainValidator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -67,6 +68,7 @@ public class DomainBlockingServiceImpl implements DomainBlockingService {
     @Override
     @Transactional
     public void blockDomain(String domain, String reason) {
+        domain = DomainValidator.validateAndNormalize(domain);
         if (blockedDomainRepository.existsByDomain(domain)) {
             logger.warn("Domain {} is already blocked", domain);
             return;
@@ -93,6 +95,7 @@ public class DomainBlockingServiceImpl implements DomainBlockingService {
     @Override
     @Transactional
     public void unblockDomain(String domain) {
+        domain = DomainValidator.validateAndNormalize(domain);
         blockedDomainRepository.findByDomain(domain).ifPresent(blockedDomain -> {
             blockedDomainRepository.delete(blockedDomain);
             // Only try to update hosts file if we have admin privileges
