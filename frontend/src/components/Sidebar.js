@@ -1,7 +1,8 @@
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Box,
+  Button,
   List,
   ListItem,
   ListItemIcon,
@@ -16,7 +17,9 @@ import {
   Computer as ComputerIcon,
   Security as SecurityIcon,
   Schedule as ScheduleIcon,
+  Logout as LogoutIcon,
 } from '@mui/icons-material';
+import { useAuth } from '../context/AuthContext';
 import { styled } from '@mui/material/styles';
 
 // Styled components
@@ -113,6 +116,13 @@ const StyledListItemText = styled(ListItemText)(({ theme }) => ({
 
 function Sidebar() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
   const menuItems = [
     { text: 'Dashboard', icon: <DashboardIcon />, path: '/' },
@@ -151,6 +161,22 @@ function Sidebar() {
           );
         })}
       </List>
+      <Box sx={{ p: 2, borderTop: '1px solid var(--border-main)' }}>
+        {user && (
+          <Typography variant="caption" sx={{ display: 'block', mb: 1, color: 'var(--text-secondary)' }}>
+            Signed in as {user}
+          </Typography>
+        )}
+        <Button
+          fullWidth
+          variant="outlined"
+          color="inherit"
+          startIcon={<LogoutIcon />}
+          onClick={handleLogout}
+        >
+          Sign Out
+        </Button>
+      </Box>
     </StyledPaper>
   );
 }
