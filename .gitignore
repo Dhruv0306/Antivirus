@@ -24,7 +24,8 @@ target/
 logs/
 *.trace.db
 *.mv.db
-
+.env
+!.env.example
 # Package Files
 *.jar
 *.war
