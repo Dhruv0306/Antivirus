@@ -24,4 +24,11 @@ export default defineConfig({
   preview: {
     port: 5000,
   },
+  optimizeDeps: {
+    esbuildOptions: {
+      loader: {
+        '.js': 'jsx',
+      },
+    },
+  },
 });

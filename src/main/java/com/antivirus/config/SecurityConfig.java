@@ -73,8 +73,8 @@ public class SecurityConfig {
 
     @Bean
     public UserDetailsService userDetailsService(
-            @Value("${spring.security.user.name}") String username,
-            @Value("${spring.security.user.password}") String password,
+            @Value("${app.admin.username}") String username,
+            @Value("${app.admin.password}") String password,
             PasswordEncoder passwordEncoder) {
         UserDetails user = User.builder()
                 .username(username)
