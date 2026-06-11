@@ -7,8 +7,12 @@ import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 import org.springframework.web.cors.CorsConfiguration;
@@ -66,5 +70,31 @@ public class SecurityConfig {
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
+    }
+
+    @Bean
+    public UserDetailsService userDetailsService(
+            @Value("${spring.security.user.name}") String username,
+            @Value("${spring.security.user.password}") String password,
+            PasswordEncoder passwordEncoder) {
+        UserDetails user = User.builder()
+                .username(username)
+                .password(resolveStoredPassword(password, passwordEncoder))
+                .roles("ADMIN")
+                .build();
+        return new InMemoryUserDetailsManager(user);
+    }
+
+    /**
+     * Accepts plaintext (encoded at startup), {bcrypt} prefixed, or raw BCrypt hashes.
+     */
+    private static String resolveStoredPassword(String password, PasswordEncoder passwordEncoder) {
+        if (password.startsWith("{bcrypt}")) {
+            return password.substring("{bcrypt}".length());
+        }
+        if (password.startsWith("$2a$") || password.startsWith("$2b$")) {
+            return password;
+        }
+        return passwordEncoder.encode(password);
     }
 }
