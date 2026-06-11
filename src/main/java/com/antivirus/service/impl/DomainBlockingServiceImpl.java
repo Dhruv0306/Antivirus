@@ -3,6 +3,7 @@ package com.antivirus.service.impl;
 import com.antivirus.model.BlockedDomain;
 import com.antivirus.repository.BlockedDomainRepository;
 import com.antivirus.service.DomainBlockingService;
+import com.antivirus.util.DomainValidator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -34,28 +35,27 @@ public class DomainBlockingServiceImpl implements DomainBlockingService {
         this.blockedDomainRepository = blockedDomainRepository;
         this.hostsFilePath = hostsFilePath;
         
-        // First check if we have admin privileges
+        Path hostsPath = Paths.get(hostsFilePath);
         hasAdminPrivileges = isAdmin();
-        if (!hasAdminPrivileges) {
-            logger.warn("Application is not running with administrator privileges. Hosts file modifications will be simulated.");
-            return;
+        hostsFileAccessible = canModifyHostsFile(hostsPath);
+
+        if (!hostsFileAccessible) {
+            logger.warn(
+                "Hosts file at {} is not writable. Domain blocking will be stored in the database only. " +
+                "Run the application as Administrator to enable system-wide hosts blocking.",
+                hostsFilePath
+            );
+        } else {
+            logger.info("Hosts file is writable at: {}", hostsFilePath);
         }
-        
-        // Only try to access the hosts file if we have admin privileges
+    }
+
+    private boolean canModifyHostsFile(Path hostsPath) {
         try {
-            Path hostsPath = Paths.get(hostsFilePath);
-            if (Files.exists(hostsPath)) {
-                // Try to read the file to check permissions
-                Files.readAllLines(hostsPath);
-                hostsFileAccessible = true;
-                logger.info("Hosts file is accessible at: {}", hostsFilePath);
-            } else {
-                hostsFileAccessible = false;
-                logger.warn("Hosts file does not exist at: {}", hostsFilePath);
-            }
-        } catch (IOException e) {
-            hostsFileAccessible = false;
-            logger.warn("Cannot access hosts file at {}: {}", hostsFilePath, e.getMessage());
+            return Files.exists(hostsPath) && Files.isWritable(hostsPath);
+        } catch (Exception e) {
+            logger.warn("Cannot verify hosts file write access at {}: {}", hostsPath, e.getMessage());
+            return false;
         }
     }
 
@@ -67,6 +67,7 @@ public class DomainBlockingServiceImpl implements DomainBlockingService {
     @Override
     @Transactional
     public void blockDomain(String domain, String reason) {
+        domain = DomainValidator.validateAndNormalize(domain);
         if (blockedDomainRepository.existsByDomain(domain)) {
             logger.warn("Domain {} is already blocked", domain);
             return;
@@ -90,21 +91,23 @@ public class DomainBlockingServiceImpl implements DomainBlockingService {
         }
     }
 
+    @SuppressWarnings("null")
     @Override
     @Transactional
     public void unblockDomain(String domain) {
-        blockedDomainRepository.findByDomain(domain).ifPresent(blockedDomain -> {
+        final String normalizedDomain = DomainValidator.validateAndNormalize(domain);
+        blockedDomainRepository.findByDomain(normalizedDomain).ifPresent(blockedDomain -> {
             blockedDomainRepository.delete(blockedDomain);
             // Only try to update hosts file if we have admin privileges
             if (hasAdminPrivileges && hostsFileAccessible) {
                 try {
                     updateHostsFile();
                 } catch (IOException e) {
-                    logger.error("Failed to update hosts file while unblocking domain: " + domain, e);
+                    logger.error("Failed to update hosts file while unblocking domain: " + normalizedDomain, e);
                     // Don't throw exception, just log the error
                 }
             } else {
-                logger.warn("Domain {} will be unblocked in database only (no admin privileges or hosts file not accessible)", domain);
+                logger.warn("Domain {} will be unblocked in database only (no admin privileges or hosts file not accessible)", normalizedDomain);
             }
         });
     }
@@ -116,22 +119,7 @@ public class DomainBlockingServiceImpl implements DomainBlockingService {
     
     @Override
     public boolean isAdmin() {
-        // Check if running with admin privileges
-        try {
-            if (System.getProperty("os.name").toLowerCase().contains("win")) {
-                // On Windows, try to write to a protected directory
-                Path testPath = Paths.get("C:\\Windows\\Temp\\antivirus_test.tmp");
-                Files.write(testPath, "test".getBytes());
-                Files.delete(testPath);
-                return true;
-            } else {
-                // On Unix-like systems, check if user is root
-                return System.getProperty("user.name").equals("root");
-            }
-        } catch (Exception e) {
-            logger.warn("Not running with administrator privileges: {}", e.getMessage());
-            return false;
-        }
+        return canModifyHostsFile(Paths.get(hostsFilePath));
     }
     
     @Override
@@ -141,8 +129,12 @@ public class DomainBlockingServiceImpl implements DomainBlockingService {
         if (hasAdminPrivileges && hostsFileAccessible) {
             try {
                 updateHostsFile();
+            } catch (AccessDeniedException e) {
+                hostsFileAccessible = false;
+                hasAdminPrivileges = false;
+                logger.warn("Hosts file sync skipped: write access denied. Using database-only blocking.");
             } catch (IOException e) {
-                logger.error("Failed to sync blocked domains", e);
+                logger.warn("Failed to sync blocked domains: {}", e.getMessage());
             }
         } else {
             logger.debug("Skipping hosts file sync (no admin privileges or file not accessible)");
@@ -179,7 +171,7 @@ public class DomainBlockingServiceImpl implements DomainBlockingService {
             // Write updated content to hosts file
             Files.write(hostsPath, systemEntries);
         } catch (AccessDeniedException e) {
-            logger.error("Access denied when trying to modify hosts file. Run the application with administrator privileges.", e);
+            logger.warn("Access denied when modifying hosts file. Using database-only blocking.");
             hostsFileAccessible = false;
             hasAdminPrivileges = false;
             throw e;

@@ -7,80 +7,82 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.Map;
-import java.util.HashMap;
 
 /**
- * Service that handles domain blocking through a proxy server
- * This provides real-time blocking without requiring system-level changes
+ * Local-only HTTP/HTTPS proxy with domain blocking.
  */
 @Service
 public class ProxyDomainBlockingService {
     private static final Logger logger = LoggerFactory.getLogger(ProxyDomainBlockingService.class);
     private static final int DEFAULT_PROXY_PORT = 8081;
-    
+    private static final int MAX_PROXY_THREADS = 50;
+    private static final int SOCKET_TIMEOUT_MS = 30_000;
+    private static final String LOCALHOST = "127.0.0.1";
+
     @Autowired
     private BlockedDomainRepository blockedDomainRepository;
-    
+
     private ServerSocket serverSocket;
-    private final ExecutorService executorService = Executors.newCachedThreadPool();
+    private ExecutorService executorService;
     private final AtomicBoolean isRunning = new AtomicBoolean(false);
     private int proxyPort = DEFAULT_PROXY_PORT;
-    
-    /**
-     * Start the proxy server
-     */
+
     public void startProxyServer() {
         if (isRunning.get()) {
             logger.info("Proxy server is already running on port {}", proxyPort);
             return;
         }
-        
+
         try {
-            serverSocket = new ServerSocket(proxyPort);
+            serverSocket = new ServerSocket();
+            serverSocket.bind(new InetSocketAddress(LOCALHOST, proxyPort));
+            executorService = Executors.newFixedThreadPool(MAX_PROXY_THREADS);
             isRunning.set(true);
-            
-            // Start accepting connections in a separate thread
             executorService.submit(this::acceptConnections);
-            
-            logger.info("Proxy server started on port {}", proxyPort);
+            logger.info("Proxy server started on {}:{}", LOCALHOST, proxyPort);
         } catch (IOException e) {
             logger.error("Failed to start proxy server: {}", e.getMessage());
             throw new RuntimeException("Failed to start proxy server", e);
         }
     }
-    
-    /**
-     * Stop the proxy server
-     */
+
     public void stopProxyServer() {
         if (!isRunning.get()) {
-            logger.info("Proxy server is not running");
             return;
         }
-        
+
         try {
             isRunning.set(false);
             if (serverSocket != null && !serverSocket.isClosed()) {
                 serverSocket.close();
             }
-            executorService.shutdown();
+            if (executorService != null) {
+                executorService.shutdownNow();
+                executorService = null;
+            }
             logger.info("Proxy server stopped");
         } catch (IOException e) {
             logger.error("Error stopping proxy server: {}", e.getMessage());
         }
     }
-    
-    /**
-     * Accept client connections
-     */
+
     private void acceptConnections() {
         while (isRunning.get()) {
             try {
@@ -93,119 +95,230 @@ public class ProxyDomainBlockingService {
             }
         }
     }
-    
-    /**
-     * Handle client connection
-     */
+
     private void handleClientConnection(Socket clientSocket) {
-        try {
-            // Check if the requested domain is blocked
-            String requestedDomain = extractDomainFromRequest(clientSocket);
-            if (isDomainBlocked(requestedDomain)) {
-                // Send blocked response
-                sendBlockedResponse(clientSocket);
+        try (Socket client = clientSocket) {
+            client.setSoTimeout(SOCKET_TIMEOUT_MS);
+            BufferedReader reader = new BufferedReader(
+                new InputStreamReader(client.getInputStream(), StandardCharsets.ISO_8859_1));
+
+            String requestLine = reader.readLine();
+            if (requestLine == null || requestLine.isBlank()) {
+                return;
+            }
+
+            String[] parts = requestLine.trim().split("\\s+");
+            if (parts.length < 3) {
+                return;
+            }
+
+            String method = parts[0].toUpperCase(Locale.ROOT);
+            String target = parts[1];
+            List<String> headerLines = readHeaders(reader);
+            ProxyRequest request = parseRequest(method, target, headerLines);
+
+            if (isDomainBlocked(request.host())) {
+                sendBlockedResponse(client);
+                return;
+            }
+
+            if ("CONNECT".equals(method)) {
+                handleConnect(client, request, requestLine, headerLines);
             } else {
-                // Forward the request to the actual server
-                forwardRequest(clientSocket);
+                handleHttpForward(client, request, requestLine, headerLines);
             }
         } catch (IOException e) {
-            logger.error("Error handling client connection: {}", e.getMessage());
-        } finally {
-            try {
-                clientSocket.close();
-            } catch (IOException e) {
-                logger.error("Error closing client socket: {}", e.getMessage());
-            }
+            logger.debug("Proxy client connection closed: {}", e.getMessage());
         }
     }
-    
-    /**
-     * Extract domain from client request
-     */
-    private String extractDomainFromRequest(Socket clientSocket) throws IOException {
-        // This is a simplified implementation
-        // In a real proxy, you would parse the HTTP request to get the Host header
-        return "example.com"; // Placeholder
+
+    private List<String> readHeaders(BufferedReader reader) throws IOException {
+        List<String> headers = new ArrayList<>();
+        String line;
+        while ((line = reader.readLine()) != null && !line.isEmpty()) {
+            headers.add(line);
+        }
+        return headers;
     }
-    
-    /**
-     * Check if a domain is blocked
-     */
+
+    private ProxyRequest parseRequest(String method, String target, List<String> headerLines) {
+        Map<String, String> headers = parseHeaderMap(headerLines);
+        String host;
+        int port;
+
+        if ("CONNECT".equals(method)) {
+            host = target.contains(":") ? target.substring(0, target.indexOf(':')) : target;
+            port = target.contains(":")
+                ? Integer.parseInt(target.substring(target.indexOf(':') + 1))
+                : 443;
+        } else if (target.startsWith("http://") || target.startsWith("https://")) {
+            String withoutScheme = target.substring(target.indexOf("://") + 3);
+            host = withoutScheme.contains("/")
+                ? withoutScheme.substring(0, withoutScheme.indexOf('/'))
+                : withoutScheme;
+            if (host.contains(":")) {
+                port = Integer.parseInt(host.substring(host.indexOf(':') + 1));
+                host = host.substring(0, host.indexOf(':'));
+            } else {
+                port = target.startsWith("https://") ? 443 : 80;
+            }
+        } else {
+            host = headers.getOrDefault("host", "localhost");
+            if (host.contains(":")) {
+                port = Integer.parseInt(host.substring(host.indexOf(':') + 1));
+                host = host.substring(0, host.indexOf(':'));
+            } else {
+                port = 80;
+            }
+        }
+
+        return new ProxyRequest(method, target, host, port, headers);
+    }
+
+    private Map<String, String> parseHeaderMap(List<String> headerLines) {
+        Map<String, String> headers = new HashMap<>();
+        for (String line : headerLines) {
+            int colon = line.indexOf(':');
+            if (colon > 0) {
+                headers.put(line.substring(0, colon).trim().toLowerCase(Locale.ROOT),
+                    line.substring(colon + 1).trim());
+            }
+        }
+        return headers;
+    }
+
+    private void handleConnect(Socket client, ProxyRequest request, String requestLine,
+                               List<String> headerLines) throws IOException {
+        try (Socket remote = new Socket()) {
+            remote.connect(new InetSocketAddress(request.host(), request.port()), SOCKET_TIMEOUT_MS);
+            remote.setSoTimeout(SOCKET_TIMEOUT_MS);
+
+            OutputStream clientOut = client.getOutputStream();
+            clientOut.write("HTTP/1.1 200 Connection Established\r\n\r\n".getBytes(StandardCharsets.ISO_8859_1));
+            clientOut.flush();
+
+            relay(client, remote);
+        } catch (IOException e) {
+            logger.debug("CONNECT tunnel failed for {}:{} - {}", request.host(), request.port(), e.getMessage());
+        }
+    }
+
+    private void handleHttpForward(Socket client, ProxyRequest request, String requestLine,
+                                   List<String> headerLines) throws IOException {
+        String path = resolveForwardPath(request);
+        String forwardRequestLine = request.method() + " " + path + " HTTP/1.1\r\n";
+        StringBuilder headerBlock = new StringBuilder(forwardRequestLine);
+        for (String header : headerLines) {
+            if (!header.toLowerCase(Locale.ROOT).startsWith("proxy-connection:")) {
+                headerBlock.append(header).append("\r\n");
+            }
+        }
+        headerBlock.append("\r\n");
+
+        try (Socket remote = new Socket()) {
+            remote.connect(new InetSocketAddress(request.host(), request.port()), SOCKET_TIMEOUT_MS);
+            remote.setSoTimeout(SOCKET_TIMEOUT_MS);
+
+            OutputStream remoteOut = remote.getOutputStream();
+            remoteOut.write(headerBlock.toString().getBytes(StandardCharsets.ISO_8859_1));
+            remoteOut.flush();
+
+            relay(client, remote);
+        } catch (IOException e) {
+            logger.debug("HTTP forward failed for {}:{} - {}", request.host(), request.port(), e.getMessage());
+        }
+    }
+
+    private String resolveForwardPath(ProxyRequest request) {
+        String target = request.target();
+        if (target.startsWith("http://")) {
+            String withoutScheme = target.substring(7);
+            int slash = withoutScheme.indexOf('/');
+            return slash >= 0 ? withoutScheme.substring(slash) : "/";
+        }
+        if (target.startsWith("https://")) {
+            String withoutScheme = target.substring(8);
+            int slash = withoutScheme.indexOf('/');
+            return slash >= 0 ? withoutScheme.substring(slash) : "/";
+        }
+        return target.startsWith("/") ? target : "/" + target;
+    }
+
+    private void relay(Socket client, Socket remote) {
+        Thread clientToRemote = new Thread(() -> pump(client, remote), "proxy-c2r");
+        Thread remoteToClient = new Thread(() -> pump(remote, client), "proxy-r2c");
+        clientToRemote.setDaemon(true);
+        remoteToClient.setDaemon(true);
+        clientToRemote.start();
+        remoteToClient.start();
+        try {
+            clientToRemote.join();
+            remoteToClient.join();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private void pump(Socket inputSocket, Socket outputSocket) {
+        try (InputStream in = inputSocket.getInputStream();
+             OutputStream out = outputSocket.getOutputStream()) {
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = in.read(buffer)) != -1) {
+                out.write(buffer, 0, read);
+                out.flush();
+            }
+        } catch (IOException ignored) {
+            // Connection closed
+        }
+    }
+
     public boolean isDomainBlocked(String domain) {
-        return blockedDomainRepository.findByDomain(domain)
+        if (domain == null || domain.isBlank()) {
+            return false;
+        }
+        String normalized = domain.toLowerCase(Locale.ROOT);
+        if (normalized.contains(":")) {
+            normalized = normalized.substring(0, normalized.indexOf(':'));
+        }
+        return blockedDomainRepository.findByDomain(normalized)
             .map(BlockedDomain::isActive)
             .orElse(false);
     }
-    
-    /**
-     * Send blocked response to client
-     */
+
     private void sendBlockedResponse(Socket clientSocket) throws IOException {
         String response = "HTTP/1.1 403 Forbidden\r\n" +
-                         "Content-Type: text/html\r\n" +
-                         "Connection: close\r\n\r\n" +
-                         "<html><body><h1>Access Denied</h1>" +
-                         "<p>This domain has been blocked by the antivirus software.</p></body></html>";
-        
-        clientSocket.getOutputStream().write(response.getBytes());
+            "Content-Type: text/html\r\n" +
+            "Connection: close\r\n\r\n" +
+            "<html><body><h1>Access Denied</h1>" +
+            "<p>This domain has been blocked by the antivirus software.</p></body></html>";
+        clientSocket.getOutputStream().write(response.getBytes(StandardCharsets.ISO_8859_1));
     }
-    
-    /**
-     * Forward request to actual server
-     */
-    private void forwardRequest(Socket clientSocket) throws IOException {
-        // This is a simplified implementation
-        // In a real proxy, you would:
-        // 1. Parse the client request
-        // 2. Create a new connection to the target server
-        // 3. Forward the request
-        // 4. Stream the response back to the client
-    }
-    
-    /**
-     * Check if proxy server is running
-     */
+
     public boolean isProxyRunning() {
         return isRunning.get();
     }
-    
-    /**
-     * Get proxy server port
-     */
+
     public int getProxyPort() {
         return proxyPort;
     }
-    
-    /**
-     * Get instructions for configuring system to use proxy
-     */
+
     public Map<String, String> getProxyInstructions() {
         Map<String, String> instructions = new HashMap<>();
-        
-        // Windows instructions
-        instructions.put("windows", 
-            "1. Open Windows Settings\n" +
-            "2. Go to Network & Internet > Proxy\n" +
-            "3. Under Manual proxy setup, enable 'Use a proxy server'\n" +
-            "4. Enter 'localhost' as Address and '" + proxyPort + "' as Port\n" +
-            "5. Click Save");
-            
-        // macOS instructions
+        instructions.put("windows",
+            "1. Open Windows Settings > Network & Internet > Proxy\n" +
+            "2. Enable 'Use a proxy server'\n" +
+            "3. Address: 127.0.0.1  Port: " + proxyPort);
         instructions.put("macos",
-            "1. Open System Preferences\n" +
-            "2. Go to Network > Advanced > Proxies\n" +
-            "3. Check 'Web Proxy (HTTP)'\n" +
-            "4. Enter 'localhost' as Address and '" + proxyPort + "' as Port\n" +
-            "5. Click OK");
-            
-        // Linux instructions
+            "1. System Preferences > Network > Advanced > Proxies\n" +
+            "2. Enable Web Proxy (HTTP)\n" +
+            "3. Address: 127.0.0.1  Port: " + proxyPort);
         instructions.put("linux",
-            "1. Open System Settings\n" +
-            "2. Go to Network > Network Proxy\n" +
-            "3. Select 'Manual'\n" +
-            "4. Enter 'localhost' as HTTP Proxy and '" + proxyPort + "' as Port\n" +
-            "5. Click Apply");
-            
+            "1. System Settings > Network > Network Proxy > Manual\n" +
+            "2. HTTP Proxy: 127.0.0.1  Port: " + proxyPort);
         return instructions;
     }
-} 
+
+    private record ProxyRequest(String method, String target, String host, int port,
+                                Map<String, String> headers) {}
+}

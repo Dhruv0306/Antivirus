@@ -1,14 +1,20 @@
 package com.antivirus.service.impl;
 
+import com.antivirus.dto.PagedResponse;
 import com.antivirus.model.ScanResult;
 import com.antivirus.service.SecurityService;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import com.antivirus.service.SystemMonitorService;
 import com.antivirus.repository.ScanResultRepository;
 import com.antivirus.service.LogService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.io.*;
 import java.nio.file.Files;
@@ -39,6 +45,7 @@ public class SecurityServiceImpl implements SecurityService {
     @Autowired
     private SystemMonitorService systemMonitorService;
 
+    @SuppressWarnings("unused")
     @Autowired
     private PasswordEncoder passwordEncoder;
 
@@ -48,6 +55,7 @@ public class SecurityServiceImpl implements SecurityService {
     private final AtomicBoolean systemScanRunning = new AtomicBoolean(false);
     private final AtomicBoolean stopSystemScan = new AtomicBoolean(false);
 
+    @SuppressWarnings("unused")
     private boolean isElevated = false;
 
     // Known malicious file signatures (MD5 hashes)
@@ -123,16 +131,12 @@ public class SecurityServiceImpl implements SecurityService {
 
     @Override
     public boolean authenticateUser(String username, String password) {
-        // For demo purposes, we'll use a simple authentication
-        // In production, this should check against a user database
-        return "admin".equals(username) && 
-               passwordEncoder.matches(password, passwordEncoder.encode("admin123"));
+        return false;
     }
 
     @Override
     public boolean authorizeUser(String username, String operation) {
-        // Implementation would check user permissions
-        return true; // Simplified for demo
+        return false;
     }
 
     @Override
@@ -174,8 +178,7 @@ public class SecurityServiceImpl implements SecurityService {
                 result.setInfected(true);
                 result.setThreatType("VIRUS");
                 result.setThreatDetails("Known malware signature detected");
-                result.setActionTaken("QUARANTINED");
-                quarantineFile(file);
+                result.setActionTaken("REPORTED");
                 scanResultRepository.save(result);
                 logService.logScanResult(result);
                 return result;
@@ -189,8 +192,7 @@ public class SecurityServiceImpl implements SecurityService {
                 result.setInfected(true);
                 result.setThreatType("MALWARE");
                 result.setThreatDetails("Suspicious code patterns detected");
-                result.setActionTaken("QUARANTINED");
-                quarantineFile(file);
+                result.setActionTaken("REPORTED");
                 scanResultRepository.save(result);
                 logService.logScanResult(result);
                 return result;
@@ -201,8 +203,7 @@ public class SecurityServiceImpl implements SecurityService {
                 result.setInfected(true);
                 result.setThreatType("RANSOMWARE");
                 result.setThreatDetails("Potential ransomware detected");
-                result.setActionTaken("QUARANTINED");
-                quarantineFile(file);
+                result.setActionTaken("REPORTED");
                 scanResultRepository.save(result);
                 logService.logScanResult(result);
                 return result;
@@ -216,7 +217,7 @@ public class SecurityServiceImpl implements SecurityService {
         } catch (Exception e) {
             logger.error("Error scanning file: {}", e.getMessage());
             result.setThreatType("ERROR");
-            result.setThreatDetails("Error scanning file: " + e.getMessage());
+            result.setThreatDetails("Error scanning file");
             result.setActionTaken("NONE");
         }
 
@@ -230,7 +231,7 @@ public class SecurityServiceImpl implements SecurityService {
     }
 
     private String calculateFileHash(File file) throws Exception {
-        MessageDigest md = MessageDigest.getInstance("MD5");
+        MessageDigest md = MessageDigest.getInstance("SHA-256");
         try (InputStream is = Files.newInputStream(file.toPath())) {
             byte[] buffer = new byte[8192];
             int read;
@@ -259,6 +260,7 @@ public class SecurityServiceImpl implements SecurityService {
         return name.substring(lastIndexOf);
     }
 
+    @SuppressWarnings("unused")
     private List<String> scanFileContent(File file) throws IOException {
         List<String> threats = new ArrayList<>();
         
@@ -371,6 +373,7 @@ public class SecurityServiceImpl implements SecurityService {
         }
     }
 
+    @SuppressWarnings("unused")
     private boolean checkElevatedPrivileges() {
         try {
             String osName = System.getProperty("os.name").toLowerCase();
@@ -392,12 +395,9 @@ public class SecurityServiceImpl implements SecurityService {
     @Override
     @Transactional
     public List<ScanResult> performSystemScan() {
-        if (systemScanRunning.get()) {
-            logger.warn("System scan is already running");
-            return new ArrayList<>();
+        if (!systemScanRunning.compareAndSet(false, true)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "System scan is already in progress");
         }
-
-        systemScanRunning.set(true);
         stopSystemScan.set(false);
         List<ScanResult> results = new ArrayList<>();
         AtomicInteger scannedFiles = new AtomicInteger(0);
@@ -562,14 +562,27 @@ public class SecurityServiceImpl implements SecurityService {
         systemMonitorService.disableRealtimeProtection();
     }
 
+    private static final int MAX_PAGE_SIZE = 100;
+
     @Override
-    public List<ScanResult> getScanHistory() {
-        return logService.getLastFiveScanResults();
+    public PagedResponse<ScanResult> getScanHistory(int page, int size) {
+        Pageable pageable = PageRequest.of(page, normalizePageSize(size),
+            Sort.by(Sort.Direction.DESC, "scanDateTime"));
+        return PagedResponse.from(scanResultRepository.findAllByOrderByScanDateTimeDesc(pageable));
     }
 
     @Override
-    public List<ScanResult> getInfectedFiles() {
-        return scanResultRepository.findByInfectedTrue();
+    public PagedResponse<ScanResult> getInfectedFiles(int page, int size) {
+        Pageable pageable = PageRequest.of(page, normalizePageSize(size),
+            Sort.by(Sort.Direction.DESC, "scanDateTime"));
+        return PagedResponse.from(scanResultRepository.findByInfectedTrue(pageable));
+    }
+
+    private int normalizePageSize(int size) {
+        if (size < 1) {
+            return 10;
+        }
+        return Math.min(size, MAX_PAGE_SIZE);
     }
 
     @Override
@@ -582,20 +595,52 @@ public class SecurityServiceImpl implements SecurityService {
     @Override
     public void quarantineFile(File file) {
         try {
-            // Create quarantine directory if it doesn't exist
             File quarantineDir = new File("quarantine");
-            if (!quarantineDir.exists()) {
-                quarantineDir.mkdir();
+            if (!quarantineDir.exists() && !quarantineDir.mkdir()) {
+                throw new IOException("Failed to create quarantine directory");
             }
-            
-            // Move file to quarantine
-            File quarantinedFile = new File(quarantineDir, file.getName() + ".quarantine");
+
+            String safeName = UUID.randomUUID() + "_" + file.getName() + ".quarantine";
+            File quarantinedFile = new File(quarantineDir, safeName);
             Files.move(file.toPath(), quarantinedFile.toPath());
         } catch (IOException e) {
-            e.printStackTrace();
+            logger.error("Failed to quarantine file: {}", file.getAbsolutePath(), e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to quarantine file");
         }
     }
 
+    @Override
+    public void quarantineScanResult(Long scanResultId) {
+        ScanResult result = loadInfectedScanResult(scanResultId);
+        File file = new File(result.getFilePath());
+        if (!file.exists()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "File no longer exists on disk");
+        }
+        quarantineFile(file);
+        result.setActionTaken("QUARANTINED");
+        scanResultRepository.save(result);
+    }
+
+    @Override
+    public void deleteScanResult(Long scanResultId) {
+        ScanResult result = loadInfectedScanResult(scanResultId);
+        File file = new File(result.getFilePath());
+        deleteInfectedFile(file);
+        result.setActionTaken("DELETED");
+        scanResultRepository.save(result);
+    }
+
+    private ScanResult loadInfectedScanResult(Long scanResultId) {
+        @SuppressWarnings("null")
+        ScanResult result = scanResultRepository.findById(scanResultId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Scan result not found"));
+        if (!result.isInfected()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only infected scan results can be modified");
+        }
+        return result;
+    }
+
+    @SuppressWarnings("unchecked")
     @Override
     public boolean detectKeylogger() {
         // Check for known keylogger processes and patterns
@@ -660,7 +705,7 @@ public class SecurityServiceImpl implements SecurityService {
             return hasRansomwareBehavior(file);
 
         } catch (Exception e) {
-            e.printStackTrace();
+            logger.error("Ransomware detection failed for file: {}", file.getName(), e);
             return false;
         }
     }
@@ -760,7 +805,7 @@ public class SecurityServiceImpl implements SecurityService {
             return hasSuspiciousNetworkBehavior(file);
 
         } catch (Exception e) {
-            e.printStackTrace();
+            logger.error("Trojan detection failed for file: {}", file.getName(), e);
             return false;
         }
     }
@@ -838,9 +883,12 @@ public class SecurityServiceImpl implements SecurityService {
     @Override
     public void deleteInfectedFile(File file) {
         try {
-            Files.deleteIfExists(file.toPath());
+            if (!Files.deleteIfExists(file.toPath())) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "File not found");
+            }
         } catch (IOException e) {
-            e.printStackTrace();
+            logger.error("Failed to delete file: {}", file.getAbsolutePath(), e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to delete file");
         }
     }
 
@@ -1000,6 +1048,7 @@ public class SecurityServiceImpl implements SecurityService {
         return false;
     }
 
+    @SuppressWarnings("null")
     @Override
     @Transactional
     public List<ScanResult> scanDirectory(String directoryPath, boolean recursive) {
@@ -1183,6 +1232,7 @@ public class SecurityServiceImpl implements SecurityService {
         return result;
     }
 
+    @SuppressWarnings("null")
     private void saveResultsInBatches(List<ScanResult> results) {
         final int BATCH_SIZE = 100;
         for (int i = 0; i < results.size(); i += BATCH_SIZE) {

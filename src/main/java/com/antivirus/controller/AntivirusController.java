@@ -1,10 +1,13 @@
 package com.antivirus.controller;
 
+import com.antivirus.dto.PagedResponse;
 import com.antivirus.model.ScanResult;
 import com.antivirus.service.SecurityService;
 import com.antivirus.service.SystemMonitorService;
 import com.antivirus.service.LogService;
+import com.antivirus.util.PathSecurityUtil;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -20,12 +23,15 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/antivirus")
-@CrossOrigin(origins = {"http://localhost:5000", "http://localhost:3000"})
 public class AntivirusController {
     private static final Logger logger = LoggerFactory.getLogger(AntivirusController.class);
+
+    @Value("${app.scan.max-files-per-directory-upload:500}")
+    private int maxFilesPerDirectoryUpload;
 
     @Autowired
     private SecurityService securityService;
@@ -33,9 +39,11 @@ public class AntivirusController {
     @Autowired
     private SystemMonitorService systemMonitorService;
 
+    @SuppressWarnings("unused")
     @Autowired
     private LogService logService;
 
+    @SuppressWarnings("null")
     @PostMapping("/scan/file")
     public ResponseEntity<?> scanFile(@RequestParam("file") MultipartFile file) {
         if (file == null || file.isEmpty()) {
@@ -66,7 +74,7 @@ public class AntivirusController {
             errorResult.setFilePath(file.getOriginalFilename());
             errorResult.setInfected(false);
             errorResult.setThreatType("ERROR");
-            errorResult.setThreatDetails("Error processing file: " + e.getMessage());
+            errorResult.setThreatDetails("Error processing file upload");
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResult);
         } finally {
             // Clean up the temporary file
@@ -125,13 +133,17 @@ public class AntivirusController {
     }
 
     @GetMapping("/history")
-    public ResponseEntity<List<ScanResult>> getScanHistory() {
-        return ResponseEntity.ok(securityService.getScanHistory());
+    public ResponseEntity<PagedResponse<ScanResult>> getScanHistory(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(securityService.getScanHistory(page, size));
     }
 
     @GetMapping("/infected")
-    public ResponseEntity<List<ScanResult>> getInfectedFiles() {
-        return ResponseEntity.ok(securityService.getInfectedFiles());
+    public ResponseEntity<PagedResponse<ScanResult>> getInfectedFiles(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(securityService.getInfectedFiles(page, size));
     }
 
     @PostMapping("/update")
@@ -141,14 +153,14 @@ public class AntivirusController {
     }
 
     @PostMapping("/quarantine")
-    public ResponseEntity<Void> quarantineFile(@RequestParam("path") String filePath) {
-        securityService.quarantineFile(new File(filePath));
+    public ResponseEntity<Void> quarantineFile(@RequestParam("scanResultId") Long scanResultId) {
+        securityService.quarantineScanResult(scanResultId);
         return ResponseEntity.ok().build();
     }
 
     @DeleteMapping("/delete")
-    public ResponseEntity<Void> deleteInfectedFile(@RequestParam("path") String filePath) {
-        securityService.deleteInfectedFile(new File(filePath));
+    public ResponseEntity<Void> deleteInfectedFile(@RequestParam("scanResultId") Long scanResultId) {
+        securityService.deleteScanResult(scanResultId);
         return ResponseEntity.ok().build();
     }
 
@@ -169,12 +181,6 @@ public class AntivirusController {
         return ResponseEntity.ok(systemMonitorService.getSystemStatus());
     }
 
-    @GetMapping("/scan/file")
-    public ResponseEntity<ScanResult> scanFile(@RequestParam("path") String filePath) {
-        // Implementation of scanFile method
-        return null; // Placeholder return, actual implementation needed
-    }
-
     /**
      * Endpoint for scanning a directory
      * @param directoryName Name of the directory being scanned
@@ -182,6 +188,7 @@ public class AntivirusController {
      * @param files List of files to scan from the directory
      * @return Scan results for all files
      */
+    @SuppressWarnings("null")
     @PostMapping("/scan/directory")
     public ResponseEntity<?> scanDirectory(
             @RequestParam("directoryName") String directoryName,
@@ -193,6 +200,13 @@ public class AntivirusController {
             Map<String, String> errorResponse = new HashMap<>();
             errorResponse.put("error", "No files provided for scanning");
             return ResponseEntity.badRequest().body(errorResponse);
+        }
+
+        if (files.size() > maxFilesPerDirectoryUpload) {
+            logger.warn("Directory upload rejected: {} files exceeds limit of {}", files.size(), maxFilesPerDirectoryUpload);
+            Map<String, String> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Too many files. Maximum allowed: " + maxFilesPerDirectoryUpload);
+            return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(errorResponse);
         }
 
         try {
@@ -216,11 +230,11 @@ public class AntivirusController {
                             continue;
                         }
                         
-                        // Create the full path in temp directory
-                        Path targetPath = tempDir.resolve(relativePath);
-                        
-                        // Create parent directories if they don't exist
-                        Files.createDirectories(targetPath.getParent());
+                        Path targetPath = PathSecurityUtil.resolveSafely(tempDir, relativePath);
+
+                        if (targetPath.getParent() != null) {
+                            Files.createDirectories(targetPath.getParent());
+                        }
                         
                         // Save the file
                         file.transferTo(targetPath.toFile());
@@ -246,13 +260,22 @@ public class AntivirusController {
                                 directoryName, processedFiles, files.size(), cleanFiles, infectedFiles, errorFiles);
                         }
                         
+                    } catch (SecurityException e) {
+                        logger.warn("Rejected unsafe path in directory upload: {}", file.getOriginalFilename());
+                        ScanResult errorResult = new ScanResult();
+                        errorResult.setFilePath(file.getOriginalFilename());
+                        errorResult.setInfected(false);
+                        errorResult.setThreatType("ERROR");
+                        errorResult.setThreatDetails("Rejected unsafe file path");
+                        results.add(errorResult);
+                        errorFiles++;
                     } catch (Exception e) {
                         logger.error("Error processing file {}: {}", file.getOriginalFilename(), e.getMessage());
                         ScanResult errorResult = new ScanResult();
                         errorResult.setFilePath(file.getOriginalFilename());
                         errorResult.setInfected(false);
                         errorResult.setThreatType("ERROR");
-                        errorResult.setThreatDetails("Error processing file: " + e.getMessage());
+                        errorResult.setThreatDetails("Error processing file");
                         results.add(errorResult);
                         errorFiles++;
                     }
@@ -278,9 +301,11 @@ public class AntivirusController {
             }
             
         } catch (Exception e) {
-            logger.error("Error during directory scan: {}", e.getMessage());
+            String reference = UUID.randomUUID().toString();
+            logger.error("Error during directory scan [ref={}]", reference, e);
             Map<String, String> errorResponse = new HashMap<>();
-            errorResponse.put("error", "Error scanning directory: " + e.getMessage());
+            errorResponse.put("error", "Error scanning directory");
+            errorResponse.put("reference", reference);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
     }

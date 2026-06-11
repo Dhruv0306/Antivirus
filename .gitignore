@@ -22,9 +22,11 @@ target/
 *.sqlite
 *.db
 logs/
+data/
 *.trace.db
 *.mv.db
-
+.env
+!.env.example
 # Package Files
 *.jar
 *.war
@@ -124,6 +126,8 @@ bin/
 application-*.properties
 !application.properties
 !application-example.properties
+!application-dev.properties
+!application-prod.properties
 
 # Test files
 /test-output/

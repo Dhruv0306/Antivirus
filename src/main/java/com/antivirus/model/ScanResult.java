@@ -3,12 +3,13 @@ package com.antivirus.model;
 import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
-import javax.persistence.*;
+import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
 /**
  * Model class representing the result of an antivirus scan
  */
+@SuppressWarnings("unused")
 @Entity
 @Table(name = "scan_results")
 public class ScanResult {

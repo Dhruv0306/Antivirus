@@ -7,7 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import javax.annotation.PostConstruct;
+import jakarta.annotation.PostConstruct;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
@@ -22,6 +22,7 @@ import java.util.stream.Collectors;
 /**
  * Implementation of network security service with enhanced scanning capabilities
  */
+@SuppressWarnings("unused")
 @Service
 public class NetworkSecurityServiceImpl implements NetworkSecurityService {
     private static final Logger logger = LoggerFactory.getLogger(NetworkSecurityServiceImpl.class);

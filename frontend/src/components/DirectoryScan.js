@@ -23,7 +23,7 @@ import {
   Error as ErrorIcon,
   Warning as WarningIcon
 } from '@mui/icons-material';
-import axios from 'axios';
+import { antivirusApi } from '../api/client';
 import { styled } from '@mui/material/styles';
 
 // Styled components
@@ -134,7 +134,7 @@ function DirectoryScan() {
       }
 
       // Send the files to the backend
-      const response = await axios.post('http://localhost:8080/api/antivirus/scan/directory', formData, {
+      const response = await antivirusApi.post('/scan/directory', formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         },

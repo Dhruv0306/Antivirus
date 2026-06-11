@@ -7,6 +7,7 @@ import com.antivirus.service.CompositeDomainBlockingService;
 import com.antivirus.service.DomainBlockingService;
 import com.antivirus.service.ProxyDomainBlockingService;
 import com.antivirus.service.DnsDomainBlockingService;
+import com.antivirus.util.DomainValidator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -22,13 +23,6 @@ import org.slf4j.LoggerFactory;
  */
 @RestController
 @RequestMapping("/api/network-security")
-@CrossOrigin(
-    origins = {"http://localhost:3000", "http://localhost:5000", "http://localhost:8080"},
-    allowedHeaders = {"Origin", "Content-Type", "Accept", "Authorization", "Access-Control-Allow-Origin"},
-    exposedHeaders = {"Access-Control-Allow-Origin"},
-    methods = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE, RequestMethod.OPTIONS},
-    allowCredentials = "true"
-)
 public class NetworkSecurityController {
 
     private static final Logger logger = LoggerFactory.getLogger(NetworkSecurityController.class);
@@ -36,6 +30,7 @@ public class NetworkSecurityController {
     @Autowired
     private NetworkSecurityService networkSecurityService;
 
+    @SuppressWarnings("unused")
     @Autowired
     private CompositeDomainBlockingService domainBlockingService;
 
@@ -139,12 +134,11 @@ public class NetworkSecurityController {
      */
     @PostMapping("/block")
     public ResponseEntity<Map<String, Object>> blockDomain(@RequestBody Map<String, String> request) {
-        String domain = request.get("domain");
-        String reason = request.get("reason");
-        
         Map<String, Object> response = new HashMap<>();
-        
+
         try {
+            String domain = DomainValidator.validateAndNormalize(request.get("domain"));
+            String reason = request.get("reason");
             hostsFileDomainBlockingService.blockDomain(domain, reason);
             response.put("success", true);
             response.put("message", "Domain blocked successfully");
@@ -157,9 +151,14 @@ public class NetworkSecurityController {
             }
             
             return ResponseEntity.ok(response);
-        } catch (Exception e) {
+        } catch (IllegalArgumentException e) {
             response.put("success", false);
-            response.put("error", e.getMessage());
+            response.put("error", "Invalid domain name");
+            return ResponseEntity.badRequest().body(response);
+        } catch (Exception e) {
+            logger.error("Failed to block domain", e);
+            response.put("success", false);
+            response.put("error", "Failed to block domain");
             return ResponseEntity.badRequest().body(response);
         }
     }
@@ -169,11 +168,10 @@ public class NetworkSecurityController {
      */
     @PostMapping("/unblock")
     public ResponseEntity<Map<String, Object>> unblockDomain(@RequestBody Map<String, String> request) {
-        String domain = request.get("domain");
-        
         Map<String, Object> response = new HashMap<>();
-        
+
         try {
+            String domain = DomainValidator.validateAndNormalize(request.get("domain"));
             hostsFileDomainBlockingService.unblockDomain(domain);
             response.put("success", true);
             response.put("message", "Domain unblocked successfully");
@@ -186,9 +184,14 @@ public class NetworkSecurityController {
             }
             
             return ResponseEntity.ok(response);
-        } catch (Exception e) {
+        } catch (IllegalArgumentException e) {
             response.put("success", false);
-            response.put("error", e.getMessage());
+            response.put("error", "Invalid domain name");
+            return ResponseEntity.badRequest().body(response);
+        } catch (Exception e) {
+            logger.error("Failed to unblock domain", e);
+            response.put("success", false);
+            response.put("error", "Failed to unblock domain");
             return ResponseEntity.badRequest().body(response);
         }
     }
@@ -217,8 +220,9 @@ public class NetworkSecurityController {
             
             return ResponseEntity.ok(response);
         } catch (Exception e) {
+            logger.error("Failed to start proxy server", e);
             response.put("success", false);
-            response.put("error", e.getMessage());
+            response.put("error", "Failed to start proxy server");
             return ResponseEntity.badRequest().body(response);
         }
     }
@@ -237,8 +241,9 @@ public class NetworkSecurityController {
             
             return ResponseEntity.ok(response);
         } catch (Exception e) {
+            logger.error("Failed to stop proxy server", e);
             response.put("success", false);
-            response.put("error", e.getMessage());
+            response.put("error", "Failed to stop proxy server");
             return ResponseEntity.badRequest().body(response);
         }
     }
@@ -282,8 +287,9 @@ public class NetworkSecurityController {
             
             return ResponseEntity.ok(response);
         } catch (Exception e) {
+            logger.error("Failed to update DNS configuration", e);
             response.put("success", false);
-            response.put("error", e.getMessage());
+            response.put("error", "Failed to update DNS configuration");
             return ResponseEntity.badRequest().body(response);
         }
     }

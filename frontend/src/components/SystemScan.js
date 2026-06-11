@@ -25,10 +25,8 @@ import {
   Stop as StopIcon,
   Error as ErrorIcon,
 } from '@mui/icons-material';
-import axios from 'axios';
+import { antivirusApi } from '../api/client';
 import { styled } from '@mui/material/styles';
-
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8080/api/antivirus';
 
 // Styled components with light theme
 const StyledPaper = styled(Paper)(({ theme }) => ({
@@ -132,7 +130,7 @@ function SystemScan() {
 
   const checkScanStatus = async () => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/scan/system/status`);
+      const response = await antivirusApi.get('/scan/system/status');
       if (!response.data.isRunning) {
         setScanning(false);
         // Refresh results when scan completes
@@ -145,8 +143,8 @@ function SystemScan() {
 
   const fetchLatestResults = async () => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/history`);
-      setScanResults(response.data);
+      const response = await antivirusApi.get('/history', { params: { page: 0, size: 50 } });
+      setScanResults(response.data.content || []);
     } catch (error) {
       console.error('Error fetching scan results:', error);
       setError('Error fetching scan results: ' + error.message);
@@ -161,7 +159,7 @@ function SystemScan() {
       setScanResults(null);
       setProgress(0);
       
-      const response = await axios.post(`${API_BASE_URL}/scan/system`);
+      const response = await antivirusApi.post('/scan/system');
       
       if (response.data && response.data.length === 1) {
         const result = response.data[0];
@@ -199,7 +197,7 @@ function SystemScan() {
 
   const handleStop = async () => {
     try {
-      await axios.post(`${API_BASE_URL}/scan/system/stop`);
+      await antivirusApi.post('/scan/system/stop');
       setScanning(false);
       setError('Scan stopped by user');
       // Don't clear scan results if they exist

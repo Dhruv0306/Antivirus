@@ -18,8 +18,8 @@ import {
   Card,
   CardContent,
   IconButton,
-  Tooltip,
   Fade,
+  TablePagination,
   CircularProgress,
 } from '@mui/material';
 import {
@@ -30,7 +30,7 @@ import {
   Refresh as RefreshIcon,
   Info as InfoIcon,
 } from '@mui/icons-material';
-import axios from 'axios';
+import { antivirusApi } from '../api/client';
 import { styled } from '@mui/material/styles';
 
 // Styled components using our theme
@@ -88,26 +88,26 @@ function Dashboard() {
   });
 
   const [scanHistory, setScanHistory] = useState([]);
+  const [historyPage, setHistoryPage] = useState(0);
+  const [historyRowsPerPage, setHistoryRowsPerPage] = useState(10);
+  const [historyTotal, setHistoryTotal] = useState(0);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     fetchSystemStatus();
-    fetchScanHistory();
-
     const statusInterval = setInterval(fetchSystemStatus, 5000);
-    const historyInterval = setInterval(fetchScanHistory, 10000);
-
-    return () => {
-      clearInterval(statusInterval);
-      clearInterval(historyInterval);
-    };
+    return () => clearInterval(statusInterval);
   }, []);
+
+  useEffect(() => {
+    fetchScanHistory();
+  }, [historyPage, historyRowsPerPage]);
 
   const fetchSystemStatus = async () => {
     try {
-      const response = await axios.get('http://localhost:8080/api/antivirus/system/status');
+      const response = await antivirusApi.get('/system/status');
       setSystemStatus(response.data);
       setError(null);
     } catch (err) {
@@ -120,11 +120,23 @@ function Dashboard() {
 
   const fetchScanHistory = async () => {
     try {
-      const response = await axios.get('http://localhost:8080/api/antivirus/history');
-      setScanHistory(response.data);
+      const response = await antivirusApi.get('/history', {
+        params: { page: historyPage, size: historyRowsPerPage },
+      });
+      setScanHistory(response.data.content || []);
+      setHistoryTotal(response.data.totalElements || 0);
     } catch (err) {
       setError('Error fetching scan history: ' + (err.response?.data || err.message));
     }
+  };
+
+  const handleHistoryPageChange = (_event, newPage) => {
+    setHistoryPage(newPage);
+  };
+
+  const handleHistoryRowsPerPageChange = (event) => {
+    setHistoryRowsPerPage(parseInt(event.target.value, 10));
+    setHistoryPage(0);
   };
 
   const handleRefresh = () => {
@@ -333,7 +345,7 @@ function Dashboard() {
                               fontWeight: 500,
                               color: 'var(--text-primary)'
                             }}>
-                              {disk.drive}
+                              {disk.name || disk.drive}
                             </Typography>
                           }
                           secondary={
@@ -451,6 +463,15 @@ function Dashboard() {
                       </TableBody>
                     </Table>
                   </TableContainer>
+                  <TablePagination
+                    component="div"
+                    count={historyTotal}
+                    page={historyPage}
+                    onPageChange={handleHistoryPageChange}
+                    rowsPerPage={historyRowsPerPage}
+                    onRowsPerPageChange={handleHistoryRowsPerPageChange}
+                    rowsPerPageOptions={[5, 10, 25, 50]}
+                  />
                 </CardContent>
               </StyledCard>
             </Fade>

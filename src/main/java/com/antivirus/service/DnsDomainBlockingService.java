@@ -20,6 +20,7 @@ import java.util.stream.Collectors;
  * Service that handles domain blocking through DNS configuration
  * This provides system-wide blocking without modifying the hosts file
  */
+@SuppressWarnings("unused")
 @Service
 public class DnsDomainBlockingService {
     private static final Logger logger = LoggerFactory.getLogger(DnsDomainBlockingService.class);

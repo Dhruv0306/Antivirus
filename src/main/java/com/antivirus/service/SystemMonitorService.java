@@ -12,11 +12,12 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import javax.annotation.PostConstruct;
+import jakarta.annotation.PostConstruct;
 
 @Service
 public class SystemMonitorService {
     private final OperatingSystemMXBean osBean;
+    @SuppressWarnings("unused")
     private final MemoryMXBean memoryBean;
     private boolean realtimeProtectionEnabled = true;
     private Map<String, Object> systemStatus = new HashMap<>();
@@ -52,13 +53,14 @@ public class SystemMonitorService {
         systemStatus.put("lastUpdate", new Date());
     }
 
+    @SuppressWarnings("deprecation")
     private double getCpuUsage() {
         try {
             if (osBean instanceof com.sun.management.OperatingSystemMXBean) {
                 return ((com.sun.management.OperatingSystemMXBean) osBean).getSystemCpuLoad() * 100;
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            // CPU metrics unavailable on this JVM — return safe default
         }
         return 0.0;
     }
@@ -84,9 +86,9 @@ public class SystemMonitorService {
                 diskUsage.add(disk);
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            // Disk metrics unavailable — return empty list
         }
-        
+
         return diskUsage;
     }
 
@@ -167,9 +169,9 @@ public class SystemMonitorService {
                     }
                 });
         } catch (Exception e) {
-            e.printStackTrace();
+            // Process enumeration unavailable on this platform
         }
-        
+
         return suspiciousProcesses;
     }
 

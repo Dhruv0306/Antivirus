@@ -1,5 +1,6 @@
 package com.antivirus.service;
 
+import com.antivirus.dto.PagedResponse;
 import com.antivirus.model.ScanResult;
 import java.io.File;
 import java.util.List;
@@ -30,11 +31,13 @@ public interface SecurityService {
     boolean detectRootkit(File file);
     
     // Security Monitoring (X.800)
-    List<ScanResult> getScanHistory();
-    List<ScanResult> getInfectedFiles();
+    PagedResponse<ScanResult> getScanHistory(int page, int size);
+    PagedResponse<ScanResult> getInfectedFiles(int page, int size);
     
     // Security Management (X.800)
     void updateVirusDefinitions();
     void quarantineFile(File file);
     void deleteInfectedFile(File file);
+    void quarantineScanResult(Long scanResultId);
+    void deleteScanResult(Long scanResultId);
 }
