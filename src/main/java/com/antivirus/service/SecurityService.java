@@ -37,4 +37,6 @@ public interface SecurityService {
     void updateVirusDefinitions();
     void quarantineFile(File file);
     void deleteInfectedFile(File file);
+    void quarantineScanResult(Long scanResultId);
+    void deleteScanResult(Long scanResultId);
 }
