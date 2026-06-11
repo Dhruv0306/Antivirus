@@ -58,7 +58,7 @@ public class SystemMonitorService {
                 return ((com.sun.management.OperatingSystemMXBean) osBean).getSystemCpuLoad() * 100;
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            // CPU metrics unavailable on this JVM — return safe default
         }
         return 0.0;
     }
@@ -84,9 +84,9 @@ public class SystemMonitorService {
                 diskUsage.add(disk);
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            // Disk metrics unavailable — return empty list
         }
-        
+
         return diskUsage;
     }
 
@@ -167,9 +167,9 @@ public class SystemMonitorService {
                     }
                 });
         } catch (Exception e) {
-            e.printStackTrace();
+            // Process enumeration unavailable on this platform
         }
-        
+
         return suspiciousProcesses;
     }
 
