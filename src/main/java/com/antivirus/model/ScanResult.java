@@ -9,6 +9,7 @@ import java.time.LocalDateTime;
 /**
  * Model class representing the result of an antivirus scan
  */
+@SuppressWarnings("unused")
 @Entity
 @Table(name = "scan_results")
 public class ScanResult {

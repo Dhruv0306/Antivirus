@@ -22,6 +22,7 @@ import java.util.stream.Collectors;
 /**
  * Implementation of network security service with enhanced scanning capabilities
  */
+@SuppressWarnings("unused")
 @Service
 public class NetworkSecurityServiceImpl implements NetworkSecurityService {
     private static final Logger logger = LoggerFactory.getLogger(NetworkSecurityServiceImpl.class);

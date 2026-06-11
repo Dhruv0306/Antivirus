@@ -190,6 +190,7 @@ public class CompositeDomainBlockingService {
         logger.info("Synchronizing blocking methods...");
         
         // Get all active blocked domains
+        @SuppressWarnings("unused")
         List<BlockedDomain> activeDomains = blockedDomainRepository.findByActiveTrue();
         
         // Update hosts file if accessible

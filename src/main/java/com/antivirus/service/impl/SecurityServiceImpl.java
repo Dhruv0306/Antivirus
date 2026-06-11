@@ -45,6 +45,7 @@ public class SecurityServiceImpl implements SecurityService {
     @Autowired
     private SystemMonitorService systemMonitorService;
 
+    @SuppressWarnings("unused")
     @Autowired
     private PasswordEncoder passwordEncoder;
 
@@ -54,6 +55,7 @@ public class SecurityServiceImpl implements SecurityService {
     private final AtomicBoolean systemScanRunning = new AtomicBoolean(false);
     private final AtomicBoolean stopSystemScan = new AtomicBoolean(false);
 
+    @SuppressWarnings("unused")
     private boolean isElevated = false;
 
     // Known malicious file signatures (MD5 hashes)
@@ -258,6 +260,7 @@ public class SecurityServiceImpl implements SecurityService {
         return name.substring(lastIndexOf);
     }
 
+    @SuppressWarnings("unused")
     private List<String> scanFileContent(File file) throws IOException {
         List<String> threats = new ArrayList<>();
         
@@ -370,6 +373,7 @@ public class SecurityServiceImpl implements SecurityService {
         }
     }
 
+    @SuppressWarnings("unused")
     private boolean checkElevatedPrivileges() {
         try {
             String osName = System.getProperty("os.name").toLowerCase();
@@ -627,6 +631,7 @@ public class SecurityServiceImpl implements SecurityService {
     }
 
     private ScanResult loadInfectedScanResult(Long scanResultId) {
+        @SuppressWarnings("null")
         ScanResult result = scanResultRepository.findById(scanResultId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Scan result not found"));
         if (!result.isInfected()) {
@@ -635,6 +640,7 @@ public class SecurityServiceImpl implements SecurityService {
         return result;
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public boolean detectKeylogger() {
         // Check for known keylogger processes and patterns
@@ -1042,6 +1048,7 @@ public class SecurityServiceImpl implements SecurityService {
         return false;
     }
 
+    @SuppressWarnings("null")
     @Override
     @Transactional
     public List<ScanResult> scanDirectory(String directoryPath, boolean recursive) {
@@ -1225,6 +1232,7 @@ public class SecurityServiceImpl implements SecurityService {
         return result;
     }
 
+    @SuppressWarnings("null")
     private void saveResultsInBatches(List<ScanResult> results) {
         final int BATCH_SIZE = 100;
         for (int i = 0; i < results.size(); i += BATCH_SIZE) {

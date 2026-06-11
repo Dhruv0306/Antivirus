@@ -17,6 +17,7 @@ import jakarta.annotation.PostConstruct;
 @Service
 public class SystemMonitorService {
     private final OperatingSystemMXBean osBean;
+    @SuppressWarnings("unused")
     private final MemoryMXBean memoryBean;
     private boolean realtimeProtectionEnabled = true;
     private Map<String, Object> systemStatus = new HashMap<>();
@@ -52,6 +53,7 @@ public class SystemMonitorService {
         systemStatus.put("lastUpdate", new Date());
     }
 
+    @SuppressWarnings("deprecation")
     private double getCpuUsage() {
         try {
             if (osBean instanceof com.sun.management.OperatingSystemMXBean) {

@@ -39,9 +39,11 @@ public class AntivirusController {
     @Autowired
     private SystemMonitorService systemMonitorService;
 
+    @SuppressWarnings("unused")
     @Autowired
     private LogService logService;
 
+    @SuppressWarnings("null")
     @PostMapping("/scan/file")
     public ResponseEntity<?> scanFile(@RequestParam("file") MultipartFile file) {
         if (file == null || file.isEmpty()) {
@@ -186,6 +188,7 @@ public class AntivirusController {
      * @param files List of files to scan from the directory
      * @return Scan results for all files
      */
+    @SuppressWarnings("null")
     @PostMapping("/scan/directory")
     public ResponseEntity<?> scanDirectory(
             @RequestParam("directoryName") String directoryName,

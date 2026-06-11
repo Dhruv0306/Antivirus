@@ -30,6 +30,7 @@ public class NetworkSecurityController {
     @Autowired
     private NetworkSecurityService networkSecurityService;
 
+    @SuppressWarnings("unused")
     @Autowired
     private CompositeDomainBlockingService domainBlockingService;
 
