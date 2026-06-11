@@ -36,7 +36,7 @@ import {
   Delete as DeleteIcon,
   Info as InfoIcon
 } from '@mui/icons-material';
-import axios from 'axios';
+import { networkSecurityApi } from '../api/client';
 import { styled } from '@mui/material/styles';
 
 // Styled components
@@ -89,14 +89,6 @@ const StyledChip = styled(Chip)(({ theme }) => ({
   }
 }));
 
-// API configuration
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8080/api/network-security';
-
-// Configure axios defaults
-axios.defaults.withCredentials = true;
-axios.defaults.headers.common['Accept'] = 'application/json';
-axios.defaults.headers.common['Content-Type'] = 'application/json';
-
 function NetworkScan() {
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState(null);
@@ -122,8 +114,7 @@ function NetworkScan() {
 
   const fetchNetworkStatus = async () => {
     try {
-      console.log('Fetching network status from:', `${API_BASE_URL}/status`);
-      const response = await axios.get(`${API_BASE_URL}/status`);
+      const response = await networkSecurityApi.get('/status');
       console.log('Network status response:', response.data);
       
       // Ensure blockedDomains is always an array
@@ -162,7 +153,7 @@ function NetworkScan() {
     setScanResult(null);
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/scan`);
+      const response = await networkSecurityApi.post('/scan');
       setScanResult(response.data);
       await fetchNetworkStatus();
     } catch (err) {
@@ -176,7 +167,7 @@ function NetworkScan() {
   const toggleFirewall = async () => {
     try {
       console.log('Toggling firewall. Current state:', networkStatus.firewallEnabled);
-      const response = await axios.post(`${API_BASE_URL}/firewall/toggle`, {
+      const response = await networkSecurityApi.post('/firewall/toggle', {
         enabled: !networkStatus.firewallEnabled
       });
       console.log('Firewall toggle response:', response.data);
@@ -210,7 +201,7 @@ function NetworkScan() {
   const toggleWebProtection = async () => {
     try {
       console.log('Toggling web protection. Current state:', networkStatus.webProtectionEnabled);
-      const response = await axios.post(`${API_BASE_URL}/web-protection/toggle`, {
+      const response = await networkSecurityApi.post('/web-protection/toggle', {
         enabled: !networkStatus.webProtectionEnabled
       });
       console.log('Web protection toggle response:', response.data);
@@ -255,7 +246,7 @@ function NetworkScan() {
 
     try {
       console.log('Blocking domain:', newDomain);
-      const response = await axios.post(`${API_BASE_URL}/block`, {
+      const response = await networkSecurityApi.post('/block', {
         domain: newDomain,
         reason: 'Manually blocked by user'
       });
@@ -283,7 +274,7 @@ function NetworkScan() {
 
   const handleRemoveDomain = async (domain) => {
     try {
-      await axios.post(`${API_BASE_URL}/unblock`, {
+      await networkSecurityApi.post('/unblock', {
         domain: domain
       });
       await fetchNetworkStatus();

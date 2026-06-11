@@ -30,7 +30,7 @@ import {
   Refresh as RefreshIcon,
   Info as InfoIcon,
 } from '@mui/icons-material';
-import axios from 'axios';
+import { antivirusApi } from '../api/client';
 import { styled } from '@mui/material/styles';
 
 // Styled components using our theme
@@ -107,7 +107,7 @@ function Dashboard() {
 
   const fetchSystemStatus = async () => {
     try {
-      const response = await axios.get('http://localhost:8080/api/antivirus/system/status');
+      const response = await antivirusApi.get('/system/status');
       setSystemStatus(response.data);
       setError(null);
     } catch (err) {
@@ -120,7 +120,7 @@ function Dashboard() {
 
   const fetchScanHistory = async () => {
     try {
-      const response = await axios.get('http://localhost:8080/api/antivirus/history');
+      const response = await antivirusApi.get('/history');
       setScanHistory(response.data);
     } catch (err) {
       setError('Error fetching scan history: ' + (err.response?.data || err.message));
@@ -333,7 +333,7 @@ function Dashboard() {
                               fontWeight: 500,
                               color: 'var(--text-primary)'
                             }}>
-                              {disk.drive}
+                              {disk.name || disk.drive}
                             </Typography>
                           }
                           secondary={

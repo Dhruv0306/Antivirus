@@ -14,7 +14,7 @@ import {
   TableRow
 } from '@mui/material';
 import { CloudUpload as CloudUploadIcon } from '@mui/icons-material';
-import axios from 'axios';
+import { antivirusApi } from '../api/client';
 import { styled } from '@mui/material/styles';
 
 // Styled components
@@ -79,8 +79,8 @@ function FileScan() {
     formData.append('file', selectedFile, selectedFile.name);
 
     try {
-      const response = await axios.post(
-        'http://localhost:8080/api/antivirus/scan/file',
+      const response = await antivirusApi.post(
+        '/scan/file',
         formData,
         {
           headers: {
