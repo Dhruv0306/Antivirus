@@ -1,5 +1,6 @@
 package com.antivirus.controller;
 
+import com.antivirus.dto.PagedResponse;
 import com.antivirus.model.ScanResult;
 import com.antivirus.service.SecurityService;
 import com.antivirus.service.SystemMonitorService;
@@ -130,13 +131,17 @@ public class AntivirusController {
     }
 
     @GetMapping("/history")
-    public ResponseEntity<List<ScanResult>> getScanHistory() {
-        return ResponseEntity.ok(securityService.getScanHistory());
+    public ResponseEntity<PagedResponse<ScanResult>> getScanHistory(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(securityService.getScanHistory(page, size));
     }
 
     @GetMapping("/infected")
-    public ResponseEntity<List<ScanResult>> getInfectedFiles() {
-        return ResponseEntity.ok(securityService.getInfectedFiles());
+    public ResponseEntity<PagedResponse<ScanResult>> getInfectedFiles(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(securityService.getInfectedFiles(page, size));
     }
 
     @PostMapping("/update")

@@ -1,7 +1,11 @@
 package com.antivirus.service.impl;
 
+import com.antivirus.dto.PagedResponse;
 import com.antivirus.model.ScanResult;
 import com.antivirus.service.SecurityService;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import com.antivirus.service.SystemMonitorService;
 import com.antivirus.repository.ScanResultRepository;
 import com.antivirus.service.LogService;
@@ -554,14 +558,27 @@ public class SecurityServiceImpl implements SecurityService {
         systemMonitorService.disableRealtimeProtection();
     }
 
+    private static final int MAX_PAGE_SIZE = 100;
+
     @Override
-    public List<ScanResult> getScanHistory() {
-        return logService.getLastFiveScanResults();
+    public PagedResponse<ScanResult> getScanHistory(int page, int size) {
+        Pageable pageable = PageRequest.of(page, normalizePageSize(size),
+            Sort.by(Sort.Direction.DESC, "scanDateTime"));
+        return PagedResponse.from(scanResultRepository.findAllByOrderByScanDateTimeDesc(pageable));
     }
 
     @Override
-    public List<ScanResult> getInfectedFiles() {
-        return scanResultRepository.findByInfectedTrue();
+    public PagedResponse<ScanResult> getInfectedFiles(int page, int size) {
+        Pageable pageable = PageRequest.of(page, normalizePageSize(size),
+            Sort.by(Sort.Direction.DESC, "scanDateTime"));
+        return PagedResponse.from(scanResultRepository.findByInfectedTrue(pageable));
+    }
+
+    private int normalizePageSize(int size) {
+        if (size < 1) {
+            return 10;
+        }
+        return Math.min(size, MAX_PAGE_SIZE);
     }
 
     @Override
