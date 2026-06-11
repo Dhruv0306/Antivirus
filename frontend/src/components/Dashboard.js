@@ -18,8 +18,8 @@ import {
   Card,
   CardContent,
   IconButton,
-  Tooltip,
   Fade,
+  TablePagination,
   CircularProgress,
 } from '@mui/material';
 import {
@@ -88,22 +88,22 @@ function Dashboard() {
   });
 
   const [scanHistory, setScanHistory] = useState([]);
+  const [historyPage, setHistoryPage] = useState(0);
+  const [historyRowsPerPage, setHistoryRowsPerPage] = useState(10);
+  const [historyTotal, setHistoryTotal] = useState(0);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     fetchSystemStatus();
-    fetchScanHistory();
-
     const statusInterval = setInterval(fetchSystemStatus, 5000);
-    const historyInterval = setInterval(fetchScanHistory, 10000);
-
-    return () => {
-      clearInterval(statusInterval);
-      clearInterval(historyInterval);
-    };
+    return () => clearInterval(statusInterval);
   }, []);
+
+  useEffect(() => {
+    fetchScanHistory();
+  }, [historyPage, historyRowsPerPage]);
 
   const fetchSystemStatus = async () => {
     try {
@@ -120,11 +120,23 @@ function Dashboard() {
 
   const fetchScanHistory = async () => {
     try {
-      const response = await antivirusApi.get('/history');
-      setScanHistory(response.data);
+      const response = await antivirusApi.get('/history', {
+        params: { page: historyPage, size: historyRowsPerPage },
+      });
+      setScanHistory(response.data.content || []);
+      setHistoryTotal(response.data.totalElements || 0);
     } catch (err) {
       setError('Error fetching scan history: ' + (err.response?.data || err.message));
     }
+  };
+
+  const handleHistoryPageChange = (_event, newPage) => {
+    setHistoryPage(newPage);
+  };
+
+  const handleHistoryRowsPerPageChange = (event) => {
+    setHistoryRowsPerPage(parseInt(event.target.value, 10));
+    setHistoryPage(0);
   };
 
   const handleRefresh = () => {
@@ -451,6 +463,15 @@ function Dashboard() {
                       </TableBody>
                     </Table>
                   </TableContainer>
+                  <TablePagination
+                    component="div"
+                    count={historyTotal}
+                    page={historyPage}
+                    onPageChange={handleHistoryPageChange}
+                    rowsPerPage={historyRowsPerPage}
+                    onRowsPerPageChange={handleHistoryRowsPerPageChange}
+                    rowsPerPageOptions={[5, 10, 25, 50]}
+                  />
                 </CardContent>
               </StyledCard>
             </Fade>

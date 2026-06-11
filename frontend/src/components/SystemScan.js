@@ -143,8 +143,8 @@ function SystemScan() {
 
   const fetchLatestResults = async () => {
     try {
-      const response = await antivirusApi.get('/history');
-      setScanResults(response.data);
+      const response = await antivirusApi.get('/history', { params: { page: 0, size: 50 } });
+      setScanResults(response.data.content || []);
     } catch (error) {
       console.error('Error fetching scan results:', error);
       setError('Error fetching scan results: ' + error.message);
