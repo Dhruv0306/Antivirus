@@ -22,6 +22,7 @@ target/
 *.sqlite
 *.db
 logs/
+data/
 *.trace.db
 *.mv.db
 .env
