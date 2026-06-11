@@ -14,7 +14,6 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -36,8 +35,8 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers(new AntPathRequestMatcher("/actuator/health")).permitAll()
-                .requestMatchers(new AntPathRequestMatcher("/api/**")).authenticated()
+                .requestMatchers("/actuator/health").permitAll()
+                .requestMatchers("/api/**").authenticated()
                 .anyRequest().denyAll()
             )
             .httpBasic(Customizer.withDefaults());
@@ -85,9 +84,6 @@ public class SecurityConfig {
         return new InMemoryUserDetailsManager(user);
     }
 
-    /**
-     * Accepts plaintext (encoded at startup), {bcrypt} prefixed, or raw BCrypt hashes.
-     */
     private static String resolveStoredPassword(String password, PasswordEncoder passwordEncoder) {
         if (password.startsWith("{bcrypt}")) {
             return password.substring("{bcrypt}".length());
