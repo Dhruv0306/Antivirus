@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
-import { antivirusApi, clearAuthCredentials, setAuthCredentials } from '../api/client';
+import { antivirusApi, authApi, clearAuthCredentials, setAuthCredentials } from '../api/client';
 
 const AuthContext = createContext(null);
 
@@ -15,7 +15,7 @@ export function AuthProvider({ children }) {
     setAuthCredentials(username, password);
     try {
       await antivirusApi.get('/system/status');
-      await antivirusApi.get('/auth/csrf');
+      await authApi.get('/csrf');
       sessionStorage.setItem('auth_user', username);
       setUser(username);
       setIsAuthenticated(true);

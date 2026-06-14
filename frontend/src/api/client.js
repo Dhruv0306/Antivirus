@@ -70,4 +70,5 @@ function createApiClient(basePath) {
 }
 
 export const antivirusApi = createApiClient('/api/antivirus');
+export const authApi = createApiClient('/api/auth');
 export const networkSecurityApi = createApiClient('/api/network-security');
