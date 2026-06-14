@@ -1,23 +1,60 @@
 import axios from 'axios';
 
 const API_ROOT = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+const CSRF_STORAGE_KEY = 'auth_csrf_credentials';
 
-let runtimeCredentials = null;
+let runtimeCsrf = null;
 
-export function setAuthCredentials(username, password) {
-  runtimeCredentials = { username, password };
+function canUseSessionStorage() {
+  return typeof window !== 'undefined' && typeof window.sessionStorage !== 'undefined';
 }
 
-export function clearAuthCredentials() {
-  runtimeCredentials = null;
-}
-
-function getCredentials() {
-  if (runtimeCredentials) {
-    return runtimeCredentials;
+function readStoredCsrfCredentials() {
+  if (!canUseSessionStorage()) {
+    return null;
   }
 
-  return null;
+  try {
+    const raw = sessionStorage.getItem(CSRF_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredCsrfCredentials(csrf) {
+  if (!canUseSessionStorage()) {
+    return;
+  }
+
+  sessionStorage.setItem(CSRF_STORAGE_KEY, JSON.stringify(csrf));
+}
+
+function clearStoredCsrfCredentials() {
+  if (!canUseSessionStorage()) {
+    return;
+  }
+
+  sessionStorage.removeItem(CSRF_STORAGE_KEY);
+}
+
+export function setCsrfCredentials(csrf) {
+  runtimeCsrf = csrf;
+  writeStoredCsrfCredentials(csrf);
+}
+
+export function clearCsrfCredentials() {
+  runtimeCsrf = null;
+  clearStoredCsrfCredentials();
+}
+
+function getCsrfCredentials() {
+  if (runtimeCsrf) {
+    return runtimeCsrf;
+  }
+
+  runtimeCsrf = readStoredCsrfCredentials();
+  return runtimeCsrf;
 }
 
 function getCookieValue(name) {
@@ -26,6 +63,22 @@ function getCookieValue(name) {
     .find((entry) => entry.startsWith(`${name}=`));
 
   return cookie ? decodeURIComponent(cookie.split('=').slice(1).join('=')) : null;
+}
+
+function setRequestHeader(headers, name, value) {
+  if (!headers) {
+    return { [name]: value };
+  }
+
+  if (typeof headers.set === 'function') {
+    headers.set(name, value);
+    return headers;
+  }
+
+  return {
+    ...headers,
+    [name]: value,
+  };
 }
 
 function createApiClient(basePath) {
@@ -40,17 +93,14 @@ function createApiClient(basePath) {
   client.interceptors.request.use((config) => {
     const method = config.method?.toLowerCase();
     if (method && ['post', 'put', 'delete', 'patch'].includes(method)) {
-      const csrfToken = getCookieValue('XSRF-TOKEN');
+      const csrfCredentials = getCsrfCredentials();
+      const csrfToken = csrfCredentials?.token || getCookieValue('XSRF-TOKEN');
       if (csrfToken) {
-        config.headers = config.headers || {};
-        config.headers['X-XSRF-TOKEN'] = csrfToken;
+        const headerName = csrfCredentials?.headerName || 'X-XSRF-TOKEN';
+        config.headers = setRequestHeader(config.headers, headerName, csrfToken);
       }
     }
 
-    const credentials = getCredentials();
-    if (credentials) {
-      config.auth = credentials;
-    }
     return config;
   });
 
@@ -59,7 +109,7 @@ function createApiClient(basePath) {
     (error) => {
       if (error.response?.status === 401 && !window.location.pathname.startsWith('/login')) {
         sessionStorage.removeItem('auth_user');
-        clearAuthCredentials();
+        clearCsrfCredentials();
         window.location.assign('/login');
       }
       return Promise.reject(error);

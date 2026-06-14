@@ -23,8 +23,8 @@ import {
   Warning as WarningIcon,
   Delete as DeleteIcon,
 } from '@mui/icons-material';
-import axios from 'axios';
 import { styled } from '@mui/material/styles';
+import { networkSecurityApi } from '../api/client';
 
 // Styled components
 const StyledPaper = styled(Paper)(({ theme }) => ({
@@ -101,7 +101,7 @@ function NetworkSecurity() {
 
   const fetchNetworkStatus = async () => {
     try {
-      const response = await axios.get('http://localhost:8080/api/antivirus/network/status');
+      const response = await networkSecurityApi.get('/status');
       setNetworkStatus(response.data);
       setBlockedDomains(response.data.blockedDomains || []);
       setRecentConnections(response.data.recentConnections || []);
@@ -112,7 +112,7 @@ function NetworkSecurity() {
 
   const handleFirewallToggle = async () => {
     try {
-      await axios.post('http://localhost:8080/api/antivirus/network/firewall', {
+      await networkSecurityApi.post('/firewall', {
         enabled: !firewallEnabled
       });
       setFirewallEnabled(!firewallEnabled);
@@ -123,7 +123,7 @@ function NetworkSecurity() {
 
   const handleWebProtectionToggle = async () => {
     try {
-      await axios.post('http://localhost:8080/api/antivirus/network/web-protection', {
+      await networkSecurityApi.post('/web-protection', {
         enabled: !webProtectionEnabled
       });
       setWebProtectionEnabled(!webProtectionEnabled);
@@ -134,7 +134,7 @@ function NetworkSecurity() {
 
   const handleRemoveBlockedDomain = async (domain) => {
     try {
-      await axios.delete(`http://localhost:8080/api/antivirus/network/blocked-domains/${domain}`);
+      await networkSecurityApi.delete(`/blocked-domains/${domain}`);
       setBlockedDomains(blockedDomains.filter(d => d !== domain));
     } catch (error) {
       setError('Error removing blocked domain: ' + (error.response?.data?.message || error.message));

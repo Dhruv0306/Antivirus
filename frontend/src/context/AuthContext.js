@@ -1,5 +1,10 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
-import { antivirusApi, authApi, clearAuthCredentials, setAuthCredentials } from '../api/client';
+import {
+  antivirusApi,
+  authApi,
+  clearCsrfCredentials,
+  setCsrfCredentials
+} from '../api/client';
 
 const AuthContext = createContext(null);
 
@@ -9,19 +14,31 @@ function readStoredUser() {
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(readStoredUser);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(() => Boolean(readStoredUser()));
 
   const login = useCallback(async (username, password) => {
-    setAuthCredentials(username, password);
     try {
+      const { data: preLoginCsrf } = await authApi.get('/csrf');
+      setCsrfCredentials(preLoginCsrf);
+      const body = new URLSearchParams({ username, password });
+      await authApi.post(
+        '/login',
+        body,
+        {
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+        }
+      );
+      const { data: postLoginCsrf } = await authApi.get('/csrf');
+      setCsrfCredentials(postLoginCsrf);
       await antivirusApi.get('/system/status');
-      await authApi.get('/csrf');
       sessionStorage.setItem('auth_user', username);
       setUser(username);
       setIsAuthenticated(true);
       return { success: true };
     } catch (error) {
-      clearAuthCredentials();
+      clearCsrfCredentials();
       sessionStorage.removeItem('auth_user');
       setUser(null);
       setIsAuthenticated(false);
@@ -35,8 +52,9 @@ export function AuthProvider({ children }) {
   }, []);
 
   const logout = useCallback(() => {
+    authApi.post('/logout').catch(() => {});
     sessionStorage.removeItem('auth_user');
-    clearAuthCredentials();
+    clearCsrfCredentials();
     setUser(null);
     setIsAuthenticated(false);
   }, []);
