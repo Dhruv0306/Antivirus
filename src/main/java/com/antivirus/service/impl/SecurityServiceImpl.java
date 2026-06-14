@@ -231,7 +231,7 @@ public class SecurityServiceImpl implements SecurityService {
     }
 
     private String calculateFileHash(File file) throws Exception {
-        MessageDigest md = MessageDigest.getInstance("SHA-256");
+        MessageDigest md = MessageDigest.getInstance("MD5");
         try (InputStream is = Files.newInputStream(file.toPath())) {
             byte[] buffer = new byte[8192];
             int read;
