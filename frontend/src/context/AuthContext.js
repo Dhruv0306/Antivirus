@@ -7,27 +7,20 @@ function readStoredUser() {
   return sessionStorage.getItem('auth_user');
 }
 
-function hasStoredSession() {
-  return Boolean(sessionStorage.getItem('auth_token'));
-}
-
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(readStoredUser);
-  const [isAuthenticated, setIsAuthenticated] = useState(hasStoredSession);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   const login = useCallback(async (username, password) => {
     setAuthCredentials(username, password);
     try {
       await antivirusApi.get('/system/status');
-      const token = btoa(`${username}:${password}`);
-      sessionStorage.setItem('auth_token', token);
       sessionStorage.setItem('auth_user', username);
       setUser(username);
       setIsAuthenticated(true);
       return { success: true };
     } catch (error) {
       clearAuthCredentials();
-      sessionStorage.removeItem('auth_token');
       sessionStorage.removeItem('auth_user');
       setUser(null);
       setIsAuthenticated(false);
@@ -49,7 +42,6 @@ export function AuthProvider({ children }) {
   }, [login]);
 
   const logout = useCallback(() => {
-    sessionStorage.removeItem('auth_token');
     sessionStorage.removeItem('auth_user');
     clearAuthCredentials();
     setUser(null);
