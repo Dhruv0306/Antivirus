@@ -128,6 +128,7 @@ application-*.properties
 !application-example.properties
 !application-dev.properties
 !application-prod.properties
+!application-local.properties
 
 # Test files
 /test-output/
@@ -158,3 +159,6 @@ Thumbs.db
 
 #Refrence images
 /refrenceImages
+
+# Temorary Files
+security_audit_report.jsx
