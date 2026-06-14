@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { antivirusApi, clearAuthCredentials, setAuthCredentials } from '../api/client';
 
 const AuthContext = createContext(null);
@@ -32,14 +32,6 @@ export function AuthProvider({ children }) {
       };
     }
   }, []);
-
-  useEffect(() => {
-    if (!hasStoredSession()
-        && import.meta.env.VITE_API_USERNAME
-        && import.meta.env.VITE_API_PASSWORD) {
-      login(import.meta.env.VITE_API_USERNAME, import.meta.env.VITE_API_PASSWORD);
-    }
-  }, [login]);
 
   const logout = useCallback(() => {
     sessionStorage.removeItem('auth_user');

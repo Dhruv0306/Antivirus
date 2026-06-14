@@ -17,12 +17,6 @@ function getCredentials() {
     return runtimeCredentials;
   }
 
-  const envUser = import.meta.env.VITE_API_USERNAME;
-  const envPass = import.meta.env.VITE_API_PASSWORD;
-  if (envUser && envPass) {
-    return { username: envUser, password: envPass };
-  }
-
   return null;
 }
 
