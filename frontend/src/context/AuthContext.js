@@ -15,6 +15,7 @@ export function AuthProvider({ children }) {
     setAuthCredentials(username, password);
     try {
       await antivirusApi.get('/system/status');
+      await antivirusApi.get('/auth/csrf');
       sessionStorage.setItem('auth_user', username);
       setUser(username);
       setIsAuthenticated(true);

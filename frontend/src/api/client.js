@@ -20,6 +20,14 @@ function getCredentials() {
   return null;
 }
 
+function getCookieValue(name) {
+  const cookie = document.cookie
+    .split('; ')
+    .find((entry) => entry.startsWith(`${name}=`));
+
+  return cookie ? decodeURIComponent(cookie.split('=').slice(1).join('=')) : null;
+}
+
 function createApiClient(basePath) {
   const client = axios.create({
     baseURL: `${API_ROOT}${basePath}`,
@@ -30,6 +38,15 @@ function createApiClient(basePath) {
   });
 
   client.interceptors.request.use((config) => {
+    const method = config.method?.toLowerCase();
+    if (method && ['post', 'put', 'delete', 'patch'].includes(method)) {
+      const csrfToken = getCookieValue('XSRF-TOKEN');
+      if (csrfToken) {
+        config.headers = config.headers || {};
+        config.headers['X-XSRF-TOKEN'] = csrfToken;
+      }
+    }
+
     const credentials = getCredentials();
     if (credentials) {
       config.auth = credentials;
