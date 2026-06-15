@@ -139,16 +139,6 @@ public class SecurityServiceImpl implements SecurityService {
     );
 
     @Override
-    public boolean authenticateUser(String username, String password) {
-        return false;
-    }
-
-    @Override
-    public boolean authorizeUser(String username, String operation) {
-        return false;
-    }
-
-    @Override
     public ScanResult scanFile(File file) {
         ScanResult result = new ScanResult();
         result.setFilePath(file.getAbsolutePath());
