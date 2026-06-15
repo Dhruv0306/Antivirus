@@ -22,6 +22,9 @@ public class ScanResult {
     @Transient
     private String fileName;
 
+    @Column(name = "owner_username")
+    private String ownerUsername;
+
     @Column(nullable = false)
     private String threatType; // VIRUS, MALWARE, TROJAN, RANSOMWARE, KEYLOGGER
 
@@ -82,6 +85,15 @@ public class ScanResult {
 
     public void setFileName(String fileName) {
         this.fileName = fileName;
+    }
+
+    @JsonIgnore
+    public String getOwnerUsername() {
+        return ownerUsername;
+    }
+
+    public void setOwnerUsername(String ownerUsername) {
+        this.ownerUsername = ownerUsername;
     }
     
     public String getThreatType() {

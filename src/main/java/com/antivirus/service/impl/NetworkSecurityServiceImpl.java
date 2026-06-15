@@ -6,6 +6,7 @@ import com.antivirus.service.NetworkSecurityService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.scheduling.annotation.Scheduled;
 
 import jakarta.annotation.PostConstruct;
 import java.io.IOException;
@@ -71,9 +72,6 @@ public class NetworkSecurityServiceImpl implements NetworkSecurityService {
             "phishing.example.com",
             "spam.example.com"
         ));
-        
-        // Start background monitoring
-        startNetworkMonitoring();
     }
 
     @Override
@@ -294,29 +292,15 @@ public class NetworkSecurityServiceImpl implements NetworkSecurityService {
         return suspicious;
     }
 
-    private void startNetworkMonitoring() {
-        // Start a background thread for continuous monitoring
-        Thread monitorThread = new Thread(() -> {
-            while (true) {
-                try {
-                    // Monitor active connections
-                    updateActiveConnections(getCurrentActiveConnections());
-                    
-                    // Check for suspicious activities
-                    checkSuspiciousActivities();
-                    
-                    // Clean up old connection records
-                    cleanupOldConnections();
-                    
-                    Thread.sleep(5000); // Check every 5 seconds
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    break;
-                }
-            }
-        });
-        monitorThread.setDaemon(true);
-        monitorThread.start();
+    @Scheduled(fixedDelay = 5000, initialDelay = 5000)
+    public void scheduledNetworkMonitor() {
+        try {
+            updateActiveConnections(getCurrentActiveConnections());
+            checkSuspiciousActivities();
+            cleanupOldConnections();
+        } catch (Exception e) {
+            logger.error("Network monitor tick failed", e);
+        }
     }
 
     private void checkSuspiciousActivities() {

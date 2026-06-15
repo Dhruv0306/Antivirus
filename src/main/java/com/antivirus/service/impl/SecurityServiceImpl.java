@@ -10,6 +10,8 @@ import com.antivirus.service.SystemMonitorService;
 import com.antivirus.repository.ScanResultRepository;
 import com.antivirus.service.LogService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -17,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -75,61 +78,64 @@ public class SecurityServiceImpl implements SecurityService {
 
     private static final int MAX_SYSTEM_SCAN_RESULTS = 2_000;
     private static final long MAX_SYSTEM_SCAN_DURATION_MS = 5 * 60 * 1000L;
+    private static final long MAX_PATTERN_SCAN_BYTES = 10L * 1024 * 1024L;
+    private static final int MAX_PATTERN_WINDOW_CHARS = 16 * 1024;
+    private static final int MAX_ZIP_ENTRIES = 1_000;
+    private static final long MAX_ZIP_UNCOMPRESSED_BYTES = 500L * 1024 * 1024L;
 
     // Malicious code patterns
     private static final List<Pattern> MALICIOUS_PATTERNS = Arrays.asList(
         // JavaScript threats
-        Pattern.compile("(?i).*eval\\(.*\\).*"), // JavaScript eval
-        Pattern.compile("(?i).*document\\.write\\(.*\\).*"), // Dynamic content injection
-        Pattern.compile("(?i).*\\<script.*\\>.*"), // Potential XSS
-        Pattern.compile("(?i).*\\bbase64_decode\\b.*"), // Base64 encoded content
-        
+        Pattern.compile("(?i)\\beval\\s*\\("), // JavaScript eval
+        Pattern.compile("(?i)\\bdocument\\.write\\s*\\("), // Dynamic content injection
+        Pattern.compile("(?i)<script\\b"), // Potential XSS
+        Pattern.compile("(?i)\\bbase64_decode\\b"), // Base64 encoded content
+
         // Shell execution
-        Pattern.compile("(?i).*shell_exec\\(.*\\).*"), // PHP shell execution
-        Pattern.compile("(?i).*exec\\(.*\\).*"), // Generic execution
-        Pattern.compile("(?i).*system\\(.*\\).*"), // System command execution
-        Pattern.compile("(?i).*passthru\\(.*\\).*"), // Command passthrough
-        
+        Pattern.compile("(?i)\\bshell_exec\\s*\\("), // PHP shell execution
+        Pattern.compile("(?i)\\bruntime\\.exec\\s*\\("), // Java Runtime execution
+        Pattern.compile("(?i)\\bsystem\\s*\\("), // System command execution
+        Pattern.compile("(?i)\\bpassthru\\s*\\("), // Command passthrough
+
         // Process manipulation
-        Pattern.compile("(?i).*process\\.spawn.*"), // Node.js process spawning
-        Pattern.compile("(?i).*runtime\\.exec.*"), // Java Runtime execution
-        Pattern.compile("(?i).*createprocess.*"), // Windows process creation
-        
+        Pattern.compile("(?i)\\bprocess\\.spawn\\b"), // Node.js process spawning
+        Pattern.compile("(?i)\\bcreateprocess\\w*\\b"), // Windows process creation
+
         // PowerShell threats
-        Pattern.compile("(?i).*powershell.*-enc.*"), // Encoded PowerShell
-        Pattern.compile("(?i).*powershell.*downloadstring.*"), // Remote script download
-        Pattern.compile("(?i).*powershell.*bypass.*"), // Security bypass
-        Pattern.compile("(?i).*powershell.*hidden.*"), // Hidden window
-        
+        Pattern.compile("(?i)\\bpowershell\\b.{0,120}(?:-enc|-encodedcommand|-w\\s+hidden)"), // Encoded PowerShell
+        Pattern.compile("(?i)\\bpowershell\\b.{0,120}downloadstring"), // Remote script download
+        Pattern.compile("(?i)\\bpowershell\\b.{0,120}\\bbypass\\b"), // Security bypass
+        Pattern.compile("(?i)\\bpowershell\\b.{0,120}\\bhidden\\b"), // Hidden window
+
         // Network threats
-        Pattern.compile("(?i).*new\\s+socket\\s*\\(.*"), // Socket creation
-        Pattern.compile("(?i).*connect\\s*\\(.*\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}.*\\).*"), // IP connection
-        Pattern.compile("(?i).*wget\\s+http.*"), // File download
-        Pattern.compile("(?i).*curl\\s+.*-O.*"), // File download
-        
+        Pattern.compile("(?i)\\bnew\\s+socket\\s*\\("), // Socket creation
+        Pattern.compile("(?i)\\bconnect\\s*\\(.*\\d{1,3}(?:\\.\\d{1,3}){3}"), // IP connection
+        Pattern.compile("(?i)\\bwget\\s+https?://"), // File download
+        Pattern.compile("(?i)\\bcurl\\b.{0,80}\\s-O\\b"), // File download
+
         // Registry manipulation
-        Pattern.compile("(?i).*reg.*add.*"), // Registry modification
-        Pattern.compile("(?i).*registry\\.setvalue.*"), // Registry API
-        
+        Pattern.compile("(?i)\\breg\\b.{0,80}\\badd\\b"), // Registry modification
+        Pattern.compile("(?i)\\bregistry\\.setvalue\\b"), // Registry API
+
         // File system threats
-        Pattern.compile("(?i).*\\.encrypt\\(.*"), // File encryption
-        Pattern.compile("(?i).*chmod.*777.*"), // Suspicious permissions
-        Pattern.compile("(?i).*icacls.*grant.*everyone.*"), // Windows permissions
-        
+        Pattern.compile("(?i)\\.encrypt\\s*\\("), // File encryption
+        Pattern.compile("(?i)\\bchmod\\b.{0,40}\\b777\\b"), // Suspicious permissions
+        Pattern.compile("(?i)\\bicacls\\b.{0,80}\\bgrant\\b.{0,80}\\beveryone\\b"), // Windows permissions
+
         // Data exfiltration
-        Pattern.compile("(?i).*\\.upload\\(.*"), // File upload
-        Pattern.compile("(?i).*post.*password.*"), // Password theft
-        Pattern.compile("(?i).*keylog.*"), // Keylogging
-        
+        Pattern.compile("(?i)\\.upload\\s*\\("), // File upload
+        Pattern.compile("(?i)\\bpost\\b.{0,80}\\bpassword\\b"), // Password theft
+        Pattern.compile("(?i)\\bkeylog(?:ger)?\\b"), // Keylogging
+
         // Persistence mechanisms
-        Pattern.compile("(?i).*\\\\startup\\\\.*"), // Startup folder
-        Pattern.compile("(?i).*\\\\system32\\\\drivers\\\\.*"), // Driver installation
-        Pattern.compile("(?i).*\\\\tasks\\\\.*"), // Scheduled tasks
-        
+        Pattern.compile("(?i)\\\\startup\\\\"), // Startup folder
+        Pattern.compile("(?i)\\\\system32\\\\drivers\\\\"), // Driver installation
+        Pattern.compile("(?i)\\\\tasks\\\\"), // Scheduled tasks
+
         // Obfuscation
-        Pattern.compile("(?i).*\\bunescape\\b.*"), // String obfuscation
-        Pattern.compile("(?i).*\\bdecode\\b.*"), // Encoding
-        Pattern.compile("(?i).*\\bfromcharcode\\b.*") // Character code obfuscation
+        Pattern.compile("(?i)\\bunescape\\b"), // String obfuscation
+        Pattern.compile("(?i)\\bdecode(?:uri)?\\b"), // Encoding
+        Pattern.compile("(?i)\\bfromcharcode\\b") // Character code obfuscation
     );
 
     @Override
@@ -146,6 +152,7 @@ public class SecurityServiceImpl implements SecurityService {
     public ScanResult scanFile(File file) {
         ScanResult result = new ScanResult();
         result.setFilePath(file.getAbsolutePath());
+        result.setOwnerUsername(resolveCurrentUsername());
         result.setInfected(false);
         result.setScanType("FILE");
         result.setActionTaken("NONE");
@@ -154,14 +161,14 @@ public class SecurityServiceImpl implements SecurityService {
             if (!file.exists()) {
                 result.setThreatType("ERROR");
                 result.setThreatDetails("File does not exist");
-                scanResultRepository.save(result);
+                saveScanResult(result);
                 return result;
             }
 
             if (!file.canRead()) {
                 result.setThreatType("ERROR");
                 result.setThreatDetails("Cannot read file");
-                scanResultRepository.save(result);
+                saveScanResult(result);
                 return result;
             }
 
@@ -169,7 +176,7 @@ public class SecurityServiceImpl implements SecurityService {
             if (file.length() > 100 * 1024 * 1024) { // 100MB limit
                 result.setThreatType("WARNING");
                 result.setThreatDetails("File too large to scan");
-                scanResultRepository.save(result);
+                saveScanResult(result);
                 return result;
             }
 
@@ -182,21 +189,18 @@ public class SecurityServiceImpl implements SecurityService {
                 result.setThreatType("VIRUS");
                 result.setThreatDetails("Known malware signature detected");
                 result.setActionTaken("REPORTED");
-                scanResultRepository.save(result);
+                saveScanResult(result);
                 logService.logScanResult(result);
                 return result;
             }
 
-            // Scan file content
-            byte[] content = Files.readAllBytes(file.toPath());
-            
-            // Check for suspicious patterns
-            if (containsSuspiciousPatterns(content)) {
+            // Scan file content using a bounded streaming reader
+            if (containsSuspiciousPatterns(file)) {
                 result.setInfected(true);
                 result.setThreatType("MALWARE");
                 result.setThreatDetails("Suspicious code patterns detected");
                 result.setActionTaken("REPORTED");
-                scanResultRepository.save(result);
+                saveScanResult(result);
                 logService.logScanResult(result);
                 return result;
             }
@@ -207,7 +211,7 @@ public class SecurityServiceImpl implements SecurityService {
                 result.setThreatType("RANSOMWARE");
                 result.setThreatDetails("Potential ransomware detected");
                 result.setActionTaken("REPORTED");
-                scanResultRepository.save(result);
+                saveScanResult(result);
                 logService.logScanResult(result);
                 return result;
             }
@@ -225,12 +229,43 @@ public class SecurityServiceImpl implements SecurityService {
         }
 
         // Save the final result
-        scanResultRepository.save(result);
+        saveScanResult(result);
         
         // Log the scan result
         logService.logScanResult(result);
 
         return result;
+    }
+
+    private String resolveCurrentUsername() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return "system";
+        }
+
+        String username = authentication.getName();
+        if (username == null || username.isBlank() || "anonymousUser".equalsIgnoreCase(username)) {
+            return "system";
+        }
+
+        return username.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private void assignOwnerIfMissing(ScanResult result) {
+        if (result == null) {
+            return;
+        }
+
+        String owner = result.getOwnerUsername();
+        if (owner == null || owner.isBlank()) {
+            result.setOwnerUsername(resolveCurrentUsername());
+        }
+    }
+
+    @SuppressWarnings("null")
+    private ScanResult saveScanResult(ScanResult result) {
+        assignOwnerIfMissing(result);
+        return scanResultRepository.save(result);
     }
 
     private String calculateFileHash(File file) throws Exception {
@@ -276,16 +311,16 @@ public class SecurityServiceImpl implements SecurityService {
         }
 
         try {
-            byte[] content = Files.readAllBytes(file.toPath());
+            byte[] content = readFilePrefix(file, (int) Math.min(file.length(), MAX_PATTERN_SCAN_BYTES));
             
             // Check for malicious patterns
-            if (containsSuspiciousPatterns(content)) {
+            if (containsSuspiciousPatterns(file)) {
                 threats.add("MALICIOUS_CODE");
                 return threats;
             }
             
             // Convert to string for text-based checks
-            String contentStr = new String(content);
+            String contentStr = new String(content, StandardCharsets.UTF_8);
             String[] lines = contentStr.split("\n");
             
             for (String line : lines) {
@@ -319,15 +354,36 @@ public class SecurityServiceImpl implements SecurityService {
     }
 
     private boolean containsMaliciousZipContent(File file) {
-        try (ZipInputStream zis = new ZipInputStream(new FileInputStream(file))) {
+        int entryCount = 0;
+        long totalUncompressed = 0L;
+
+        try (ZipInputStream zis = new ZipInputStream(new BufferedInputStream(new FileInputStream(file)))) {
             ZipEntry entry;
             while ((entry = zis.getNextEntry()) != null) {
+                entryCount++;
+                if (entryCount > MAX_ZIP_ENTRIES) {
+                    logger.warn("ZIP bomb suspected: entry count exceeds {}", MAX_ZIP_ENTRIES);
+                    return true;
+                }
+
+                long entrySize = entry.getSize();
+                if (entrySize > 0) {
+                    totalUncompressed += entrySize;
+                    if (totalUncompressed > MAX_ZIP_UNCOMPRESSED_BYTES) {
+                        logger.warn("ZIP bomb suspected: uncompressed size exceeds {} bytes", MAX_ZIP_UNCOMPRESSED_BYTES);
+                        return true;
+                    }
+                }
+
                 // Check for suspicious files in archive
                 if (SUSPICIOUS_EXTENSIONS.contains(getFileExtension(new File(entry.getName())))) {
                     return true;
                 }
+
+                zis.closeEntry();
             }
-        } catch (Exception e) {
+        } catch (IOException e) {
+            logger.error("Error scanning ZIP file {}: {}", file.getAbsolutePath(), e.getMessage(), e);
             return false;
         }
         return false;
@@ -354,25 +410,55 @@ public class SecurityServiceImpl implements SecurityService {
         }
     }
 
-    private boolean containsSuspiciousPatterns(byte[] content) {
-        try {
-            // Convert bytes to string for pattern matching
-            String contentStr = new String(content);
-            String[] lines = contentStr.split("\n");
-            
-            for (String line : lines) {
-                for (Pattern pattern : MALICIOUS_PATTERNS) {
-                    if (pattern.matcher(line).matches()) {
-                        return true;
-                    }
+    private boolean containsSuspiciousPatterns(File file) {
+        try (Reader reader = new BufferedReader(new InputStreamReader(
+                new FileInputStream(file), StandardCharsets.UTF_8))) {
+            char[] buffer = new char[8192];
+            StringBuilder window = new StringBuilder(MAX_PATTERN_WINDOW_CHARS);
+            long charsRead = 0L;
+            int read;
+
+            while ((read = reader.read(buffer)) != -1 && charsRead < MAX_PATTERN_SCAN_BYTES) {
+                charsRead += read;
+                window.append(buffer, 0, read);
+
+                if (matchesSuspiciousPatterns(window)) {
+                    return true;
+                }
+
+                if (window.length() > MAX_PATTERN_WINDOW_CHARS) {
+                    window.delete(0, window.length() - MAX_PATTERN_WINDOW_CHARS);
                 }
             }
-            
-            // If text scanning didn't find anything, check for binary patterns
-            return containsSuspiciousBytes(content);
-        } catch (Exception e) {
-            logger.error("Error checking for suspicious patterns: {}", e.getMessage());
+
+            return containsSuspiciousBytes(readFilePrefix(file, 8));
+        } catch (IOException e) {
+            logger.error("Error checking for suspicious patterns in {}: {}", file.getAbsolutePath(), e.getMessage(), e);
             return false;
+        }
+    }
+
+    private boolean matchesSuspiciousPatterns(CharSequence content) {
+        for (Pattern pattern : MALICIOUS_PATTERNS) {
+            if (pattern.matcher(content).find()) {
+                logger.debug("Suspicious pattern matched: {}", pattern.pattern());
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private byte[] readFilePrefix(File file, int maxBytes) throws IOException {
+        try (InputStream is = new BufferedInputStream(Files.newInputStream(file.toPath()));
+             ByteArrayOutputStream out = new ByteArrayOutputStream(Math.min(maxBytes, 8 * 1024))) {
+            byte[] buffer = new byte[8192];
+            int remaining = maxBytes;
+            int read;
+            while (remaining > 0 && (read = is.read(buffer, 0, Math.min(buffer.length, remaining))) != -1) {
+                out.write(buffer, 0, read);
+                remaining -= read;
+            }
+            return out.toByteArray();
         }
     }
 
@@ -644,7 +730,7 @@ public class SecurityServiceImpl implements SecurityService {
         }
         quarantineFile(file);
         result.setActionTaken("QUARANTINED");
-        scanResultRepository.save(result);
+        saveScanResult(result);
     }
 
     @Override
@@ -653,7 +739,7 @@ public class SecurityServiceImpl implements SecurityService {
         File file = new File(result.getFilePath());
         deleteInfectedFile(file);
         result.setActionTaken("DELETED");
-        scanResultRepository.save(result);
+        saveScanResult(result);
     }
 
     private ScanResult loadInfectedScanResult(Long scanResultId) {
@@ -662,6 +748,16 @@ public class SecurityServiceImpl implements SecurityService {
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Scan result not found"));
         if (!result.isInfected()) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only infected scan results can be modified");
+        }
+        String requestingUser = resolveCurrentUsername();
+        String owner = result.getOwnerUsername();
+        if (owner == null || owner.isBlank()) {
+            result.setOwnerUsername(requestingUser);
+            scanResultRepository.save(result);
+            return result;
+        }
+        if (!owner.equalsIgnoreCase(requestingUser)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not allowed to modify this scan result");
         }
         return result;
     }
@@ -930,9 +1026,8 @@ public class SecurityServiceImpl implements SecurityService {
             // Check file extension
             String extension = getFileExtension(file).toLowerCase();
             if (SUSPICIOUS_EXTENSIONS.contains(extension)) {
-                // Check for malicious patterns in suspicious files
-                byte[] content = Files.readAllBytes(file.toPath());
-                return containsSuspiciousPatterns(content);
+                // Check for malicious patterns in suspicious files with bounded reads
+                return containsSuspiciousPatterns(file);
             }
 
             // Check for trojan behavior
@@ -978,8 +1073,9 @@ public class SecurityServiceImpl implements SecurityService {
             }
 
             // Read file content for analysis
-            byte[] content = Files.readAllBytes(file.toPath());
-            String contentStr = new String(content);
+            int sampleSize = (int) Math.min(file.length(), MAX_PATTERN_SCAN_BYTES);
+            byte[] content = readFilePrefix(file, sampleSize);
+            String contentStr = new String(content, StandardCharsets.UTF_8);
 
             // Check for rootkit indicators in binary content
             if (detectRootkitBinaryPatterns(content)) {
@@ -1074,7 +1170,6 @@ public class SecurityServiceImpl implements SecurityService {
         return false;
     }
 
-    @SuppressWarnings("null")
     @Override
     @Transactional
     public List<ScanResult> scanDirectory(String directoryPath, boolean recursive) {
@@ -1174,7 +1269,7 @@ public class SecurityServiceImpl implements SecurityService {
             logger.error("Error scanning directory: {}", directoryPath, e);
             ScanResult errorResult = createErrorResult(directoryPath, e.getMessage());
             results.add(errorResult);
-            scanResultRepository.save(errorResult);
+            saveScanResult(errorResult);
             return results;
         }
     }
@@ -1258,12 +1353,12 @@ public class SecurityServiceImpl implements SecurityService {
         return result;
     }
 
-    @SuppressWarnings("null")
     private void saveResultsInBatches(List<ScanResult> results) {
         final int BATCH_SIZE = 100;
         for (int i = 0; i < results.size(); i += BATCH_SIZE) {
             int end = Math.min(i + BATCH_SIZE, results.size());
             List<ScanResult> batch = results.subList(i, end);
+            batch.forEach(this::assignOwnerIfMissing);
             scanResultRepository.saveAll(batch);
             logger.debug("Saved batch of {} results to database", batch.size());
         }

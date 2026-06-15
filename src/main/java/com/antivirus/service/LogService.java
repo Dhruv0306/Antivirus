@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import java.io.*;
 import java.util.*;
 import java.nio.file.*;
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -18,6 +19,8 @@ public class LogService {
     private static final Logger logger = LoggerFactory.getLogger(LogService.class);
     private static final String LOG_DIRECTORY = "logs";
     private static final String LOG_FILE = "scan_history.log";
+    private static final long MAX_LOG_FILE_SIZE_BYTES = 10L * 1024 * 1024L;
+    private static final int MAX_LOG_BACKUPS = 7;
     private final ObjectMapper objectMapper;
 
     public LogService() {
@@ -45,18 +48,19 @@ public class LogService {
             
             // Convert ScanResult to JSON and encode
             String jsonResult = objectMapper.writeValueAsString(result);
-            String encodedResult = Base64.getEncoder().encodeToString(jsonResult.getBytes());
+            String encodedResult = Base64.getEncoder().encodeToString(jsonResult.getBytes(StandardCharsets.UTF_8));
             
             // Append to log file with timestamp
             String logEntry = System.currentTimeMillis() + ":" + encodedResult + "\n";
             
             // Ensure parent directories exist
             Files.createDirectories(logPath.getParent());
-            
+            rotateLogIfNeeded(logPath, logEntry.getBytes(StandardCharsets.UTF_8).length);
+
             // Write with all necessary options
             Files.write(
                 logPath,
-                logEntry.getBytes(),
+                logEntry.getBytes(StandardCharsets.UTF_8),
                 StandardOpenOption.CREATE,
                 StandardOpenOption.APPEND,
                 StandardOpenOption.WRITE
@@ -70,15 +74,7 @@ public class LogService {
 
     public List<ScanResult> getLastFiveScanResults() {
         try {
-            File logsDir = new File(LOG_DIRECTORY);
-            Path logPath = logsDir.toPath().resolve(LOG_FILE);
-            
-            if (!Files.exists(logPath)) {
-                logger.debug("Scan history log file does not exist yet at: {}", logPath.toAbsolutePath());
-                return new ArrayList<>();
-            }
-
-            List<String> lines = Files.readAllLines(logPath);
+            List<String> lines = readAllLogLines();
             if (lines.isEmpty()) {
                 logger.debug("Scan history log file is empty");
                 return new ArrayList<>();
@@ -95,6 +91,53 @@ public class LogService {
             logger.error("Error reading scan history log: {}", e.getMessage(), e);
             return new ArrayList<>();
         }
+    }
+
+    private void rotateLogIfNeeded(Path logPath, long nextEntrySize) throws IOException {
+        if (!Files.exists(logPath)) {
+            return;
+        }
+
+        long currentSize = Files.size(logPath);
+        if (currentSize + nextEntrySize <= MAX_LOG_FILE_SIZE_BYTES) {
+            return;
+        }
+
+        Path oldestBackup = logPath.resolveSibling(LOG_FILE + "." + MAX_LOG_BACKUPS);
+        Files.deleteIfExists(oldestBackup);
+
+        for (int i = MAX_LOG_BACKUPS - 1; i >= 1; i--) {
+            Path source = logPath.resolveSibling(LOG_FILE + "." + i);
+            if (Files.exists(source)) {
+                Path target = logPath.resolveSibling(LOG_FILE + "." + (i + 1));
+                Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+            }
+        }
+
+        Files.move(logPath, logPath.resolveSibling(LOG_FILE + ".1"), StandardCopyOption.REPLACE_EXISTING);
+    }
+
+    private List<String> readAllLogLines() throws IOException {
+        List<String> lines = new ArrayList<>();
+        List<Path> logFiles = new ArrayList<>();
+        Path currentLog = Paths.get(LOG_DIRECTORY).resolve(LOG_FILE);
+
+        for (int i = 1; i <= MAX_LOG_BACKUPS; i++) {
+            Path backup = currentLog.resolveSibling(LOG_FILE + "." + i);
+            if (Files.exists(backup)) {
+                logFiles.add(backup);
+            }
+        }
+
+        if (Files.exists(currentLog)) {
+            logFiles.add(currentLog);
+        }
+
+        for (Path logFile : logFiles) {
+            lines.addAll(Files.readAllLines(logFile));
+        }
+
+        return lines;
     }
 
     private ScanResult decodeScanResult(String line) {
@@ -119,4 +162,4 @@ public class LogService {
             return null;
         }
     }
-} 
+}
