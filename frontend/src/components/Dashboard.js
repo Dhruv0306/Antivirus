@@ -79,6 +79,10 @@ const StyledIconButton = styled(IconButton)(({ theme }) => ({
   }
 }));
 
+function getDisplayName(scan) {
+  return scan?.fileName || scan?.filePath || 'Unknown file';
+}
+
 function Dashboard() {
   const [systemStatus, setSystemStatus] = useState({
     diskUsage: [],
@@ -406,7 +410,7 @@ function Dashboard() {
                       <TableHead>
                         <TableRow>
                           <TableCell sx={{ fontWeight: 600 }}>Time</TableCell>
-                          <TableCell sx={{ fontWeight: 600 }}>File Path</TableCell>
+                          <TableCell sx={{ fontWeight: 600 }}>File Name</TableCell>
                           <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
                           <TableCell sx={{ fontWeight: 600 }}>Threat Type</TableCell>
                           <TableCell sx={{ fontWeight: 600 }}>Details</TableCell>
@@ -425,7 +429,7 @@ function Dashboard() {
                           >
                             <TableCell>{formatDate(scan.scanDateTime)}</TableCell>
                             <TableCell sx={{ maxWidth: 200, wordBreak: 'break-all' }}>
-                              {scan.filePath}
+                              {getDisplayName(scan)}
                             </TableCell>
                             <TableCell>
                               <Alert
@@ -482,4 +486,4 @@ function Dashboard() {
   );
 }
 
-export default Dashboard; 
+export default Dashboard;

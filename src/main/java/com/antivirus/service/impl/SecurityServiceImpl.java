@@ -73,6 +73,9 @@ public class SecurityServiceImpl implements SecurityService {
         ".ws", ".wsf", ".wsh", ".scr", ".sct", ".shb", ".tmp"
     ));
 
+    private static final int MAX_SYSTEM_SCAN_RESULTS = 2_000;
+    private static final long MAX_SYSTEM_SCAN_DURATION_MS = 5 * 60 * 1000L;
+
     // Malicious code patterns
     private static final List<Pattern> MALICIOUS_PATTERNS = Arrays.asList(
         // JavaScript threats
@@ -399,9 +402,10 @@ public class SecurityServiceImpl implements SecurityService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "System scan is already in progress");
         }
         stopSystemScan.set(false);
-        List<ScanResult> results = new ArrayList<>();
+        List<ScanResult> results = new ArrayList<>(Math.min(MAX_SYSTEM_SCAN_RESULTS, 256));
         AtomicInteger scannedFiles = new AtomicInteger(0);
         AtomicInteger skippedFiles = new AtomicInteger(0);
+        long scanDeadline = System.currentTimeMillis() + MAX_SYSTEM_SCAN_DURATION_MS;
         
         try {
             logger.info("Starting system scan...");
@@ -434,7 +438,7 @@ public class SecurityServiceImpl implements SecurityService {
                 logger.info("Scanning root directory: {}", root.getAbsolutePath());
                 
                 try {
-                    scanDirectory(root.toPath(), skipDirectories, results, scannedFiles, skippedFiles);
+                    scanDirectory(root.toPath(), skipDirectories, results, scannedFiles, skippedFiles, scanDeadline);
                 } catch (Exception e) {
                     logger.error("Error scanning root directory {}: {}", root, e.getMessage());
                     ScanResult errorResult = new ScanResult();
@@ -444,7 +448,9 @@ public class SecurityServiceImpl implements SecurityService {
                     errorResult.setThreatDetails("Error accessing directory: " + e.getMessage());
                     errorResult.setScanType("SYSTEM");
                     errorResult.setActionTaken("NONE");
-                    results.add(errorResult);
+                    if (results.size() < MAX_SYSTEM_SCAN_RESULTS) {
+                        results.add(errorResult);
+                    }
                 }
             }
             
@@ -463,9 +469,17 @@ public class SecurityServiceImpl implements SecurityService {
     private void scanDirectory(Path directory, Set<String> skipDirectories, 
                              List<ScanResult> results, 
                              AtomicInteger scannedFiles,
-                             AtomicInteger skippedFiles) throws IOException {
+                             AtomicInteger skippedFiles,
+                             long scanDeadline) throws IOException {
         try {
-            if (stopSystemScan.get()) {
+            if (stopSystemScan.get() || System.currentTimeMillis() >= scanDeadline || results.size() >= MAX_SYSTEM_SCAN_RESULTS) {
+                if (results.size() >= MAX_SYSTEM_SCAN_RESULTS) {
+                    logger.warn("System scan capped at {} results to avoid resource exhaustion", MAX_SYSTEM_SCAN_RESULTS);
+                }
+                if (System.currentTimeMillis() >= scanDeadline) {
+                    logger.warn("System scan stopped after exceeding {} ms", MAX_SYSTEM_SCAN_DURATION_MS);
+                }
+                stopSystemScan.set(true);
                 return;
             }
 
@@ -492,16 +506,26 @@ public class SecurityServiceImpl implements SecurityService {
                         boolean isRegularFile = Files.isRegularFile(path);
 
                         if (isDirectory) {
-                            scanDirectory(path, skipDirectories, results, scannedFiles, skippedFiles);
+                            scanDirectory(path, skipDirectories, results, scannedFiles, skippedFiles, scanDeadline);
                         } else if (isRegularFile && isReadable) {
                             logger.debug("Scanning file: {}", path);
                             ScanResult result = scanFile(path.toFile());
-                            results.add(result);
+                            if (results.size() < MAX_SYSTEM_SCAN_RESULTS) {
+                                results.add(result);
+                            } else {
+                                stopSystemScan.set(true);
+                                return;
+                            }
                             scannedFiles.incrementAndGet();
                             
                             if (result.isInfected()) {
                                 logger.warn("Infected file found: {} (Type: {})", 
                                     path, result.getThreatType());
+                            }
+
+                            if (System.currentTimeMillis() >= scanDeadline || results.size() >= MAX_SYSTEM_SCAN_RESULTS) {
+                                stopSystemScan.set(true);
+                                return;
                             }
                         }
                     } catch (AccessDeniedException e) {
@@ -516,7 +540,9 @@ public class SecurityServiceImpl implements SecurityService {
                         errorResult.setThreatDetails("Error scanning file: " + e.getMessage());
                         errorResult.setScanType("SYSTEM");
                         errorResult.setActionTaken("NONE");
-                        results.add(errorResult);
+                        if (results.size() < MAX_SYSTEM_SCAN_RESULTS) {
+                            results.add(errorResult);
+                        }
                     }
                 }
             } catch (AccessDeniedException e) {

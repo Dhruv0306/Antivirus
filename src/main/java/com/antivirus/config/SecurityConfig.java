@@ -1,5 +1,8 @@
 package com.antivirus.config;
 
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import org.springframework.core.Ordered;
+import org.springframework.security.config.Customizer;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -16,19 +19,34 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
+import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
+    private static final int AUTH_ATTEMPT_LIMIT = 10;
+    private static final Duration AUTH_ATTEMPT_WINDOW = Duration.ofMinutes(1);
 
     @Value("${app.cors.allowed-origins:http://localhost:5000,http://localhost:3000}")
     private String allowedOrigins;
+
+    private final Map<String, AttemptWindow> authAttemptWindows = new ConcurrentHashMap<>();
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -64,9 +82,61 @@ public class SecurityConfig {
                     response.setContentType("application/json");
                     response.getWriter().write("{\"success\":true}");
                 })
+            )
+            .headers(headers -> headers
+                .contentSecurityPolicy(csp -> csp.policyDirectives(
+                    "default-src 'self'; " +
+                    "base-uri 'self'; " +
+                    "object-src 'none'; " +
+                    "script-src 'self'; " +
+                    "style-src 'self' 'unsafe-inline'; " +
+                    "img-src 'self' data:; " +
+                    "connect-src 'self'; " +
+                    "frame-ancestors 'none';"
+                ))
+                .frameOptions(frame -> frame.deny())
+                .contentTypeOptions(Customizer.withDefaults())
+                .httpStrictTransportSecurity(hsts -> hsts
+                    .includeSubDomains(true)
+                    .maxAgeInSeconds(31536000))
+                .referrerPolicy(ref -> ref
+                    .policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN))
             );
 
         return http.build();
+    }
+
+    @Bean
+    public FilterRegistrationBean<OncePerRequestFilter> authRateLimitFilter() {
+        FilterRegistrationBean<OncePerRequestFilter> bean = new FilterRegistrationBean<>();
+        bean.setFilter(new OncePerRequestFilter() {
+            @SuppressWarnings("null")
+            @Override
+            protected void doFilterInternal(
+                    HttpServletRequest request,
+                    HttpServletResponse response,
+                    FilterChain filterChain) throws ServletException, IOException {
+                if (!"POST".equalsIgnoreCase(request.getMethod())) {
+                    filterChain.doFilter(request, response);
+                    return;
+                }
+
+                String rateLimitKey = resolveRateLimitKey(request);
+                AttemptWindow window = authAttemptWindows.computeIfAbsent(rateLimitKey, key -> new AttemptWindow());
+                if (!window.tryAcquire(AUTH_ATTEMPT_WINDOW, AUTH_ATTEMPT_LIMIT)) {
+                    response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
+                    response.setContentType("application/json");
+                    response.getWriter().write("{\"success\":false,\"message\":\"Too many login attempts. Please try again later.\"}");
+                    return;
+                }
+
+                filterChain.doFilter(request, response);
+                cleanupExpiredAttemptWindows();
+            }
+        });
+        bean.addUrlPatterns("/api/auth/login");
+        bean.setOrder(Ordered.HIGHEST_PRECEDENCE);
+        return bean;
     }
 
     @Bean
@@ -117,5 +187,49 @@ public class SecurityConfig {
             return password;
         }
         return passwordEncoder.encode(password);
+    }
+
+    private String resolveRateLimitKey(HttpServletRequest request) {
+        String forwardedFor = request.getHeader("X-Forwarded-For");
+        String remoteAddress = request.getRemoteAddr();
+        String clientIp = remoteAddress;
+        if (forwardedFor != null && !forwardedFor.isBlank()) {
+            clientIp = forwardedFor.split(",")[0].trim();
+        }
+
+        String username = request.getParameter("username");
+        if (username == null || username.isBlank()) {
+            username = "unknown";
+        }
+
+        return clientIp + "|" + username.toLowerCase();
+    }
+
+    private void cleanupExpiredAttemptWindows() {
+        authAttemptWindows.entrySet().removeIf(entry -> entry.getValue().isExpired(AUTH_ATTEMPT_WINDOW));
+    }
+
+    private static final class AttemptWindow {
+        private Instant windowStart = Instant.now();
+        private int attempts = 0;
+
+        synchronized boolean tryAcquire(Duration window, int maxAttempts) {
+            Instant now = Instant.now();
+            if (windowStart.plus(window).isBefore(now)) {
+                windowStart = now;
+                attempts = 0;
+            }
+
+            if (attempts >= maxAttempts) {
+                return false;
+            }
+
+            attempts++;
+            return true;
+        }
+
+        synchronized boolean isExpired(Duration window) {
+            return windowStart.plus(window).isBefore(Instant.now());
+        }
     }
 }

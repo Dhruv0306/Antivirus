@@ -16,8 +16,13 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 /**
  * Implementation of network security service with enhanced scanning capabilities
@@ -51,6 +56,12 @@ public class NetworkSecurityServiceImpl implements NetworkSecurityService {
     private static final int MAX_CONNECTION_ATTEMPTS = 5;
     private static final int CONNECTION_TIMEOUT_MS = 1000;
     private static final int RATE_LIMIT_WINDOW_SECONDS = 60;
+    private static final ExecutorService PORT_SCAN_EXECUTOR =
+        Executors.newFixedThreadPool(8, r -> {
+            Thread thread = new Thread(r, "port-scan");
+            thread.setDaemon(true);
+            return thread;
+        });
 
     @PostConstruct
     public void init() {
@@ -92,9 +103,11 @@ public class NetworkSecurityServiceImpl implements NetworkSecurityService {
             logger.error("Error scanning network interfaces", e);
         }
 
-        // Enhanced port scanning
-        for (int port : COMMON_PORTS) {
-            if (isPortOpen("localhost", port)) {
+        // Enhanced port scanning with bounded parallelism
+        List<String> openPorts = getOpenPorts();
+        for (String openPort : openPorts) {
+            int port = Integer.parseInt(openPort);
+            if (port > 0) {
                 NetworkVulnerability vulnerability = new NetworkVulnerability();
                 vulnerability.setType("OPEN_PORT");
                 vulnerability.setDescription("Port " + port + " is open and potentially vulnerable");
@@ -134,7 +147,7 @@ public class NetworkSecurityServiceImpl implements NetworkSecurityService {
         result.setVulnerabilities(vulnerabilities);
         result.setScanTime(LocalDateTime.now());
         result.setStatus("COMPLETED");
-        result.setOpenPorts(getOpenPorts());
+        result.setOpenPorts(openPorts);
         result.setSuspiciousConnections(suspiciousIPs);
         result.setFirewallEnabled(firewallEnabled);
         result.setWebProtectionEnabled(webProtectionEnabled);
@@ -252,13 +265,24 @@ public class NetworkSecurityServiceImpl implements NetworkSecurityService {
     }
 
     private List<String> getOpenPorts() {
-        List<String> openPorts = new ArrayList<>();
-        for (int port : COMMON_PORTS) {
-            if (isPortOpen("localhost", port)) {
-                openPorts.add(String.valueOf(port));
-            }
-        }
-        return openPorts;
+        List<CompletableFuture<Optional<String>>> futures = IntStream.of(COMMON_PORTS)
+            .mapToObj(port -> CompletableFuture.supplyAsync(
+                () -> isPortOpen("localhost", port)
+                    ? Optional.of(String.valueOf(port))
+                    : Optional.<String>empty(),
+                PORT_SCAN_EXECUTOR))
+            .collect(Collectors.toList());
+
+        return futures.stream()
+            .map(future -> {
+                try {
+                    return future.get(2, TimeUnit.SECONDS);
+                } catch (Exception e) {
+                    return Optional.<String>empty();
+                }
+            })
+            .flatMap(Optional::stream)
+            .collect(Collectors.toList());
     }
 
     private List<String> getSuspiciousConnections() {
@@ -352,4 +376,4 @@ public class NetworkSecurityServiceImpl implements NetworkSecurityService {
         vulnerability.setRecommendation("Enable " + type.replace("_", " ").toLowerCase() + " protection");
         vulnerabilities.add(vulnerability);
     }
-} 
+}

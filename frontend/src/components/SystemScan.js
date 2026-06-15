@@ -107,6 +107,10 @@ const StatusIcon = styled(Box)(({ status }) => ({
   })
 }));
 
+function getDisplayName(result) {
+  return result?.fileName || result?.filePath || 'Unknown file';
+}
+
 function SystemScan() {
   const [scanning, setScanning] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -344,7 +348,7 @@ function SystemScan() {
                         )}
                       </ListItemIcon>
                       <ListItemText
-                        primary={result.filePath}
+                        primary={getDisplayName(result)}
                           secondary={result.threatDetails || 'No threats detected'}
                           sx={{
                             '& .MuiListItemText-primary': {
@@ -371,4 +375,4 @@ function SystemScan() {
   );
 }
 
-export default SystemScan; 
+export default SystemScan;

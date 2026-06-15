@@ -73,6 +73,10 @@ const StyledProgress = styled(LinearProgress)(({ theme }) => ({
   }
 }));
 
+function getDisplayName(result) {
+  return result?.fileName || result?.filePath || 'Unknown file';
+}
+
 function DirectoryScan() {
   const [selectedDirectory, setSelectedDirectory] = useState('');
   const [scanning, setScanning] = useState(false);
@@ -431,7 +435,7 @@ function DirectoryScan() {
                                 wordBreak: 'break-all' 
                               }}
                             >
-                              {result.filePath}
+                              {getDisplayName(result)}
                             </Typography>
                           }
                           secondary={
@@ -480,4 +484,4 @@ function DirectoryScan() {
   );
 }
 
-export default DirectoryScan; 
+export default DirectoryScan;

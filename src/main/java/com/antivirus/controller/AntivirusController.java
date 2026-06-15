@@ -23,12 +23,29 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/antivirus")
 public class AntivirusController {
     private static final Logger logger = LoggerFactory.getLogger(AntivirusController.class);
+    private static final Set<String> ALLOWED_CONTENT_TYPES = Set.of(
+        "application/octet-stream",
+        "application/java-archive",
+        "application/pdf",
+        "application/zip",
+        "application/x-zip-compressed",
+        "application/x-msdownload",
+        "application/x-msdos-program",
+        "application/x-dosexec",
+        "application/x-executable",
+        "application/vnd.microsoft.portable-executable",
+        "image/jpeg",
+        "image/png",
+        "text/plain"
+    );
 
     @Value("${app.scan.max-files-per-directory-upload:500}")
     private int maxFilesPerDirectoryUpload;
@@ -56,22 +73,37 @@ public class AntivirusController {
             return ResponseEntity.badRequest().body(errorResult);
         }
 
+        String originalFilename = sanitizeDisplayName(file.getOriginalFilename());
+        String contentType = file.getContentType();
+        if (contentType == null || !ALLOWED_CONTENT_TYPES.contains(contentType.toLowerCase(Locale.ROOT))) {
+            logger.warn("Rejected upload with unsupported content type: {}", contentType);
+            ScanResult errorResult = new ScanResult();
+            errorResult.setFilePath(originalFilename);
+            errorResult.setFileName(originalFilename);
+            errorResult.setInfected(false);
+            errorResult.setThreatType("ERROR");
+            errorResult.setThreatDetails("Unsupported file type");
+            return ResponseEntity.badRequest().body(errorResult);
+        }
+
         File tempFile = null;
         try {
             // Create temporary file
-            tempFile = File.createTempFile("scan_", "_" + file.getOriginalFilename());
+            tempFile = File.createTempFile("scan_", "_" + UUID.randomUUID());
             file.transferTo(tempFile);
             logger.info("File uploaded successfully: {}", tempFile.getAbsolutePath());
 
             // Perform scan
             ScanResult result = securityService.scanFile(tempFile);
+            result.setFileName(originalFilename);
             logger.info("File scan completed: {}", result);
             return ResponseEntity.ok(result);
 
         } catch (IOException e) {
             logger.error("Error processing file upload: {}", e.getMessage());
             ScanResult errorResult = new ScanResult();
-            errorResult.setFilePath(file.getOriginalFilename());
+            errorResult.setFilePath(originalFilename);
+            errorResult.setFileName(originalFilename);
             errorResult.setInfected(false);
             errorResult.setThreatType("ERROR");
             errorResult.setThreatDetails("Error processing file upload");
@@ -225,7 +257,7 @@ public class AntivirusController {
                 for (MultipartFile file : files) {
                     try {
                         // Get the relative path from the original filename
-                        String relativePath = file.getOriginalFilename();
+                        String relativePath = sanitizeDisplayName(file.getOriginalFilename());
                         if (relativePath == null) {
                             continue;
                         }
@@ -241,6 +273,7 @@ public class AntivirusController {
                         
                         // Scan the file
                         ScanResult result = securityService.scanFile(targetPath.toFile());
+                        result.setFileName(relativePath);
                         results.add(result);
                         
                         // Update statistics
@@ -263,7 +296,9 @@ public class AntivirusController {
                     } catch (SecurityException e) {
                         logger.warn("Rejected unsafe path in directory upload: {}", file.getOriginalFilename());
                         ScanResult errorResult = new ScanResult();
-                        errorResult.setFilePath(file.getOriginalFilename());
+                        String displayName = sanitizeDisplayName(file.getOriginalFilename());
+                        errorResult.setFilePath(displayName);
+                        errorResult.setFileName(displayName);
                         errorResult.setInfected(false);
                         errorResult.setThreatType("ERROR");
                         errorResult.setThreatDetails("Rejected unsafe file path");
@@ -272,7 +307,9 @@ public class AntivirusController {
                     } catch (Exception e) {
                         logger.error("Error processing file {}: {}", file.getOriginalFilename(), e.getMessage());
                         ScanResult errorResult = new ScanResult();
-                        errorResult.setFilePath(file.getOriginalFilename());
+                        String displayName = sanitizeDisplayName(file.getOriginalFilename());
+                        errorResult.setFilePath(displayName);
+                        errorResult.setFileName(displayName);
                         errorResult.setInfected(false);
                         errorResult.setThreatType("ERROR");
                         errorResult.setThreatDetails("Error processing file");
@@ -332,4 +369,11 @@ public class AntivirusController {
             }
         }
     }
-} 
+
+    private String sanitizeDisplayName(String originalFilename) {
+        if (originalFilename == null || originalFilename.isBlank()) {
+            return "unknown-file";
+        }
+        return originalFilename.replace("\\", "/");
+    }
+}
