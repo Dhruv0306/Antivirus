@@ -162,3 +162,6 @@ Thumbs.db
 
 # Temorary Files
 security_audit_report.jsx
+
+# Claude files
+.claude/

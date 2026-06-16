@@ -63,17 +63,19 @@ public class AntivirusController {
     @SuppressWarnings("null")
     @PostMapping("/scan/file")
     public ResponseEntity<?> scanFile(@RequestParam("file") MultipartFile file) {
-        if (file == null || file.isEmpty()) {
-            logger.error("No file provided or file is empty");
+        // Validate that filename exists before processing (L-03 fix: handle null/blank filenames explicitly)
+        String originalFilename = sanitizeDisplayName(file.getOriginalFilename());
+        if (originalFilename == null || originalFilename.isBlank()) {
+            logger.error("No valid filename for uploaded file");
             ScanResult errorResult = new ScanResult();
-            errorResult.setFilePath("No file");
+            errorResult.setFilePath("unknown-file");
+            errorResult.setFileName("unknown-file");
             errorResult.setInfected(false);
             errorResult.setThreatType("ERROR");
-            errorResult.setThreatDetails("No file provided or file is empty");
+            errorResult.setThreatDetails("No filename for uploaded file (null or blank)");
             return ResponseEntity.badRequest().body(errorResult);
         }
 
-        String originalFilename = sanitizeDisplayName(file.getOriginalFilename());
         String contentType = file.getContentType();
         if (contentType == null || !ALLOWED_CONTENT_TYPES.contains(contentType.toLowerCase(Locale.ROOT))) {
             logger.warn("Rejected upload with unsupported content type: {}", contentType);
@@ -226,7 +228,7 @@ public class AntivirusController {
             @RequestParam("directoryName") String directoryName,
             @RequestParam(value = "recursive", defaultValue = "true") boolean recursive,
             @RequestParam("files") List<MultipartFile> files) {
-        
+
         if (files == null || files.isEmpty()) {
             logger.error("No files provided for scanning");
             Map<String, String> errorResponse = new HashMap<>();
