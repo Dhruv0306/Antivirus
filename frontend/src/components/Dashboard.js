@@ -100,13 +100,32 @@ function Dashboard() {
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    fetchSystemStatus();
-    const statusInterval = setInterval(fetchSystemStatus, 5000);
-    return () => clearInterval(statusInterval);
-  }, []);
+    const controller = new AbortController();
 
-  useEffect(() => {
-    fetchScanHistory();
+    const fetchStatus = async () => {
+      try {
+        const response = await antivirusApi.get('/system/status', {
+          signal: controller.signal
+        });
+        setSystemStatus(response.data);
+        setError(null);
+      } catch (err) {
+        if (err.name !== 'CanceledError' && err.code !== 'ERR_CANCELED') {
+          setError('Error fetching system status: ' + (err.response?.data || err.message));
+        }
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    };
+
+    fetchStatus(); // initial fetch
+    const statusInterval = setInterval(fetchStatus, 5000);
+
+    return () => {
+      controller.abort();       // cancel any in-flight request
+      clearInterval(statusInterval); // stop scheduling new ones
+    };
   }, [historyPage, historyRowsPerPage]);
 
   const fetchSystemStatus = async () => {

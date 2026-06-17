@@ -105,23 +105,31 @@ function NetworkScan() {
   const [newDomain, setNewDomain] = useState('');
   const [domainError, setDomainError] = useState('');
 
-  // Fetch initial network status
+  // M-08: Polling useEffect with AbortController to cancel in-flight requests on unmount
   useEffect(() => {
-    fetchNetworkStatus();
-    const interval = setInterval(fetchNetworkStatus, 30000); // Update every 30 seconds
-    return () => clearInterval(interval);
+    const controller = new AbortController();
+
+    fetchNetworkStatus(controller.signal); // initial fetch with signal
+    const interval = setInterval(() => fetchNetworkStatus(controller.signal), 30000); // Update every 30 seconds
+
+    return () => {
+      controller.abort();       // cancel any in-flight request
+      clearInterval(interval);  // stop scheduling new ones
+    };
   }, []);
 
-  const fetchNetworkStatus = async () => {
+  // M-08: Accept optional abort signal for polling; on-demand calls omit it
+  const fetchNetworkStatus = async (signal) => {
     try {
-      const response = await networkSecurityApi.get('/status');
+      const options = signal ? { signal } : undefined;
+      const response = await networkSecurityApi.get('/status', options);
       console.log('Network status response:', response.data);
-      
+
       // Ensure blockedDomains is always an array
-      const blockedDomains = Array.isArray(response.data.blockedDomains) 
-        ? response.data.blockedDomains 
+      const blockedDomains = Array.isArray(response.data.blockedDomains)
+        ? response.data.blockedDomains
         : [];
-        
+
       setNetworkStatus({
         ...response.data,
         blockedDomains,
@@ -129,6 +137,11 @@ function NetworkScan() {
         webProtectionEnabled: Boolean(response.data.securityControls?.webProtectionEnabled)
       });
     } catch (error) {
+      // M-08: Ignore errors from aborted requests
+      if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') {
+        return;
+      }
+
       console.error('Error fetching network status:', error);
       console.error('Error details:', {
         message: error.message,
@@ -136,7 +149,7 @@ function NetworkScan() {
         status: error.response?.status,
         headers: error.response?.headers
       });
-      
+
       if (error.response?.status === 403) {
         setError('Access denied. Please check server configuration.');
       } else if (error.code === 'ERR_NETWORK') {
@@ -155,7 +168,7 @@ function NetworkScan() {
     try {
       const response = await networkSecurityApi.post('/scan');
       setScanResult(response.data);
-      await fetchNetworkStatus();
+      await fetchNetworkStatus(); // on-demand call, no signal
     } catch (err) {
       console.error('Network scan error:', err);
       setError('Error during network scan: ' + (err.response?.data?.error || err.message));
@@ -171,15 +184,15 @@ function NetworkScan() {
         enabled: !networkStatus.firewallEnabled
       });
       console.log('Firewall toggle response:', response.data);
-      
+
       // Update local state immediately for better UX
       setNetworkStatus(prevStatus => ({
         ...prevStatus,
         firewallEnabled: !prevStatus.firewallEnabled
       }));
-      
+
       // Fetch updated status from server
-      await fetchNetworkStatus();
+      await fetchNetworkStatus(); // on-demand call, no signal
     } catch (error) {
       console.error('Error toggling firewall:', error);
       console.error('Error details:', {
@@ -187,13 +200,13 @@ function NetworkScan() {
         response: error.response?.data,
         status: error.response?.status
       });
-      
+
       // Revert the local state if the API call failed
       setNetworkStatus(prevStatus => ({
         ...prevStatus,
         firewallEnabled: !prevStatus.firewallEnabled
       }));
-      
+
       setError('Error toggling firewall: ' + (error.response?.data?.error || error.message));
     }
   };
@@ -205,15 +218,15 @@ function NetworkScan() {
         enabled: !networkStatus.webProtectionEnabled
       });
       console.log('Web protection toggle response:', response.data);
-      
+
       // Update local state immediately for better UX
       setNetworkStatus(prevStatus => ({
         ...prevStatus,
         webProtectionEnabled: !prevStatus.webProtectionEnabled
       }));
-      
+
       // Fetch updated status from server
-      await fetchNetworkStatus();
+      await fetchNetworkStatus(); // on-demand call, no signal
     } catch (error) {
       console.error('Error toggling web protection:', error);
       console.error('Error details:', {
@@ -221,13 +234,13 @@ function NetworkScan() {
         response: error.response?.data,
         status: error.response?.status
       });
-      
+
       // Revert the local state if the API call failed
       setNetworkStatus(prevStatus => ({
         ...prevStatus,
         webProtectionEnabled: !prevStatus.webProtectionEnabled
       }));
-      
+
       setError('Error toggling web protection: ' + (error.response?.data?.error || error.message));
     }
   };
@@ -251,8 +264,8 @@ function NetworkScan() {
         reason: 'Manually blocked by user'
       });
       console.log('Block domain response:', response.data);
-      
-      await fetchNetworkStatus();
+
+      await fetchNetworkStatus(); // on-demand call, no signal
       setNewDomain('');
       setDomainError('');
     } catch (error) {
@@ -263,7 +276,7 @@ function NetworkScan() {
         status: error.response?.status,
         headers: error.response?.headers
       });
-      
+
       if (error.code === 'ERR_NETWORK') {
         setDomainError('Could not connect to the server. Please ensure the server is running.');
       } else {
@@ -277,7 +290,7 @@ function NetworkScan() {
       await networkSecurityApi.post('/unblock', {
         domain: domain
       });
-      await fetchNetworkStatus();
+      await fetchNetworkStatus(); // on-demand call, no signal
     } catch (error) {
       console.error('Error removing domain:', error);
       setError('Error removing domain: ' + (error.response?.data?.message || error.message));
@@ -286,11 +299,11 @@ function NetworkScan() {
 
   return (
     <Box sx={{ p: 3, color: 'var(--text-primary)' }}>
-      <Typography 
-        variant="h3" 
-        gutterBottom 
-        align="center" 
-        sx={{ 
+      <Typography
+        variant="h3"
+        gutterBottom
+        align="center"
+        sx={{
           color: 'var(--text-primary)',
           mb: 4,
           fontWeight: 600
@@ -303,15 +316,15 @@ function NetworkScan() {
         {/* Security Controls Card */}
         <Grid item xs={12} md={6}>
           <StyledCard>
-            <Box sx={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              mb: 2 
+            <Box sx={{
+              display: 'flex',
+              alignItems: 'center',
+              mb: 2
             }}>
-              <ShieldIcon sx={{ 
-                fontSize: 30, 
-                mr: 1, 
-                color: 'var(--primary-main)' 
+              <ShieldIcon sx={{
+                fontSize: 30,
+                mr: 1,
+                color: 'var(--primary-main)'
               }} />
               <Typography variant="h6" sx={{ fontWeight: 600 }}>
                 Security Controls
@@ -320,13 +333,13 @@ function NetworkScan() {
             <List>
               <ListItem>
                 <ListItemIcon>
-                  <LockIcon sx={{ 
-                    color: networkStatus.firewallEnabled 
-                      ? 'var(--success-main)' 
-                      : 'var(--error-main)' 
+                  <LockIcon sx={{
+                    color: networkStatus.firewallEnabled
+                      ? 'var(--success-main)'
+                      : 'var(--error-main)'
                   }} />
                 </ListItemIcon>
-                <ListItemText 
+                <ListItemText
                   primary={
                     <Typography component="div" sx={{ fontWeight: 500 }}>
                       Firewall Protection
@@ -354,13 +367,13 @@ function NetworkScan() {
               </ListItem>
               <ListItem>
                 <ListItemIcon>
-                  <LanguageIcon sx={{ 
-                    color: networkStatus.webProtectionEnabled 
-                      ? 'var(--success-main)' 
-                      : 'var(--error-main)' 
+                  <LanguageIcon sx={{
+                    color: networkStatus.webProtectionEnabled
+                      ? 'var(--success-main)'
+                      : 'var(--error-main)'
                   }} />
                 </ListItemIcon>
-                <ListItemText 
+                <ListItemText
                   primary={
                     <Typography component="div" sx={{ fontWeight: 500 }}>
                       Web Protection
@@ -393,15 +406,15 @@ function NetworkScan() {
         {/* Network Status Card */}
         <Grid item xs={12} md={6}>
           <StyledCard>
-            <Box sx={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              mb: 2 
+            <Box sx={{
+              display: 'flex',
+              alignItems: 'center',
+              mb: 2
             }}>
-              <NetworkCheckIcon sx={{ 
-                fontSize: 30, 
-                mr: 1, 
-                color: 'var(--primary-main)' 
+              <NetworkCheckIcon sx={{
+                fontSize: 30,
+                mr: 1,
+                color: 'var(--primary-main)'
               }} />
               <Typography variant="h6" sx={{ fontWeight: 600 }}>
                 Network Status
@@ -412,7 +425,7 @@ function NetworkScan() {
                 <ListItemIcon>
                   <WifiIcon sx={{ color: 'var(--primary-main)' }} />
                 </ListItemIcon>
-                <ListItemText 
+                <ListItemText
                   primary={
                     <Typography component="div" sx={{ fontWeight: 500 }}>
                       Active Connections
@@ -429,7 +442,7 @@ function NetworkScan() {
                 <ListItemIcon>
                   <BlockIcon sx={{ color: 'var(--warning-main)' }} />
                 </ListItemIcon>
-                <ListItemText 
+                <ListItemText
                   primary={
                     <Typography component="div" sx={{ fontWeight: 500 }}>
                       Blocked Attempts
@@ -449,15 +462,15 @@ function NetworkScan() {
         {/* Blocked Domains Card */}
         <Grid item xs={12}>
           <StyledCard>
-            <Box sx={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              mb: 2 
+            <Box sx={{
+              display: 'flex',
+              alignItems: 'center',
+              mb: 2
             }}>
-              <BlockIcon sx={{ 
-                fontSize: 30, 
-                mr: 1, 
-                color: 'var(--primary-main)' 
+              <BlockIcon sx={{
+                fontSize: 30,
+                mr: 1,
+                color: 'var(--primary-main)'
               }} />
               <Typography variant="h6" sx={{ fontWeight: 600 }}>
                 Blocked Domains
@@ -473,7 +486,7 @@ function NetworkScan() {
                 helperText={domainError}
                 InputProps={{
                   endAdornment: (
-                    <IconButton 
+                    <IconButton
                       onClick={handleAddDomain}
                       sx={{ color: 'var(--primary-main)' }}
                     >
@@ -517,9 +530,9 @@ function NetworkScan() {
         {/* Error Alert */}
         {error && (
           <Grid item xs={12}>
-            <Alert 
-              severity="error" 
-              sx={{ 
+            <Alert
+              severity="error"
+              sx={{
                 backgroundColor: 'var(--error-main)',
                 color: '#FFFFFF',
                 '& .MuiAlert-icon': {
@@ -536,35 +549,35 @@ function NetworkScan() {
         {scanResult && (
           <Grid item xs={12}>
             <StyledCard>
-              <Box sx={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                mb: 2 
+              <Box sx={{
+                display: 'flex',
+                alignItems: 'center',
+                mb: 2
               }}>
                 {scanResult.threats > 0 ? (
-                  <ErrorIcon sx={{ 
-                    fontSize: 30, 
-                    mr: 1, 
-                    color: 'var(--error-main)' 
+                  <ErrorIcon sx={{
+                    fontSize: 30,
+                    mr: 1,
+                    color: 'var(--error-main)'
                   }} />
                 ) : (
-                  <CheckCircleIcon sx={{ 
-                    fontSize: 30, 
-                    mr: 1, 
-                    color: 'var(--success-main)' 
+                  <CheckCircleIcon sx={{
+                    fontSize: 30,
+                    mr: 1,
+                    color: 'var(--success-main)'
                   }} />
                 )}
                 <Typography variant="h6" sx={{ fontWeight: 600 }}>
                   Network Scan Report
                 </Typography>
               </Box>
-              
+
               {/* Scan Summary */}
               <Box sx={{ mb: 3, p: 2, bgcolor: 'var(--background-default)', borderRadius: 1 }}>
                 <Grid container spacing={2}>
                   <Grid item xs={12} sm={6} md={3}>
                     <Box sx={{ textAlign: 'center' }}>
-                      <Typography variant="h4" sx={{ 
+                      <Typography variant="h4" sx={{
                         color: scanResult.threats > 0 ? 'var(--error-main)' : 'var(--success-main)',
                         fontWeight: 'bold'
                       }}>
@@ -607,7 +620,7 @@ function NetworkScan() {
                   </Grid>
                 </Grid>
               </Box>
-              
+
               {/* Scan Details */}
               <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
                 Scan Details
@@ -621,34 +634,34 @@ function NetworkScan() {
                   </Grid>
                   <Grid item xs={12} sm={6}>
                     <Typography variant="body2" color="text.secondary" component="div">
-                      Status: <Chip 
-                        label={scanResult.status} 
-                        size="small" 
-                        color={scanResult.status === 'COMPLETED' ? 'success' : 'warning'} 
+                      Status: <Chip
+                        label={scanResult.status}
+                        size="small"
+                        color={scanResult.status === 'COMPLETED' ? 'success' : 'warning'}
                       />
                     </Typography>
                   </Grid>
                   <Grid item xs={12} sm={6}>
                     <Typography variant="body2" color="text.secondary" component="div">
-                      Firewall: <Chip 
-                        label={scanResult.firewallEnabled ? 'Enabled' : 'Disabled'} 
-                        size="small" 
-                        color={scanResult.firewallEnabled ? 'success' : 'error'} 
+                      Firewall: <Chip
+                        label={scanResult.firewallEnabled ? 'Enabled' : 'Disabled'}
+                        size="small"
+                        color={scanResult.firewallEnabled ? 'success' : 'error'}
                       />
                     </Typography>
                   </Grid>
                   <Grid item xs={12} sm={6}>
                     <Typography variant="body2" color="text.secondary" component="div">
-                      Web Protection: <Chip 
-                        label={scanResult.webProtectionEnabled ? 'Enabled' : 'Disabled'} 
-                        size="small" 
-                        color={scanResult.webProtectionEnabled ? 'success' : 'error'} 
+                      Web Protection: <Chip
+                        label={scanResult.webProtectionEnabled ? 'Enabled' : 'Disabled'}
+                        size="small"
+                        color={scanResult.webProtectionEnabled ? 'success' : 'error'}
                       />
                     </Typography>
                   </Grid>
                 </Grid>
               </Box>
-              
+
               {/* Vulnerabilities */}
               {scanResult.vulnerabilities && scanResult.vulnerabilities.length > 0 && (
                 <>
@@ -657,18 +670,17 @@ function NetworkScan() {
                   </Typography>
                   <Box sx={{ mb: 3 }}>
                     {scanResult.vulnerabilities.map((vuln, index) => (
-                      <Paper 
-                        key={index} 
-                        sx={{ 
-                          p: 2, 
-                          mb: 1, 
+                      <Paper
+                        key={index}
+                        sx={{
+                          p: 2,
+                          mb: 1,
                           bgcolor: 'var(--background-default)',
-                          borderLeft: `4px solid ${
-                            vuln.severity === 'CRITICAL' ? 'var(--error-main)' :
-                            vuln.severity === 'HIGH' ? 'var(--error-light)' :
-                            vuln.severity === 'MEDIUM' ? 'var(--warning-main)' :
-                            'var(--info-main)'
-                          }`
+                          borderLeft: `4px solid ${vuln.severity === 'CRITICAL' ? 'var(--error-main)' :
+                              vuln.severity === 'HIGH' ? 'var(--error-light)' :
+                                vuln.severity === 'MEDIUM' ? 'var(--warning-main)' :
+                                  'var(--info-main)'
+                            }`
                         }}
                       >
                         <Box sx={{ display: 'flex', alignItems: 'flex-start' }}>
@@ -692,13 +704,13 @@ function NetworkScan() {
                               <strong>Recommendation:</strong> {vuln.recommendation}
                             </Typography>
                           </Box>
-                          <Chip 
-                            label={vuln.severity} 
-                            size="small" 
+                          <Chip
+                            label={vuln.severity}
+                            size="small"
                             color={
                               vuln.severity === 'CRITICAL' || vuln.severity === 'HIGH' ? 'error' :
-                              vuln.severity === 'MEDIUM' ? 'warning' : 'info'
-                            } 
+                                vuln.severity === 'MEDIUM' ? 'warning' : 'info'
+                            }
                           />
                         </Box>
                       </Paper>
@@ -706,7 +718,7 @@ function NetworkScan() {
                   </Box>
                 </>
               )}
-              
+
               {/* Open Ports */}
               {scanResult.openPorts && scanResult.openPorts.length > 0 && (
                 <>
@@ -716,7 +728,7 @@ function NetworkScan() {
                   <Box sx={{ mb: 3 }}>
                     <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                       {scanResult.openPorts.map((port, index) => (
-                        <Chip 
+                        <Chip
                           key={index}
                           label={`Port ${port}`}
                           color="warning"
@@ -728,7 +740,7 @@ function NetworkScan() {
                   </Box>
                 </>
               )}
-              
+
               {/* Suspicious Connections */}
               {scanResult.suspiciousConnections && scanResult.suspiciousConnections.length > 0 && (
                 <>
@@ -738,7 +750,7 @@ function NetworkScan() {
                   <Box sx={{ mb: 3 }}>
                     <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                       {scanResult.suspiciousConnections.map((ip, index) => (
-                        <Chip 
+                        <Chip
                           key={index}
                           label={ip}
                           color="error"
@@ -750,20 +762,20 @@ function NetworkScan() {
                   </Box>
                 </>
               )}
-              
+
               {/* Action Buttons */}
               <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
-                <Button 
-                  variant="outlined" 
-                  color="primary" 
+                <Button
+                  variant="outlined"
+                  color="primary"
                   onClick={() => setScanResult(null)}
                   sx={{ mr: 1 }}
                 >
                   Close Report
                 </Button>
-                <Button 
-                  variant="contained" 
-                  color="primary" 
+                <Button
+                  variant="contained"
+                  color="primary"
                   onClick={handleScan}
                   startIcon={<SecurityIcon />}
                 >
@@ -778,4 +790,4 @@ function NetworkScan() {
   );
 }
 
-export default NetworkScan; 
+export default NetworkScan;
