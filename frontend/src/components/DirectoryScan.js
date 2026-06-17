@@ -26,6 +26,7 @@ import {
 import { antivirusApi } from '../api/client';
 import { styled } from '@mui/material/styles';
 import { log, logError } from '../utils/logger';
+import { toUserMessage } from '../utils/errors'; // Import the error normalizer
 
 // Styled components
 const StyledPaper = styled(Paper)(({ theme }) => ({
@@ -112,7 +113,7 @@ function DirectoryScan() {
       input.click();
     } catch (err) {
       logError('Directory selection error:', err);
-      setError('Error selecting directory: ' + err.message);
+      setError(toUserMessage(err)); // Use safe user-facing message instead of raw server error
     }
   };
 

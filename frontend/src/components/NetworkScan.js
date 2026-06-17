@@ -39,6 +39,7 @@ import {
 import { networkSecurityApi } from '../api/client';
 import { styled } from '@mui/material/styles';
 import { log, logError } from '../utils/logger';
+import { toUserMessage } from '../utils/errors'; // Import the error normalizer
 
 // Styled components
 const StyledCard = styled(Card)(({ theme }) => ({
@@ -146,13 +147,8 @@ function NetworkScan() {
       // M-09: Use safe logger instead of console.error; no verbose API response dumping
       logError('Error fetching network status:', error);
 
-      if (error.response?.status === 403) {
-        setError('Access denied. Please check server configuration.');
-      } else if (error.code === 'ERR_NETWORK') {
-        setError('Could not connect to the server. Please ensure the server is running and accessible.');
-      } else {
-        setError('Error connecting to server: ' + (error.response?.data?.message || error.message));
-      }
+      // M-10: Use safe user-facing message instead of raw server error
+      setError(toUserMessage(error));
     }
   };
 
@@ -167,7 +163,7 @@ function NetworkScan() {
       await fetchNetworkStatus(); // on-demand call, no signal
     } catch (err) {
       logError('Network scan error:', err);
-      setError('Error during network scan: ' + (err.response?.data?.error || err.message));
+      setError(toUserMessage(err));
     } finally {
       setScanning(false);
     }
@@ -198,7 +194,7 @@ function NetworkScan() {
         firewallEnabled: !prevStatus.firewallEnabled
       }));
 
-      setError('Error toggling firewall: ' + (error.response?.data?.error || error.message));
+      setError(toUserMessage(error));
     }
   };
 
@@ -227,7 +223,7 @@ function NetworkScan() {
         webProtectionEnabled: !prevStatus.webProtectionEnabled
       }));
 
-      setError('Error toggling web protection: ' + (error.response?.data?.error || error.message));
+      setError(toUserMessage(error));
     }
   };
 
@@ -260,7 +256,7 @@ function NetworkScan() {
       if (error.code === 'ERR_NETWORK') {
         setDomainError('Could not connect to the server. Please ensure the server is running.');
       } else {
-        setDomainError('Error blocking domain: ' + (error.response?.data?.message || error.message));
+        setDomainError(toUserMessage(error));
       }
     }
   };
@@ -273,7 +269,7 @@ function NetworkScan() {
       await fetchNetworkStatus(); // on-demand call, no signal
     } catch (error) {
       logError('Error removing blocked domain:', error);
-      setError('Error removing domain: ' + (error.response?.data?.message || error.message));
+      setError(toUserMessage(error));
     }
   };
 

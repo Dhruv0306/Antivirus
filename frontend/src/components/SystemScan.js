@@ -28,6 +28,7 @@ import {
 import { antivirusApi } from '../api/client';
 import { styled } from '@mui/material/styles';
 import { log, logError } from '../utils/logger';
+import { toUserMessage } from '../utils/errors'; // Import the error normalizer
 
 // Styled components with light theme
 const StyledPaper = styled(Paper)(({ theme }) => ({
@@ -152,7 +153,7 @@ function SystemScan() {
       setScanResults(response.data.content || []);
     } catch (error) {
       logError('Error fetching scan results:', error);
-      setError('Error fetching scan results: ' + error.message);
+      setError(toUserMessage(error)); // Use safe user-facing message instead of raw server error
     }
   };
 
@@ -171,7 +172,7 @@ function SystemScan() {
         if (result.threatType === 'WARNING' && 
             result.threatDetails.includes('Administrator privileges required')) {
           setNeedsElevation(true);
-          setError('This application requires administrator privileges for a full system scan.');
+          setError(toUserMessage(error)); // Use safe user-facing message instead of raw server error
           return;
         }
       }

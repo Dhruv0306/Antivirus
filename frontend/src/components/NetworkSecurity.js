@@ -25,6 +25,8 @@ import {
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
 import { networkSecurityApi } from '../api/client';
+import { logError } from '../utils/logger';
+import { toUserMessage } from '../utils/errors'; // Import the error normalizer
 
 // Styled components
 const StyledPaper = styled(Paper)(({ theme }) => ({
@@ -106,7 +108,7 @@ function NetworkSecurity() {
       setBlockedDomains(response.data.blockedDomains || []);
       setRecentConnections(response.data.recentConnections || []);
     } catch (error) {
-      setError('Error fetching network status: ' + (error.response?.data?.message || error.message));
+      setError(toUserMessage(error)); // Use safe user-facing message instead of raw server error
     }
   };
 
@@ -117,7 +119,7 @@ function NetworkSecurity() {
       });
       setFirewallEnabled(!firewallEnabled);
     } catch (error) {
-      setError('Error toggling firewall: ' + (error.response?.data?.message || error.message));
+      setError(toUserMessage(error)); // Use safe user-facing message instead of raw server error
     }
   };
 
@@ -128,7 +130,7 @@ function NetworkSecurity() {
       });
       setWebProtectionEnabled(!webProtectionEnabled);
     } catch (error) {
-      setError('Error toggling web protection: ' + (error.response?.data?.message || error.message));
+      setError(toUserMessage(error)); // Use safe user-facing message instead of raw server error
     }
   };
 
@@ -137,7 +139,7 @@ function NetworkSecurity() {
       await networkSecurityApi.delete(`/blocked-domains/${domain}`);
       setBlockedDomains(blockedDomains.filter(d => d !== domain));
     } catch (error) {
-      setError('Error removing blocked domain: ' + (error.response?.data?.message || error.message));
+      setError(toUserMessage(error)); // Use safe user-facing message instead of raw server error
     }
   };
 

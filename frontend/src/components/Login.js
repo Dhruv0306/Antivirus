@@ -12,6 +12,8 @@ import {
 } from '@mui/material';
 import { Security as SecurityIcon } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
+import { logError } from '../utils/logger';
+import { toUserMessage } from '../utils/errors'; // Import the error normalizer
 
 function Login() {
   const navigate = useNavigate();

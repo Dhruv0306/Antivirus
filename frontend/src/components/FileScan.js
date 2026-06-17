@@ -17,6 +17,7 @@ import { CloudUpload as CloudUploadIcon } from '@mui/icons-material';
 import { antivirusApi } from '../api/client';
 import { styled } from '@mui/material/styles';
 import { log, logError } from '../utils/logger';
+import { toUserMessage } from '../utils/errors'; // Import the error normalizer
 
 // Styled components
 const StyledPaper = styled(Paper)(({ theme }) => ({
@@ -101,7 +102,7 @@ function FileScan() {
       }
     } catch (error) {
       logError('Scan error:', error);
-      setError('Error scanning file: ' + (error.response?.data?.threatDetails || error.message));
+      setError(toUserMessage(error)); // Use safe user-facing message instead of raw server error
       setScanResult(null);
     } finally {
       setScanning(false);

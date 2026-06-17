@@ -33,6 +33,7 @@ import {
 import { antivirusApi } from '../api/client';
 import { styled } from '@mui/material/styles';
 import { log, logError } from '../utils/logger';
+import { toUserMessage } from '../utils/errors';
 
 // Styled components using our theme
 const StyledCard = styled(Card)(({ theme }) => ({
@@ -112,7 +113,7 @@ function Dashboard() {
         setError(null);
       } catch (err) {
         if (err.name !== 'CanceledError' && err.code !== 'ERR_CANCELED') {
-          setError('Error fetching system status: ' + (err.response?.data || err.message));
+          setError(toUserMessage(err));
         }
       } finally {
         setLoading(false);
@@ -135,7 +136,12 @@ function Dashboard() {
       setSystemStatus(response.data);
       setError(null);
     } catch (err) {
-      setError('Error fetching system status: ' + (err.response?.data || err.message));
+      // M-08: Ignore aborted requests
+      if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') {
+        return;
+      }
+      // M-10: Use safe user-facing message instead of raw server error
+      setError(toUserMessage(err));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -150,7 +156,8 @@ function Dashboard() {
       setScanHistory(response.data.content || []);
       setHistoryTotal(response.data.totalElements || 0);
     } catch (err) {
-      setError('Error fetching scan history: ' + (err.response?.data || err.message));
+      // M-10: Use safe user-facing message instead of raw server error
+      setError(toUserMessage(err));
     }
   };
 
@@ -188,23 +195,23 @@ function Dashboard() {
   };
 
   return (
-    <Box sx={{ 
-      width: '100%', 
-      maxWidth: 1200, 
-      margin: '0 auto', 
+    <Box sx={{
+      width: '100%',
+      maxWidth: 1200,
+      margin: '0 auto',
       p: 1,
       color: 'var(--text-primary)'
     }}>
-      <Box sx={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center', 
-        mb: 2 
+      <Box sx={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        mb: 2
       }}>
-        <Typography 
-          variant="h4" 
+        <Typography
+          variant="h4"
           component="div"
-          sx={{ 
+          sx={{
             fontWeight: 600,
             color: 'var(--text-primary)'
           }}
@@ -224,8 +231,8 @@ function Dashboard() {
       </Box>
 
       {error && (
-        <StyledAlert 
-          severity="error" 
+        <StyledAlert
+          severity="error"
           sx={{ mb: 3 }}
         >
           {error}
@@ -233,14 +240,14 @@ function Dashboard() {
       )}
 
       {loading ? (
-        <Box sx={{ 
-          display: 'flex', 
-          justifyContent: 'center', 
-          alignItems: 'center', 
-          minHeight: '400px' 
+        <Box sx={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          minHeight: '400px'
         }}>
-          <CircularProgress 
-            size={60} 
+          <CircularProgress
+            size={60}
             sx={{ color: 'var(--primary-main)' }}
           />
         </Box>
@@ -251,20 +258,20 @@ function Dashboard() {
             <Fade in timeout={500}>
               <StyledCard>
                 <CardContent>
-                  <Box sx={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    mb: 2 
+                  <Box sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    mb: 2
                   }}>
-                    <SecurityIcon sx={{ 
-                      fontSize: 30, 
-                      mr: 1, 
-                      color: 'var(--primary-main)' 
+                    <SecurityIcon sx={{
+                      fontSize: 30,
+                      mr: 1,
+                      color: 'var(--primary-main)'
                     }} />
-                    <Typography 
-                      variant="h6" 
+                    <Typography
+                      variant="h6"
                       component="div"
-                      sx={{ 
+                      sx={{
                         fontWeight: 600,
                         color: 'var(--text-primary)'
                       }}
@@ -275,15 +282,15 @@ function Dashboard() {
                   <List>
                     <ListItem>
                       <ListItemIcon>
-                        <SecurityIcon sx={{ 
-                          color: systemStatus.systemProtected 
-                            ? 'var(--success-main)' 
-                            : 'var(--error-main)' 
+                        <SecurityIcon sx={{
+                          color: systemStatus.systemProtected
+                            ? 'var(--success-main)'
+                            : 'var(--error-main)'
                         }} />
                       </ListItemIcon>
                       <ListItemText
                         primary={
-                          <Typography component="div" sx={{ 
+                          <Typography component="div" sx={{
                             fontWeight: 500,
                             color: 'var(--text-primary)'
                           }}>
@@ -291,7 +298,7 @@ function Dashboard() {
                           </Typography>
                         }
                         secondary={
-                          <Typography component="div" sx={{ 
+                          <Typography component="div" sx={{
                             color: 'var(--text-secondary)'
                           }}>
                             {systemStatus.systemProtected ? "Protected" : "At Risk"}
@@ -301,15 +308,15 @@ function Dashboard() {
                     </ListItem>
                     <ListItem>
                       <ListItemIcon>
-                        <CheckCircleIcon sx={{ 
-                          color: systemStatus.realtimeProtection 
-                            ? 'var(--success-main)' 
-                            : 'var(--error-main)' 
+                        <CheckCircleIcon sx={{
+                          color: systemStatus.realtimeProtection
+                            ? 'var(--success-main)'
+                            : 'var(--error-main)'
                         }} />
                       </ListItemIcon>
                       <ListItemText
                         primary={
-                          <Typography component="div" sx={{ 
+                          <Typography component="div" sx={{
                             fontWeight: 500,
                             color: 'var(--text-primary)'
                           }}>
@@ -317,7 +324,7 @@ function Dashboard() {
                           </Typography>
                         }
                         secondary={
-                          <Typography component="div" sx={{ 
+                          <Typography component="div" sx={{
                             color: 'var(--text-secondary)'
                           }}>
                             {systemStatus.realtimeProtection ? "Active" : "Disabled"}
@@ -336,20 +343,20 @@ function Dashboard() {
             <Fade in timeout={500} style={{ transitionDelay: '100ms' }}>
               <StyledCard>
                 <CardContent>
-                  <Box sx={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    mb: 2 
+                  <Box sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    mb: 2
                   }}>
-                    <StorageIcon sx={{ 
-                      fontSize: 30, 
-                      mr: 1, 
-                      color: 'var(--primary-main)' 
+                    <StorageIcon sx={{
+                      fontSize: 30,
+                      mr: 1,
+                      color: 'var(--primary-main)'
                     }} />
-                    <Typography 
-                      variant="h6" 
+                    <Typography
+                      variant="h6"
                       component="div"
-                      sx={{ 
+                      sx={{
                         fontWeight: 600,
                         color: 'var(--text-primary)'
                       }}
@@ -365,7 +372,7 @@ function Dashboard() {
                         </ListItemIcon>
                         <ListItemText
                           primary={
-                            <Typography component="div" sx={{ 
+                            <Typography component="div" sx={{
                               fontWeight: 500,
                               color: 'var(--text-primary)'
                             }}>
@@ -373,18 +380,18 @@ function Dashboard() {
                             </Typography>
                           }
                           secondary={
-                            <Typography 
-                              component="div" 
-                              sx={{ 
+                            <Typography
+                              component="div"
+                              sx={{
                                 color: 'var(--text-secondary)',
-                                mt: 1 
+                                mt: 1
                               }}
                             >
-                              <Box 
-                                component="span" 
-                                sx={{ 
-                                  display: 'flex', 
-                                  justifyContent: 'space-between', 
+                              <Box
+                                component="span"
+                                sx={{
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
                                   mb: 0.5,
                                   color: 'var(--text-secondary)'
                                 }}
@@ -414,10 +421,10 @@ function Dashboard() {
                 <CardContent>
                   <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                     <SpeedIcon sx={{ fontSize: 30, mr: 1, color: 'primary.main' }} />
-                    <Typography 
-                      variant="h6" 
+                    <Typography
+                      variant="h6"
                       component="div"
-                      sx={{ 
+                      sx={{
                         fontWeight: 600,
                         color: 'var(--text-primary)'
                       }}
@@ -438,10 +445,10 @@ function Dashboard() {
                       </TableHead>
                       <TableBody>
                         {scanHistory.map((scan, index) => (
-                          <TableRow 
+                          <TableRow
                             key={index}
-                            sx={{ 
-                              '&:hover': { 
+                            sx={{
+                              '&:hover': {
                                 backgroundColor: 'rgba(255, 255, 255, 0.05)',
                                 transition: 'background-color 0.2s'
                               }
@@ -454,7 +461,7 @@ function Dashboard() {
                             <TableCell>
                               <Alert
                                 severity={scan.infected ? 'error' : 'success'}
-                                sx={{ 
+                                sx={{
                                   display: 'inline-flex',
                                   py: 0,
                                   px: 1,
