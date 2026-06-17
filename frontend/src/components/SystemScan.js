@@ -27,6 +27,7 @@ import {
 } from '@mui/icons-material';
 import { antivirusApi } from '../api/client';
 import { styled } from '@mui/material/styles';
+import { log, logError } from '../utils/logger';
 
 // Styled components with light theme
 const StyledPaper = styled(Paper)(({ theme }) => ({
@@ -141,7 +142,7 @@ function SystemScan() {
         fetchLatestResults();
       }
     } catch (error) {
-      console.error('Error checking scan status:', error);
+      logError('Error checking scan status:', error);
     }
   };
 
@@ -150,7 +151,7 @@ function SystemScan() {
       const response = await antivirusApi.get('/history', { params: { page: 0, size: 50 } });
       setScanResults(response.data.content || []);
     } catch (error) {
-      console.error('Error fetching scan results:', error);
+      logError('Error fetching scan results:', error);
       setError('Error fetching scan results: ' + error.message);
     }
   };
@@ -179,7 +180,7 @@ function SystemScan() {
         setScanResults(response.data);
       }
     } catch (err) {
-      console.error('Scan error:', err);
+      logError('Scan error:', err);
       let errorMessage = 'An error occurred during the system scan.';
       
       if (err.response) {
@@ -206,7 +207,7 @@ function SystemScan() {
       setError('Scan stopped by user');
       // Don't clear scan results if they exist
     } catch (err) {
-      console.error('Error stopping scan:', err);
+      logError('Error stopping scan:', err);
       setError('Failed to stop the scan. Please try again.');
     }
   };

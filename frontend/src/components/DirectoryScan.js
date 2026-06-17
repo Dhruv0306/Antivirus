@@ -25,6 +25,7 @@ import {
 } from '@mui/icons-material';
 import { antivirusApi } from '../api/client';
 import { styled } from '@mui/material/styles';
+import { log, logError } from '../utils/logger';
 
 // Styled components
 const StyledPaper = styled(Paper)(({ theme }) => ({
@@ -110,7 +111,7 @@ function DirectoryScan() {
 
       input.click();
     } catch (err) {
-      console.error('Directory selection error:', err);
+      logError('Directory selection error:', err);
       setError('Error selecting directory: ' + err.message);
     }
   };
@@ -160,7 +161,7 @@ function DirectoryScan() {
         throw new Error('No scan result received');
       }
     } catch (err) {
-      console.error('Scan error:', err);
+      logError('Scan error:', err);
       const errorMessage = err.response?.data?.error || err.message || 'Unknown error';
       setError('Error scanning directory: ' + errorMessage);
     } finally {

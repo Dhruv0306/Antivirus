@@ -32,6 +32,7 @@ import {
 } from '@mui/icons-material';
 import { antivirusApi } from '../api/client';
 import { styled } from '@mui/material/styles';
+import { log, logError } from '../utils/logger';
 
 // Styled components using our theme
 const StyledCard = styled(Card)(({ theme }) => ({
@@ -174,7 +175,7 @@ function Dashboard() {
       // Handle ISO date string format from backend
       return new Date(timestamp).toLocaleString();
     } catch (error) {
-      console.error('Error formatting date:', error);
+      logError('Error formatting date:', error);
       return 'Invalid Date';
     }
   };

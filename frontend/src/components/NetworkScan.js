@@ -38,6 +38,7 @@ import {
 } from '@mui/icons-material';
 import { networkSecurityApi } from '../api/client';
 import { styled } from '@mui/material/styles';
+import { log, logError } from '../utils/logger';
 
 // Styled components
 const StyledCard = styled(Card)(({ theme }) => ({
@@ -123,7 +124,7 @@ function NetworkScan() {
     try {
       const options = signal ? { signal } : undefined;
       const response = await networkSecurityApi.get('/status', options);
-      console.log('Network status response:', response.data);
+      log('Network status response:', response.data);
 
       // Ensure blockedDomains is always an array
       const blockedDomains = Array.isArray(response.data.blockedDomains)
@@ -142,13 +143,8 @@ function NetworkScan() {
         return;
       }
 
-      console.error('Error fetching network status:', error);
-      console.error('Error details:', {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status,
-        headers: error.response?.headers
-      });
+      // M-09: Use safe logger instead of console.error; no verbose API response dumping
+      logError('Error fetching network status:', error);
 
       if (error.response?.status === 403) {
         setError('Access denied. Please check server configuration.');
@@ -170,7 +166,7 @@ function NetworkScan() {
       setScanResult(response.data);
       await fetchNetworkStatus(); // on-demand call, no signal
     } catch (err) {
-      console.error('Network scan error:', err);
+      logError('Network scan error:', err);
       setError('Error during network scan: ' + (err.response?.data?.error || err.message));
     } finally {
       setScanning(false);
@@ -179,11 +175,11 @@ function NetworkScan() {
 
   const toggleFirewall = async () => {
     try {
-      console.log('Toggling firewall. Current state:', networkStatus.firewallEnabled);
+      log('Toggling firewall. Current state:', networkStatus.firewallEnabled);
       const response = await networkSecurityApi.post('/firewall/toggle', {
         enabled: !networkStatus.firewallEnabled
       });
-      console.log('Firewall toggle response:', response.data);
+      log('Firewall toggle response:', response.data);
 
       // Update local state immediately for better UX
       setNetworkStatus(prevStatus => ({
@@ -194,12 +190,7 @@ function NetworkScan() {
       // Fetch updated status from server
       await fetchNetworkStatus(); // on-demand call, no signal
     } catch (error) {
-      console.error('Error toggling firewall:', error);
-      console.error('Error details:', {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status
-      });
+      logError('Error toggling firewall:', error);
 
       // Revert the local state if the API call failed
       setNetworkStatus(prevStatus => ({
@@ -213,11 +204,11 @@ function NetworkScan() {
 
   const toggleWebProtection = async () => {
     try {
-      console.log('Toggling web protection. Current state:', networkStatus.webProtectionEnabled);
+      log('Toggling web protection. Current state:', networkStatus.webProtectionEnabled);
       const response = await networkSecurityApi.post('/web-protection/toggle', {
         enabled: !networkStatus.webProtectionEnabled
       });
-      console.log('Web protection toggle response:', response.data);
+      log('Web protection toggle response:', response.data);
 
       // Update local state immediately for better UX
       setNetworkStatus(prevStatus => ({
@@ -228,12 +219,7 @@ function NetworkScan() {
       // Fetch updated status from server
       await fetchNetworkStatus(); // on-demand call, no signal
     } catch (error) {
-      console.error('Error toggling web protection:', error);
-      console.error('Error details:', {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status
-      });
+      logError('Error toggling web protection:', error);
 
       // Revert the local state if the API call failed
       setNetworkStatus(prevStatus => ({
@@ -258,24 +244,18 @@ function NetworkScan() {
     }
 
     try {
-      console.log('Blocking domain:', newDomain);
+      log('Blocking domain:', newDomain);
       const response = await networkSecurityApi.post('/block', {
         domain: newDomain,
         reason: 'Manually blocked by user'
       });
-      console.log('Block domain response:', response.data);
+      log('Block domain response:', response.data);
 
       await fetchNetworkStatus(); // on-demand call, no signal
       setNewDomain('');
       setDomainError('');
     } catch (error) {
-      console.error('Error blocking domain:', error);
-      console.error('Error details:', {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status,
-        headers: error.response?.headers
-      });
+      logError('Error blocking domain:', error);
 
       if (error.code === 'ERR_NETWORK') {
         setDomainError('Could not connect to the server. Please ensure the server is running.');
@@ -292,7 +272,7 @@ function NetworkScan() {
       });
       await fetchNetworkStatus(); // on-demand call, no signal
     } catch (error) {
-      console.error('Error removing domain:', error);
+      logError('Error removing blocked domain:', error);
       setError('Error removing domain: ' + (error.response?.data?.message || error.message));
     }
   };
@@ -677,9 +657,9 @@ function NetworkScan() {
                           mb: 1,
                           bgcolor: 'var(--background-default)',
                           borderLeft: `4px solid ${vuln.severity === 'CRITICAL' ? 'var(--error-main)' :
-                              vuln.severity === 'HIGH' ? 'var(--error-light)' :
-                                vuln.severity === 'MEDIUM' ? 'var(--warning-main)' :
-                                  'var(--info-main)'
+                            vuln.severity === 'HIGH' ? 'var(--error-light)' :
+                              vuln.severity === 'MEDIUM' ? 'var(--warning-main)' :
+                                'var(--info-main)'
                             }`
                         }}
                       >

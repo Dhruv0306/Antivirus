@@ -16,6 +16,7 @@ import {
 import { CloudUpload as CloudUploadIcon } from '@mui/icons-material';
 import { antivirusApi } from '../api/client';
 import { styled } from '@mui/material/styles';
+import { log, logError } from '../utils/logger';
 
 // Styled components
 const StyledPaper = styled(Paper)(({ theme }) => ({
@@ -88,7 +89,7 @@ function FileScan() {
           },
           onUploadProgress: (progressEvent) => {
             const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-            console.log('Upload Progress:', percentCompleted, '%');
+            log('Upload Progress:', percentCompleted, '%');
           },
         }
       );
@@ -99,7 +100,7 @@ function FileScan() {
         throw new Error('No scan result received');
       }
     } catch (error) {
-      console.error('Scan error:', error);
+      logError('Scan error:', error);
       setError('Error scanning file: ' + (error.response?.data?.threatDetails || error.message));
       setScanResult(null);
     } finally {
