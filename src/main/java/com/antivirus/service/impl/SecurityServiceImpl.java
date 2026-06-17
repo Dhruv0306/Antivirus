@@ -61,6 +61,13 @@ public class SecurityServiceImpl implements SecurityService {
     @SuppressWarnings("unused")
     private boolean isElevated = false;
 
+    // Safe opaque error messages to prevent leaking sensitive info in API responses
+    private static final Map<String, String> SAFE_ERROR_MESSAGES = Map.of(
+        "ACCESS_DENIED",  "Access denied to this path",
+        "IO_ERROR",       "Could not read file",
+        "SCAN_ERROR",     "Scan could not be completed"
+    );
+
     // Known malicious file signatures (MD5 hashes)
     private static final Set<String> KNOWN_MALWARE_SIGNATURES = new HashSet<>(Arrays.asList(
         "e4968ef99266df7c9a1f0637d2389dab", // Example malware signature
@@ -515,13 +522,37 @@ public class SecurityServiceImpl implements SecurityService {
                 
                 try {
                     scanDirectory(root.toPath(), skipDirectories, results, scannedFiles, skippedFiles, scanDeadline);
-                } catch (Exception e) {
-                    logger.error("Error scanning root directory {}: {}", root, e.getMessage());
+                } catch (AccessDeniedException e) {
+                    logger.debug("Access denied to root directory: {}", root, e);
                     ScanResult errorResult = new ScanResult();
-                    errorResult.setFilePath(root.getAbsolutePath());
+                    errorResult.setFilePath(root.getPath());
                     errorResult.setInfected(false);
                     errorResult.setThreatType("ERROR");
-                    errorResult.setThreatDetails("Error accessing directory: " + e.getMessage());
+                    errorResult.setThreatDetails(SAFE_ERROR_MESSAGES.get("ACCESS_DENIED"));
+                    errorResult.setScanType("SYSTEM");
+                    errorResult.setActionTaken("NONE");
+                    if (results.size() < MAX_SYSTEM_SCAN_RESULTS) {
+                        results.add(errorResult);
+                    }
+                } catch (IOException e) {
+                    logger.error("IO error scanning root directory: {}", root, e);
+                    ScanResult errorResult = new ScanResult();
+                    errorResult.setFilePath(root.getPath());
+                    errorResult.setInfected(false);
+                    errorResult.setThreatType("ERROR");
+                    errorResult.setThreatDetails(SAFE_ERROR_MESSAGES.get("IO_ERROR"));
+                    errorResult.setScanType("SYSTEM");
+                    errorResult.setActionTaken("NONE");
+                    if (results.size() < MAX_SYSTEM_SCAN_RESULTS) {
+                        results.add(errorResult);
+                    }
+                } catch (Exception e) {
+                    logger.error("Unexpected error scanning root directory: {}", root, e);
+                    ScanResult errorResult = new ScanResult();
+                    errorResult.setFilePath(root.getPath());
+                    errorResult.setInfected(false);
+                    errorResult.setThreatType("ERROR");
+                    errorResult.setThreatDetails(SAFE_ERROR_MESSAGES.get("SCAN_ERROR"));
                     errorResult.setScanType("SYSTEM");
                     errorResult.setActionTaken("NONE");
                     if (results.size() < MAX_SYSTEM_SCAN_RESULTS) {
@@ -607,13 +638,25 @@ public class SecurityServiceImpl implements SecurityService {
                     } catch (AccessDeniedException e) {
                         logger.debug("Access denied to path: {}", path);
                         skippedFiles.incrementAndGet();
-                    } catch (Exception e) {
-                        logger.error("Error processing path {}: {}", path, e.getMessage());
+                    } catch (IOException e) {
+                        logger.error("IO error processing path: {}", path, e);
                         ScanResult errorResult = new ScanResult();
-                        errorResult.setFilePath(path.toString());
+                        errorResult.setFilePath(path.getFileName().toString());
                         errorResult.setInfected(false);
                         errorResult.setThreatType("ERROR");
-                        errorResult.setThreatDetails("Error scanning file: " + e.getMessage());
+                        errorResult.setThreatDetails(SAFE_ERROR_MESSAGES.get("IO_ERROR"));
+                        errorResult.setScanType("SYSTEM");
+                        errorResult.setActionTaken("NONE");
+                        if (results.size() < MAX_SYSTEM_SCAN_RESULTS) {
+                            results.add(errorResult);
+                        }
+                    } catch (Exception e) {
+                        logger.error("Unexpected error processing path: {}", path, e);
+                        ScanResult errorResult = new ScanResult();
+                        errorResult.setFilePath(path.getFileName().toString());
+                        errorResult.setInfected(false);
+                        errorResult.setThreatType("ERROR");
+                        errorResult.setThreatDetails(SAFE_ERROR_MESSAGES.get("SCAN_ERROR"));
                         errorResult.setScanType("SYSTEM");
                         errorResult.setActionTaken("NONE");
                         if (results.size() < MAX_SYSTEM_SCAN_RESULTS) {
@@ -1240,9 +1283,15 @@ public class SecurityServiceImpl implements SecurityService {
                                 logProgress(processed, totalFiles.get(), infectedFiles.get());
                             }
 
+                        } catch (AccessDeniedException e) {
+                            logger.debug("Access denied to file: {}", path);
+                            logErrorFile(path, results, SAFE_ERROR_MESSAGES.get("ACCESS_DENIED"));
+                        } catch (IOException e) {
+                            logger.error("IO error scanning file: {}", path, e);
+                            logErrorFile(path, results, SAFE_ERROR_MESSAGES.get("IO_ERROR"));
                         } catch (Exception e) {
-                            logger.error("Error scanning file: {}", path, e);
-                            logErrorFile(path, results, e.getMessage());
+                            logger.error("Unexpected error scanning file: {}", path, e);
+                            logErrorFile(path, results, SAFE_ERROR_MESSAGES.get("SCAN_ERROR"));
                         }
                     });
             }
@@ -1255,9 +1304,21 @@ public class SecurityServiceImpl implements SecurityService {
 
             return results;
 
+        } catch (AccessDeniedException e) {
+            logger.debug("Access denied to directory: {}", directoryPath, e);
+            ScanResult errorResult = createErrorResult(directoryPath, SAFE_ERROR_MESSAGES.get("ACCESS_DENIED"));
+            results.add(errorResult);
+            saveScanResult(errorResult);
+            return results;
+        } catch (IOException e) {
+            logger.error("IO error scanning directory: {}", directoryPath, e);
+            ScanResult errorResult = createErrorResult(directoryPath, SAFE_ERROR_MESSAGES.get("IO_ERROR"));
+            results.add(errorResult);
+            saveScanResult(errorResult);
+            return results;
         } catch (Exception e) {
-            logger.error("Error scanning directory: {}", directoryPath, e);
-            ScanResult errorResult = createErrorResult(directoryPath, e.getMessage());
+            logger.error("Unexpected error scanning directory: {}", directoryPath, e);
+            ScanResult errorResult = createErrorResult(directoryPath, SAFE_ERROR_MESSAGES.get("SCAN_ERROR"));
             results.add(errorResult);
             saveScanResult(errorResult);
             return results;
@@ -1307,13 +1368,13 @@ public class SecurityServiceImpl implements SecurityService {
         results.add(skipResult);
     }
 
-    private void logErrorFile(Path path, List<ScanResult> results, String error) {
-        logger.error("Error scanning file: {} - {}", path, error);
+    private void logErrorFile(Path path, List<ScanResult> results, String safeMessage) {
+        logger.error("Error scanning file: {}", path);  // detail in caller's log
         ScanResult errorResult = new ScanResult();
-        errorResult.setFilePath(path.toString());
+        errorResult.setFilePath(path.getFileName().toString());
         errorResult.setInfected(false);
         errorResult.setThreatType("ERROR");
-        errorResult.setThreatDetails(error);
+        errorResult.setThreatDetails(safeMessage);
         errorResult.setScanType("DIRECTORY");
         errorResult.setActionTaken("NONE");
         results.add(errorResult);
@@ -1332,12 +1393,12 @@ public class SecurityServiceImpl implements SecurityService {
         logger.info("Total results (including skipped/errors): {}", resultsSize);
     }
 
-    private ScanResult createErrorResult(String path, String message) {
+    private ScanResult createErrorResult(String path, String safeMessage) {  // Step 7: callers pass SAFE_ERROR_MESSAGES.get(...) only
         ScanResult result = new ScanResult();
         result.setFilePath(path);
         result.setInfected(false);
         result.setThreatType("ERROR");
-        result.setThreatDetails(message);
+        result.setThreatDetails(safeMessage);
         result.setScanType("DIRECTORY");
         result.setActionTaken("NONE");
         return result;
