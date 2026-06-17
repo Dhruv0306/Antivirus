@@ -17,34 +17,33 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * Implementation of DomainBlockingService that uses hosts file for domain blocking
+ * Implementation of DomainBlockingService that uses hosts file for domain
+ * blocking
  */
 @Service
 public class DomainBlockingServiceImpl implements DomainBlockingService {
     private static final Logger logger = LoggerFactory.getLogger(DomainBlockingServiceImpl.class);
-    
+
     private final BlockedDomainRepository blockedDomainRepository;
     private final String hostsFilePath;
     private boolean hostsFileAccessible = false;
     private boolean hasAdminPrivileges = false;
-    
+
     public DomainBlockingServiceImpl(
             BlockedDomainRepository blockedDomainRepository,
-            @Value("${system.hosts.file.path:#{systemProperties['os.name'].toLowerCase().contains('win') ? 'C:/Windows/System32/drivers/etc/hosts' : '/etc/hosts'}}") 
-            String hostsFilePath) {
+            @Value("${system.hosts.file.path:#{systemProperties['os.name'].toLowerCase().contains('win') ? 'C:/Windows/System32/drivers/etc/hosts' : '/etc/hosts'}}") String hostsFilePath) {
         this.blockedDomainRepository = blockedDomainRepository;
         this.hostsFilePath = hostsFilePath;
-        
+
         Path hostsPath = Paths.get(hostsFilePath);
         hasAdminPrivileges = isAdmin();
         hostsFileAccessible = canModifyHostsFile(hostsPath);
 
         if (!hostsFileAccessible) {
             logger.warn(
-                "Hosts file at {} is not writable. Domain blocking will be stored in the database only. " +
-                "Run the application as Administrator to enable system-wide hosts blocking.",
-                hostsFilePath
-            );
+                    "Hosts file at {} is not writable. Domain blocking will be stored in the database only. " +
+                            "Run the application as Administrator to enable system-wide hosts blocking.",
+                    hostsFilePath);
         } else {
             logger.info("Hosts file is writable at: {}", hostsFilePath);
         }
@@ -87,7 +86,8 @@ public class DomainBlockingServiceImpl implements DomainBlockingService {
                 // The domain is still blocked in the database
             }
         } else {
-            logger.warn("Domain {} will be blocked in database only (no admin privileges or hosts file not accessible)", domain);
+            logger.warn("Domain {} will be blocked in database only (no admin privileges or hosts file not accessible)",
+                    domain);
         }
     }
 
@@ -107,7 +107,9 @@ public class DomainBlockingServiceImpl implements DomainBlockingService {
                     // Don't throw exception, just log the error
                 }
             } else {
-                logger.warn("Domain {} will be unblocked in database only (no admin privileges or hosts file not accessible)", normalizedDomain);
+                logger.warn(
+                        "Domain {} will be unblocked in database only (no admin privileges or hosts file not accessible)",
+                        normalizedDomain);
             }
         });
     }
@@ -116,12 +118,22 @@ public class DomainBlockingServiceImpl implements DomainBlockingService {
     public List<BlockedDomain> getBlockedDomains() {
         return blockedDomainRepository.findAll();
     }
-    
+
     @Override
     public boolean isAdmin() {
         return canModifyHostsFile(Paths.get(hostsFilePath));
     }
-    
+
+    /**
+     * Explicitly re-check filesystem permissions and update cached fields.
+     * Call this only when a deliberate privilege state change is needed
+     * (e.g. after runtime privilege escalation).
+     */
+    public void refreshPrivilegeCheck() {
+        this.hasAdminPrivileges = canModifyHostsFile(Paths.get(hostsFilePath));
+        this.hostsFileAccessible = hasAdminPrivileges;
+    }
+
     @Override
     @Scheduled(fixedRate = 300000) // Run every 5 minutes
     public void synchronizeHostsFile() {
@@ -143,31 +155,31 @@ public class DomainBlockingServiceImpl implements DomainBlockingService {
 
     private void updateHostsFile() throws IOException {
         List<BlockedDomain> activeBlockedDomains = blockedDomainRepository.findByActiveTrue();
-        
+
         // Read existing hosts file content
         List<String> existingLines = Files.readAllLines(Paths.get(hostsFilePath));
-        
+
         // Filter out our blocked domains (keep system entries)
         List<String> systemEntries = existingLines.stream()
                 .filter(line -> !line.contains("# ANTIVIRUS_BLOCKED_DOMAIN"))
                 .collect(Collectors.toList());
-        
+
         // Add our blocked domains
         List<String> blockedEntries = activeBlockedDomains.stream()
                 .map(domain -> "127.0.0.1 " + domain.getDomain() + " # ANTIVIRUS_BLOCKED_DOMAIN")
                 .collect(Collectors.toList());
-        
+
         // Combine system entries with our blocked domains
         systemEntries.addAll(blockedEntries);
-        
+
         // Create backup of existing hosts file
         Path hostsPath = Paths.get(hostsFilePath);
         Path backupPath = Paths.get(hostsFilePath + ".backup");
-        
+
         try {
             // Try to create backup
             Files.copy(hostsPath, backupPath, StandardCopyOption.REPLACE_EXISTING);
-            
+
             // Write updated content to hosts file
             Files.write(hostsPath, systemEntries);
         } catch (AccessDeniedException e) {
@@ -187,4 +199,4 @@ public class DomainBlockingServiceImpl implements DomainBlockingService {
             throw e;
         }
     }
-} 
+}

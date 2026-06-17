@@ -24,6 +24,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.context.annotation.Profile;
+import org.springframework.core.annotation.Order;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -49,60 +51,77 @@ public class SecurityConfig {
     private final Map<String, AttemptWindow> authAttemptWindows = new ConcurrentHashMap<>();
 
     @Bean
+    @Order(2)
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-            .csrf(csrf -> csrf.csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()))
-            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
-            .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/actuator/health").permitAll()
-                .requestMatchers("/api/auth/csrf").permitAll()
-                .requestMatchers("/api/auth/login").permitAll()
-                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                .requestMatchers("/api/**").authenticated()
-                .anyRequest().denyAll()
-            )
-            .formLogin(form -> form
-                .loginProcessingUrl("/api/auth/login")
-                .successHandler((request, response, authentication) -> {
-                    response.setStatus(HttpStatus.OK.value());
-                    response.setContentType("application/json");
-                    response.getWriter().write("{\"success\":true}");
-                })
-                .failureHandler((request, response, exception) -> {
-                    response.setStatus(HttpStatus.UNAUTHORIZED.value());
-                    response.setContentType("application/json");
-                    response.getWriter().write("{\"success\":false,\"message\":\"Invalid username or password\"}");
-                })
-            )
-            .logout(logout -> logout
-                .logoutUrl("/api/auth/logout")
-                .logoutSuccessHandler((request, response, authentication) -> {
-                    response.setStatus(HttpStatus.OK.value());
-                    response.setContentType("application/json");
-                    response.getWriter().write("{\"success\":true}");
-                })
-            )
-            .headers(headers -> headers
-                .contentSecurityPolicy(csp -> csp.policyDirectives(
-                    "default-src 'self'; " +
-                    "base-uri 'self'; " +
-                    "object-src 'none'; " +
-                    "script-src 'self'; " +
-                    "style-src 'self' 'unsafe-inline'; " +
-                    "img-src 'self' data:; " +
-                    "connect-src 'self'; " +
-                    "frame-ancestors 'none';"
-                ))
-                .frameOptions(frame -> frame.deny())
-                .contentTypeOptions(Customizer.withDefaults())
-                .httpStrictTransportSecurity(hsts -> hsts
-                    .includeSubDomains(true)
-                    .maxAgeInSeconds(31536000))
-                .referrerPolicy(ref -> ref
-                    .policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN))
-            );
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .csrf(csrf -> csrf.csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()))
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/actuator/health").permitAll()
+                        .requestMatchers("/api/auth/csrf").permitAll()
+                        .requestMatchers("/api/auth/login").permitAll()
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .requestMatchers("/api/**").authenticated()
+                        .anyRequest().denyAll())
+                .formLogin(form -> form
+                        .loginProcessingUrl("/api/auth/login")
+                        .successHandler((request, response, authentication) -> {
+                            response.setStatus(HttpStatus.OK.value());
+                            response.setContentType("application/json");
+                            response.getWriter().write("{\"success\":true}");
+                        })
+                        .failureHandler((request, response, exception) -> {
+                            response.setStatus(HttpStatus.UNAUTHORIZED.value());
+                            response.setContentType("application/json");
+                            response.getWriter()
+                                    .write("{\"success\":false,\"message\":\"Invalid username or password\"}");
+                        }))
+                .logout(logout -> logout
+                        .logoutUrl("/api/auth/logout")
+                        .logoutSuccessHandler((request, response, authentication) -> {
+                            response.setStatus(HttpStatus.OK.value());
+                            response.setContentType("application/json");
+                            response.getWriter().write("{\"success\":true}");
+                        }))
+                .headers(headers -> headers
+                        .contentSecurityPolicy(csp -> csp.policyDirectives(
+                                "default-src 'self'; " +
+                                        "base-uri 'self'; " +
+                                        "object-src 'none'; " +
+                                        "script-src 'self'; " +
+                                        "style-src 'self' 'unsafe-inline'; " +
+                                        "img-src 'self' data:; " +
+                                        "connect-src 'self'; " +
+                                        "frame-ancestors 'none';"))
+                        .frameOptions(frame -> frame.deny())
+                        .contentTypeOptions(Customizer.withDefaults())
+                        .httpStrictTransportSecurity(hsts -> hsts
+                                .includeSubDomains(true)
+                                .maxAgeInSeconds(31536000))
+                        .referrerPolicy(ref -> ref
+                                .policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN)));
 
+        return http.build();
+    }
+
+    /**
+     * L-06: Dev-only security chain for H2 console.
+     * Requires ADMIN role, disables CSRF (H2 console uses POST forms),
+     * and sets frameOptions to sameOrigin (H2 console uses frames).
+     * Only active when the "dev" profile is set.
+     */
+    @Bean
+    @Profile("dev")
+    @Order(1)
+    public SecurityFilterChain h2ConsoleFilterChain(HttpSecurity http) throws Exception {
+        http
+                .securityMatcher("/h2-console/**")
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/h2-console/**").hasRole("ADMIN"))
+                .csrf(csrf -> csrf.disable())
+                .headers(headers -> headers
+                        .frameOptions(frame -> frame.sameOrigin()));
         return http.build();
     }
 
@@ -126,7 +145,8 @@ public class SecurityConfig {
                 if (!window.tryAcquire(AUTH_ATTEMPT_WINDOW, AUTH_ATTEMPT_LIMIT)) {
                     response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
                     response.setContentType("application/json");
-                    response.getWriter().write("{\"success\":false,\"message\":\"Too many login attempts. Please try again later.\"}");
+                    response.getWriter().write(
+                            "{\"success\":false,\"message\":\"Too many login attempts. Please try again later.\"}");
                     return;
                 }
 
@@ -145,8 +165,7 @@ public class SecurityConfig {
         configuration.setAllowedOrigins(parseAllowedOrigins());
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList(
-            "Authorization", "Content-Type", "Accept", "X-Requested-With", "X-XSRF-TOKEN"
-        ));
+                "Authorization", "Content-Type", "Accept", "X-Requested-With", "X-XSRF-TOKEN"));
         configuration.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
@@ -156,9 +175,9 @@ public class SecurityConfig {
 
     private List<String> parseAllowedOrigins() {
         return Arrays.stream(allowedOrigins.split(","))
-            .map(String::trim)
-            .filter(origin -> !origin.isEmpty())
-            .toList();
+                .map(String::trim)
+                .filter(origin -> !origin.isEmpty())
+                .toList();
     }
 
     @Bean

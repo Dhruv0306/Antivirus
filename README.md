@@ -90,7 +90,7 @@ antivirus/
    mvn spring-boot:run
    ```
 4. Backend will be available at `http://localhost:8080`
-5. H2 Console will be available at `http://localhost:8080/h2-console`
+5. Backend API will be available at `http://localhost:8080`
 
 ### Frontend Setup
 1. Navigate to the frontend directory:
