@@ -15,7 +15,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.io.*;
@@ -89,7 +88,6 @@ public class SecurityServiceImpl implements SecurityService {
     private static final int MAX_PATTERN_WINDOW_CHARS = 16 * 1024;
     private static final int MAX_ZIP_ENTRIES = 1_000;
     private static final long MAX_ZIP_UNCOMPRESSED_BYTES = 500L * 1024 * 1024L;
-
     // Malicious code patterns
     private static final List<Pattern> MALICIOUS_PATTERNS = Arrays.asList(
         // JavaScript threats
@@ -479,7 +477,6 @@ public class SecurityServiceImpl implements SecurityService {
     }
 
     @Override
-    @Transactional
     public List<ScanResult> performSystemScan() {
         if (!systemScanRunning.compareAndSet(false, true)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "System scan is already in progress");
@@ -531,6 +528,7 @@ public class SecurityServiceImpl implements SecurityService {
                     errorResult.setThreatDetails(SAFE_ERROR_MESSAGES.get("ACCESS_DENIED"));
                     errorResult.setScanType("SYSTEM");
                     errorResult.setActionTaken("NONE");
+                    saveScanResult(errorResult);
                     if (results.size() < MAX_SYSTEM_SCAN_RESULTS) {
                         results.add(errorResult);
                     }
@@ -543,6 +541,7 @@ public class SecurityServiceImpl implements SecurityService {
                     errorResult.setThreatDetails(SAFE_ERROR_MESSAGES.get("IO_ERROR"));
                     errorResult.setScanType("SYSTEM");
                     errorResult.setActionTaken("NONE");
+                    saveScanResult(errorResult);
                     if (results.size() < MAX_SYSTEM_SCAN_RESULTS) {
                         results.add(errorResult);
                     }
@@ -555,6 +554,7 @@ public class SecurityServiceImpl implements SecurityService {
                     errorResult.setThreatDetails(SAFE_ERROR_MESSAGES.get("SCAN_ERROR"));
                     errorResult.setScanType("SYSTEM");
                     errorResult.setActionTaken("NONE");
+                    saveScanResult(errorResult);
                     if (results.size() < MAX_SYSTEM_SCAN_RESULTS) {
                         results.add(errorResult);
                     }
@@ -647,6 +647,7 @@ public class SecurityServiceImpl implements SecurityService {
                         errorResult.setThreatDetails(SAFE_ERROR_MESSAGES.get("IO_ERROR"));
                         errorResult.setScanType("SYSTEM");
                         errorResult.setActionTaken("NONE");
+                        saveScanResult(errorResult);
                         if (results.size() < MAX_SYSTEM_SCAN_RESULTS) {
                             results.add(errorResult);
                         }
@@ -659,6 +660,7 @@ public class SecurityServiceImpl implements SecurityService {
                         errorResult.setThreatDetails(SAFE_ERROR_MESSAGES.get("SCAN_ERROR"));
                         errorResult.setScanType("SYSTEM");
                         errorResult.setActionTaken("NONE");
+                        saveScanResult(errorResult);
                         if (results.size() < MAX_SYSTEM_SCAN_RESULTS) {
                             results.add(errorResult);
                         }
@@ -1204,7 +1206,6 @@ public class SecurityServiceImpl implements SecurityService {
     }
 
     @Override
-    @Transactional
     public List<ScanResult> scanDirectory(String directoryPath, boolean recursive) {
         List<ScanResult> results = Collections.synchronizedList(new ArrayList<>());
         AtomicInteger totalFiles = new AtomicInteger(0);
