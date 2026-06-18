@@ -478,10 +478,11 @@ function NetworkScan() {
                 const domain = typeof item === 'object' ? item.domain : item;
                 return domain ? (
                   <StyledChip
+                    style={{ backgroundColor: 'var(--error-main)', color: '#FFFFFF' }}
                     key={domain}
                     label={domain}
                     onDelete={() => handleRemoveDomain(domain)}
-                    deleteIcon={<DeleteIcon />}
+                    deleteIcon={<DeleteIcon style={{ color: '#FFFFFF' }} />}
                     sx={{ m: 0.5 }}
                   />
                 ) : null;
