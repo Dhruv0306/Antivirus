@@ -24,6 +24,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -32,20 +33,19 @@ import java.util.UUID;
 public class AntivirusController {
     private static final Logger logger = LoggerFactory.getLogger(AntivirusController.class);
     private static final Set<String> ALLOWED_CONTENT_TYPES = Set.of(
-        "application/octet-stream",
-        "application/java-archive",
-        "application/pdf",
-        "application/zip",
-        "application/x-zip-compressed",
-        "application/x-msdownload",
-        "application/x-msdos-program",
-        "application/x-dosexec",
-        "application/x-executable",
-        "application/vnd.microsoft.portable-executable",
-        "image/jpeg",
-        "image/png",
-        "text/plain"
-    );
+            "application/octet-stream",
+            "application/java-archive",
+            "application/pdf",
+            "application/zip",
+            "application/x-zip-compressed",
+            "application/x-msdownload",
+            "application/x-msdos-program",
+            "application/x-dosexec",
+            "application/x-executable",
+            "application/vnd.microsoft.portable-executable",
+            "image/jpeg",
+            "image/png",
+            "text/plain");
 
     @Value("${app.scan.max-files-per-directory-upload:500}")
     private int maxFilesPerDirectoryUpload;
@@ -60,10 +60,10 @@ public class AntivirusController {
     @Autowired
     private LogService logService;
 
-    @SuppressWarnings("null")
     @PostMapping("/scan/file")
     public ResponseEntity<?> scanFile(@RequestParam("file") MultipartFile file) {
-        // Validate that filename exists before processing (L-03 fix: handle null/blank filenames explicitly)
+        // Validate that filename exists before processing (L-03 fix: handle null/blank
+        // filenames explicitly)
         String originalFilename = sanitizeDisplayName(file.getOriginalFilename());
         if (originalFilename == null || originalFilename.isBlank()) {
             logger.error("No valid filename for uploaded file");
@@ -92,7 +92,9 @@ public class AntivirusController {
         try {
             // Create temporary file
             tempFile = File.createTempFile("scan_", "_" + UUID.randomUUID());
-            file.transferTo(tempFile);
+            // O-02 Fix: Use Objects.requireNonNull to satisfy @NonNull contract and remove
+            // suppression
+            file.transferTo(Objects.requireNonNull(tempFile, "Temp file creation failed unexpectedly"));
             logger.info("File uploaded successfully: {}", tempFile.getAbsolutePath());
 
             // Perform scan
@@ -217,12 +219,12 @@ public class AntivirusController {
 
     /**
      * Endpoint for scanning a directory
+     * 
      * @param directoryName Name of the directory being scanned
-     * @param recursive Whether to scan subdirectories
-     * @param files List of files to scan from the directory
+     * @param recursive     Whether to scan subdirectories
+     * @param files         List of files to scan from the directory
      * @return Scan results for all files
      */
-    @SuppressWarnings("null")
     @PostMapping("/scan/directory")
     public ResponseEntity<?> scanDirectory(
             @RequestParam("directoryName") String directoryName,
@@ -237,7 +239,8 @@ public class AntivirusController {
         }
 
         if (files.size() > maxFilesPerDirectoryUpload) {
-            logger.warn("Directory upload rejected: {} files exceeds limit of {}", files.size(), maxFilesPerDirectoryUpload);
+            logger.warn("Directory upload rejected: {} files exceeds limit of {}", files.size(),
+                    maxFilesPerDirectoryUpload);
             Map<String, String> errorResponse = new HashMap<>();
             errorResponse.put("error", "Too many files. Maximum allowed: " + maxFilesPerDirectoryUpload);
             return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(errorResponse);
@@ -250,10 +253,10 @@ public class AntivirusController {
             int cleanFiles = 0;
             int infectedFiles = 0;
             int errorFiles = 0;
-            
+
             // Create a temporary directory to store uploaded files
             Path tempDir = Files.createTempDirectory("scan_");
-            
+
             try {
                 // Process each file while maintaining directory structure
                 for (MultipartFile file : files) {
@@ -263,21 +266,23 @@ public class AntivirusController {
                         if (relativePath == null) {
                             continue;
                         }
-                        
+
                         Path targetPath = PathSecurityUtil.resolveSafely(tempDir, relativePath);
 
                         if (targetPath.getParent() != null) {
                             Files.createDirectories(targetPath.getParent());
                         }
-                        
-                        // Save the file
-                        file.transferTo(targetPath.toFile());
-                        
+
+                        // O-02 Fix: Use Objects.requireNonNull to satisfy @NonNull contract and remove
+                        // suppression
+                        file.transferTo(Objects.requireNonNull(targetPath.toFile(),
+                                "Target path could not be converted to File"));
+
                         // Scan the file
                         ScanResult result = securityService.scanFile(targetPath.toFile());
                         result.setFileName(relativePath);
                         results.add(result);
-                        
+
                         // Update statistics
                         processedFiles++;
                         if (result.isInfected()) {
@@ -291,10 +296,11 @@ public class AntivirusController {
 
                         // Log progress every 100 files
                         if (processedFiles % 100 == 0) {
-                            logger.info("Directory scan progress - Directory: {}, Processed: {}/{}, Clean: {}, Infected: {}, Errors: {}", 
-                                directoryName, processedFiles, files.size(), cleanFiles, infectedFiles, errorFiles);
+                            logger.info(
+                                    "Directory scan progress - Directory: {}, Processed: {}/{}, Clean: {}, Infected: {}, Errors: {}",
+                                    directoryName, processedFiles, files.size(), cleanFiles, infectedFiles, errorFiles);
                         }
-                        
+
                     } catch (SecurityException e) {
                         logger.warn("Rejected unsafe path in directory upload: {}", file.getOriginalFilename());
                         ScanResult errorResult = new ScanResult();
@@ -319,7 +325,7 @@ public class AntivirusController {
                         errorFiles++;
                     }
                 }
-                
+
                 // Create response with summary and details
                 Map<String, Object> response = new HashMap<>();
                 response.put("totalFiles", results.size());
@@ -327,18 +333,19 @@ public class AntivirusController {
                 response.put("infectedFiles", infectedFiles);
                 response.put("errorFiles", errorFiles);
                 response.put("results", results);
-                
+
                 // Log final summary
-                logger.info("Directory scan completed - Directory: {}, Total Files: {}, Clean: {}, Infected: {}, Errors: {}", 
-                    directoryName, processedFiles, cleanFiles, infectedFiles, errorFiles);
-                
+                logger.info(
+                        "Directory scan completed - Directory: {}, Total Files: {}, Clean: {}, Infected: {}, Errors: {}",
+                        directoryName, processedFiles, cleanFiles, infectedFiles, errorFiles);
+
                 return ResponseEntity.ok(response);
-                
+
             } finally {
                 // Clean up temporary directory
                 deleteDirectory(tempDir.toFile());
             }
-            
+
         } catch (Exception e) {
             String reference = UUID.randomUUID().toString();
             logger.error("Error during directory scan [ref={}]", reference, e);

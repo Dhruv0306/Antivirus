@@ -188,26 +188,32 @@ public class NetworkSecurityServiceImpl implements NetworkSecurityService {
         return status;
     }
 
+    // O-04 Fix: prevent underflow by checking for state changes and using
+    // Math.max(0, v - 1)
     @Override
     public void toggleFirewall(Boolean enabled) {
-        logger.info("Toggling firewall: {}", enabled);
-        this.firewallEnabled = enabled != null ? enabled : !this.firewallEnabled;
-        if (this.firewallEnabled) {
-            activeThreats.decrementAndGet();
-        } else {
-            activeThreats.incrementAndGet();
+        boolean was = this.firewallEnabled;
+        this.firewallEnabled = enabled != null ? enabled : !was;
+        if (!was && this.firewallEnabled) {
+            activeThreats.updateAndGet(v -> Math.max(0, v - 1)); // enabling: safe decrement
+        } else if (was && !this.firewallEnabled) {
+            activeThreats.incrementAndGet(); // disabling: increment
         }
+        logger.info("Toggling firewall: {}", this.firewallEnabled);
     }
 
+    // O-04 Fix: prevent underflow by checking for state changes and using
+    // Math.max(0, v - 1)
     @Override
     public void toggleWebProtection(Boolean enabled) {
-        logger.info("Toggling web protection: {}", enabled);
-        this.webProtectionEnabled = enabled != null ? enabled : !this.webProtectionEnabled;
-        if (this.webProtectionEnabled) {
-            activeThreats.decrementAndGet();
-        } else {
-            activeThreats.incrementAndGet();
+        boolean was = this.webProtectionEnabled;
+        this.webProtectionEnabled = enabled != null ? enabled : !was;
+        if (!was && this.webProtectionEnabled) {
+            activeThreats.updateAndGet(v -> Math.max(0, v - 1)); // enabling: safe decrement
+        } else if (was && !this.webProtectionEnabled) {
+            activeThreats.incrementAndGet(); // disabling: increment
         }
+        logger.info("Toggling web protection: {}", this.webProtectionEnabled);
     }
 
     @Override

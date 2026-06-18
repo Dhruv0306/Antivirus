@@ -121,7 +121,7 @@ public class DomainBlockingServiceImpl implements DomainBlockingService {
 
     @Override
     public boolean isAdmin() {
-        return canModifyHostsFile(Paths.get(hostsFilePath));
+        return hasAdminPrivileges;
     }
 
     /**

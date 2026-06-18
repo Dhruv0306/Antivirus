@@ -66,7 +66,7 @@ public class LogService {
                 StandardOpenOption.WRITE
             );
             
-            logger.debug("Successfully logged scan result for file: {}", result.getFilePath());
+            logger.debug("Successfully logged scan result for file: {}", result.getFileName());
         } catch (IOException e) {
             logger.error("Error writing to scan history log: {}", e.getMessage(), e);
         }
