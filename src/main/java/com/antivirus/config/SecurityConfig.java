@@ -37,7 +37,10 @@ import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 @Configuration
 @EnableWebSecurity
@@ -47,6 +50,9 @@ public class SecurityConfig {
 
     @Value("${app.cors.allowed-origins:http://localhost:5000,http://localhost:3000}")
     private String allowedOrigins;
+
+    @Value("${app.trusted-proxy-ips:}")
+    private String trustedProxyIps;
 
     private final Map<String, AttemptWindow> authAttemptWindows = new ConcurrentHashMap<>();
 
@@ -209,17 +215,29 @@ public class SecurityConfig {
     }
 
     private String resolveRateLimitKey(HttpServletRequest request) {
-        String forwardedFor = request.getHeader("X-Forwarded-For");
-        String remoteAddress = request.getRemoteAddr();
-        String clientIp = remoteAddress;
-        if (forwardedFor != null && !forwardedFor.isBlank()) {
-            clientIp = forwardedFor.split(",")[0].trim();
+        String remoteAddr = request.getRemoteAddr();
+
+        // Only honour X-Forwarded-For when the TCP peer is a known proxy
+        Set<String> trustedProxies = Arrays.stream(trustedProxyIps.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.toSet());
+
+        String clientIp = remoteAddr;
+        if (trustedProxies.contains(remoteAddr)) {
+            String xff = request.getHeader("X-Forwarded-For");
+            if (xff != null && !xff.isBlank()) {
+                // Take the first (leftmost) IP and validate format
+                String candidate = xff.split(",")[0].trim();
+                if (candidate.matches("^[0-9.:a-fA-F]+$")) {
+                    clientIp = candidate;
+                }
+            }
         }
 
-        String username = request.getParameter("username");
-        if (username == null || username.isBlank()) {
-            username = "unknown";
-        }
+        String username = Optional.ofNullable(request.getParameter("username"))
+                .filter(u -> !u.isBlank())
+                .orElse("unknown");
 
         return clientIp + "|" + username.toLowerCase();
     }
