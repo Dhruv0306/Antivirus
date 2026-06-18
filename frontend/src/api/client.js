@@ -1,59 +1,18 @@
 import axios from 'axios';
 
 const API_ROOT = import.meta.env.VITE_API_URL || 'http://localhost:8080';
-const CSRF_STORAGE_KEY = 'auth_csrf_credentials';
 
 let runtimeCsrf = null;
 
-function canUseSessionStorage() {
-  return typeof window !== 'undefined' && typeof window.sessionStorage !== 'undefined';
-}
-
-function readStoredCsrfCredentials() {
-  if (!canUseSessionStorage()) {
-    return null;
-  }
-
-  try {
-    const raw = sessionStorage.getItem(CSRF_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeStoredCsrfCredentials(csrf) {
-  if (!canUseSessionStorage()) {
-    return;
-  }
-
-  sessionStorage.setItem(CSRF_STORAGE_KEY, JSON.stringify(csrf));
-}
-
-function clearStoredCsrfCredentials() {
-  if (!canUseSessionStorage()) {
-    return;
-  }
-
-  sessionStorage.removeItem(CSRF_STORAGE_KEY);
-}
-
 export function setCsrfCredentials(csrf) {
   runtimeCsrf = csrf;
-  writeStoredCsrfCredentials(csrf);
 }
 
 export function clearCsrfCredentials() {
   runtimeCsrf = null;
-  clearStoredCsrfCredentials();
 }
 
 function getCsrfCredentials() {
-  if (runtimeCsrf) {
-    return runtimeCsrf;
-  }
-
-  runtimeCsrf = readStoredCsrfCredentials();
   return runtimeCsrf;
 }
 

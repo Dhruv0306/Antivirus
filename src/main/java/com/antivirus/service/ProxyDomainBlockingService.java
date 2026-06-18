@@ -26,6 +26,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -53,6 +54,10 @@ public class ProxyDomainBlockingService {
 
     private ServerSocket serverSocket;
     private ExecutorService executorService;
+    // N-06 Fix: Dedicated relay thread pool instead of unbounded raw thread
+    // creation
+    private ExecutorService relayExecutor;
+
     private final AtomicBoolean isRunning = new AtomicBoolean(false);
     private int proxyPort = DEFAULT_PROXY_PORT;
 
@@ -66,6 +71,13 @@ public class ProxyDomainBlockingService {
             serverSocket = new ServerSocket();
             serverSocket.bind(new InetSocketAddress(LOCALHOST, proxyPort));
             executorService = Executors.newFixedThreadPool(MAX_PROXY_THREADS);
+            // N-06 Fix: Initialize bounded/cached relay pool
+            relayExecutor = Executors.newCachedThreadPool(r -> {
+                Thread t = new Thread(r, "proxy-relay");
+                t.setDaemon(true);
+                return t;
+            });
+
             isRunning.set(true);
             executorService.submit(this::acceptConnections);
             logger.info("Proxy server started on {}:{}", LOCALHOST, proxyPort);
@@ -88,6 +100,11 @@ public class ProxyDomainBlockingService {
             if (executorService != null) {
                 executorService.shutdownNow();
                 executorService = null;
+            }
+            // N-06 Fix: Shut down relay executor
+            if (relayExecutor != null) {
+                relayExecutor.shutdownNow();
+                relayExecutor = null;
             }
             logger.info("Proxy server stopped");
         } catch (IOException e) {
@@ -264,17 +281,16 @@ public class ProxyDomainBlockingService {
     }
 
     private void relay(Socket client, Socket remote) {
-        Thread clientToRemote = new Thread(() -> pump(client, remote), "proxy-c2r");
-        Thread remoteToClient = new Thread(() -> pump(remote, client), "proxy-r2c");
-        clientToRemote.setDaemon(true);
-        remoteToClient.setDaemon(true);
-        clientToRemote.start();
-        remoteToClient.start();
+        // N-06 Fix: Use managed ExecutorService instead of raw Thread creation
+        Future<?> c2r = relayExecutor.submit(() -> pump(client, remote));
+        Future<?> r2c = relayExecutor.submit(() -> pump(remote, client));
         try {
-            clientToRemote.join();
-            remoteToClient.join();
-        } catch (InterruptedException e) {
+            c2r.get();
+            r2c.get();
+        } catch (Exception e) {
             Thread.currentThread().interrupt();
+            c2r.cancel(true);
+            r2c.cancel(true);
         }
     }
 

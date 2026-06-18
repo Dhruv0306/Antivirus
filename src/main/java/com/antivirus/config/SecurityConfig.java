@@ -27,6 +27,9 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.annotation.Order;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -36,10 +39,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Configuration
@@ -54,7 +56,11 @@ public class SecurityConfig {
     @Value("${app.trusted-proxy-ips:}")
     private String trustedProxyIps;
 
-    private final Map<String, AttemptWindow> authAttemptWindows = new ConcurrentHashMap<>();
+    // N-05 Fix: Use Caffeine cache with size cap and time-based eviction
+    private final Cache<String, AttemptWindow> authAttemptWindows = Caffeine.newBuilder()
+            .maximumSize(50_000)
+            .expireAfterWrite(2, TimeUnit.MINUTES)
+            .build();
 
     @Bean
     @Order(2)
@@ -147,7 +153,8 @@ public class SecurityConfig {
                 }
 
                 String rateLimitKey = resolveRateLimitKey(request);
-                AttemptWindow window = authAttemptWindows.computeIfAbsent(rateLimitKey, key -> new AttemptWindow());
+                // N-05 Fix: Use Caffeine's thread-safe get
+                AttemptWindow window = authAttemptWindows.get(rateLimitKey, key -> new AttemptWindow());
                 if (!window.tryAcquire(AUTH_ATTEMPT_WINDOW, AUTH_ATTEMPT_LIMIT)) {
                     response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
                     response.setContentType("application/json");
@@ -157,7 +164,7 @@ public class SecurityConfig {
                 }
 
                 filterChain.doFilter(request, response);
-                cleanupExpiredAttemptWindows();
+                // N-05 Fix: cleanupExpiredAttemptWindows() call removed; Caffeine handles this
             }
         });
         bean.addUrlPatterns("/api/auth/login");
@@ -217,7 +224,6 @@ public class SecurityConfig {
     private String resolveRateLimitKey(HttpServletRequest request) {
         String remoteAddr = request.getRemoteAddr();
 
-        // Only honour X-Forwarded-For when the TCP peer is a known proxy
         Set<String> trustedProxies = Arrays.stream(trustedProxyIps.split(","))
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
@@ -227,7 +233,6 @@ public class SecurityConfig {
         if (trustedProxies.contains(remoteAddr)) {
             String xff = request.getHeader("X-Forwarded-For");
             if (xff != null && !xff.isBlank()) {
-                // Take the first (leftmost) IP and validate format
                 String candidate = xff.split(",")[0].trim();
                 if (candidate.matches("^[0-9.:a-fA-F]+$")) {
                     clientIp = candidate;
@@ -240,10 +245,6 @@ public class SecurityConfig {
                 .orElse("unknown");
 
         return clientIp + "|" + username.toLowerCase();
-    }
-
-    private void cleanupExpiredAttemptWindows() {
-        authAttemptWindows.entrySet().removeIf(entry -> entry.getValue().isExpired(AUTH_ATTEMPT_WINDOW));
     }
 
     private static final class AttemptWindow {
@@ -263,10 +264,6 @@ public class SecurityConfig {
 
             attempts++;
             return true;
-        }
-
-        synchronized boolean isExpired(Duration window) {
-            return windowStart.plus(window).isBefore(Instant.now());
         }
     }
 }

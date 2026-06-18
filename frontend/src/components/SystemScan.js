@@ -153,7 +153,7 @@ function SystemScan() {
       setScanResults(response.data.content || []);
     } catch (error) {
       logError('Error fetching scan results:', error);
-      setError(toUserMessage(error)); // Use safe user-facing message instead of raw server error
+      setError(toUserMessage(error));
     }
   };
 
@@ -164,15 +164,16 @@ function SystemScan() {
       setNeedsElevation(false);
       setScanResults(null);
       setProgress(0);
-      
+
       const response = await antivirusApi.post('/scan/system');
-      
+
       if (response.data && response.data.length === 1) {
         const result = response.data[0];
-        if (result.threatType === 'WARNING' && 
-            result.threatDetails.includes('Administrator privileges required')) {
+        if (result.threatType === 'WARNING' &&
+          result.threatDetails.includes('Administrator privileges required')) {
           setNeedsElevation(true);
-          setError(toUserMessage(error)); // Use safe user-facing message instead of raw server error
+          // N-07 Fix: Use a hardcoded safe message — there is no Error object here
+          setError('Administrator privileges are required to perform a full system scan.');
           return;
         }
       }
@@ -182,19 +183,8 @@ function SystemScan() {
       }
     } catch (err) {
       logError('Scan error:', err);
-      let errorMessage = 'An error occurred during the system scan.';
-      
-      if (err.response) {
-        if (err.response.status === 500) {
-          errorMessage = 'Internal server error: The scan could not be completed. Please check server logs for details.';
-        } else if (err.response.data && err.response.data.message) {
-          errorMessage = err.response.data.message;
-        }
-      } else if (err.request) {
-        errorMessage = 'Could not connect to the server. Please check if the server is running.';
-      }
-      
-      setError(errorMessage);
+      // N-07 Fix: ALWAYS use toUserMessage — never touch err.response.data.message
+      setError(toUserMessage(err));
     } finally {
       setScanning(false);
       setProgress(100);
@@ -215,7 +205,7 @@ function SystemScan() {
 
   const calculateScanSummary = (results) => {
     if (!results || !Array.isArray(results)) return null;
-    
+
     return {
       totalFiles: results.length,
       threats: results.filter(r => r.infected).length,
@@ -226,13 +216,13 @@ function SystemScan() {
 
   return (
     <Box>
-      <Typography 
-        variant="h4" 
-        gutterBottom 
-        sx={{ 
+      <Typography
+        variant="h4"
+        gutterBottom
+        sx={{
           mb: 4,
           color: 'var(--text-primary)',
-          fontWeight: 600 
+          fontWeight: 600
         }}
       >
         System Scan
@@ -250,7 +240,7 @@ function SystemScan() {
               >
                 {scanning ? 'Scanning...' : 'Start System Scan'}
               </StyledButton>
-              
+
               {scanning && (
                 <StyledButton
                   variant="outlined"
@@ -273,9 +263,9 @@ function SystemScan() {
             )}
 
             {error && (
-              <Alert 
+              <Alert
                 severity={needsElevation ? "warning" : "error"}
-                sx={{ 
+                sx={{
                   mb: 3,
                   borderRadius: 'var(--border-radius-medium)',
                   backgroundColor: needsElevation ? 'var(--warning-transparent)' : 'var(--error-transparent)',
@@ -294,7 +284,7 @@ function SystemScan() {
                 <Typography variant="h6" gutterBottom sx={{ color: 'var(--text-primary)', fontWeight: 600 }}>
                   Scan Results
                 </Typography>
-                
+
                 {calculateScanSummary(scanResults) && (
                   <Grid container spacing={2} sx={{ mb: 3 }}>
                     <Grid item xs={3}>
@@ -340,17 +330,17 @@ function SystemScan() {
                   {scanResults.map((result, index) => (
                     <React.Fragment key={index}>
                       <StyledListItem>
-                      <ListItemIcon>
-                        {result.infected ? (
-                          <ErrorIcon color="error" />
-                        ) : result.threatType === 'ERROR' ? (
-                          <WarningIcon color="warning" />
-                        ) : (
-                          <CheckCircleIcon color="success" />
-                        )}
-                      </ListItemIcon>
-                      <ListItemText
-                        primary={getDisplayName(result)}
+                        <ListItemIcon>
+                          {result.infected ? (
+                            <ErrorIcon color="error" />
+                          ) : result.threatType === 'ERROR' ? (
+                            <WarningIcon color="warning" />
+                          ) : (
+                            <CheckCircleIcon color="success" />
+                          )}
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={getDisplayName(result)}
                           secondary={result.threatDetails || 'No threats detected'}
                           sx={{
                             '& .MuiListItemText-primary': {
@@ -358,9 +348,9 @@ function SystemScan() {
                               fontWeight: 500
                             },
                             '& .MuiListItemText-secondary': {
-                              color: result.infected ? 'var(--error-main)' : 
-                                     result.threatType === 'ERROR' ? 'var(--warning-main)' : 
-                                     'var(--text-secondary)'
+                              color: result.infected ? 'var(--error-main)' :
+                                result.threatType === 'ERROR' ? 'var(--warning-main)' :
+                                  'var(--text-secondary)'
                             }
                           }}
                         />
@@ -371,7 +361,7 @@ function SystemScan() {
               </Box>
             )}
           </StyledPaper>
-            </Grid>
+        </Grid>
       </Grid>
     </Box>
   );
