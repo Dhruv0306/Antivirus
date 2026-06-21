@@ -36,8 +36,8 @@ public class DomainBlockingServiceImpl implements DomainBlockingService {
         this.hostsFilePath = hostsFilePath;
 
         Path hostsPath = Paths.get(hostsFilePath);
-        hasAdminPrivileges = isAdmin();
-        hostsFileAccessible = canModifyHostsFile(hostsPath);
+        this.hasAdminPrivileges = canModifyHostsFile(hostsPath);
+        this.hostsFileAccessible = hasAdminPrivileges;
 
         if (!hostsFileAccessible) {
             logger.warn(
