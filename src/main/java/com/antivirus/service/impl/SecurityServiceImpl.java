@@ -62,25 +62,28 @@ public class SecurityServiceImpl implements SecurityService {
 
     // Safe opaque error messages to prevent leaking sensitive info in API responses
     private static final Map<String, String> SAFE_ERROR_MESSAGES = Map.of(
-        "ACCESS_DENIED",  "Access denied to this path",
-        "IO_ERROR",       "Could not read file",
-        "SCAN_ERROR",     "Scan could not be completed"
-    );
+            "ACCESS_DENIED", "Access denied to this path",
+            "IO_ERROR", "Could not read file",
+            "SCAN_ERROR", "Scan could not be completed");
 
     // Known malicious file signatures (MD5 hashes)
     private static final Set<String> KNOWN_MALWARE_SIGNATURES = new HashSet<>(Arrays.asList(
-        "e4968ef99266df7c9a1f0637d2389dab", // Example malware signature
-        "a7d6f45f05f9bc45f2b9c6fb93d7d9ab",
-        "c8d03b43a0c9b5890b6f6994da2c4639"
-    ));
+            "e4968ef99266df7c9a1f0637d2389dab", // Example malware signature
+            "a7d6f45f05f9bc45f2b9c6fb93d7d9ab",
+            "c8d03b43a0c9b5890b6f6994da2c4639"));
 
     // Suspicious file extensions
     private static final Set<String> SUSPICIOUS_EXTENSIONS = new HashSet<>(Arrays.asList(
-        ".exe", ".dll", ".bat", ".cmd", ".scr", ".js", ".vbs", ".hta",
-        ".sys", ".bin", ".com", ".msi", ".pif", ".gadget", ".msp",
-        ".cpl", ".hta", ".msc", ".jar", ".ps1", ".psm1", ".vbe",
-        ".ws", ".wsf", ".wsh", ".scr", ".sct", ".shb", ".tmp"
-    ));
+            ".exe", ".dll", ".bat", ".cmd", ".scr", ".js", ".vbs", ".hta",
+            ".sys", ".bin", ".com", ".msi", ".pif", ".gadget", ".msp",
+            ".cpl", ".hta", ".msc", ".jar", ".ps1", ".psm1", ".vbe",
+            ".ws", ".wsf", ".wsh", ".scr", ".sct", ".shb", ".tmp"));
+
+    // High-signal trojan name indicators — broad terms like
+    // "inject"/"payload"/"downloader" removed
+    private static final Set<String> TROJAN_NAME_SIGNATURES = Set.of(
+            "backdoor", "rootkit", "trojan", "remote_access",
+            "stealer", "reverse_shell", "wscript.shell");
 
     private static final int MAX_SYSTEM_SCAN_RESULTS = 2_000;
     private static final long MAX_SYSTEM_SCAN_DURATION_MS = 5 * 60 * 1000L;
@@ -90,57 +93,57 @@ public class SecurityServiceImpl implements SecurityService {
     private static final long MAX_ZIP_UNCOMPRESSED_BYTES = 500L * 1024 * 1024L;
     // Malicious code patterns
     private static final List<Pattern> MALICIOUS_PATTERNS = Arrays.asList(
-        // JavaScript threats
-        Pattern.compile("(?i)\\beval\\s*\\("), // JavaScript eval
-        Pattern.compile("(?i)\\bdocument\\.write\\s*\\("), // Dynamic content injection
-        Pattern.compile("(?i)<script\\b"), // Potential XSS
-        Pattern.compile("(?i)\\bbase64_decode\\b"), // Base64 encoded content
+            // JavaScript threats
+            Pattern.compile("(?i)\\beval\\s*\\("), // JavaScript eval
+            Pattern.compile("(?i)\\bdocument\\.write\\s*\\("), // Dynamic content injection
+            Pattern.compile("(?i)<script\\b"), // Potential XSS
+            Pattern.compile("(?i)\\bbase64_decode\\b"), // Base64 encoded content
 
-        // Shell execution
-        Pattern.compile("(?i)\\bshell_exec\\s*\\("), // PHP shell execution
-        Pattern.compile("(?i)\\bruntime\\.exec\\s*\\("), // Java Runtime execution
-        Pattern.compile("(?i)\\bsystem\\s*\\("), // System command execution
-        Pattern.compile("(?i)\\bpassthru\\s*\\("), // Command passthrough
+            // Shell execution
+            Pattern.compile("(?i)\\bshell_exec\\s*\\("), // PHP shell execution
+            Pattern.compile("(?i)\\bruntime\\.exec\\s*\\("), // Java Runtime execution
+            Pattern.compile("(?i)\\bsystem\\s*\\("), // System command execution
+            Pattern.compile("(?i)\\bpassthru\\s*\\("), // Command passthrough
 
-        // Process manipulation
-        Pattern.compile("(?i)\\bprocess\\.spawn\\b"), // Node.js process spawning
-        Pattern.compile("(?i)\\bcreateprocess\\w*\\b"), // Windows process creation
+            // Process manipulation
+            Pattern.compile("(?i)\\bprocess\\.spawn\\b"), // Node.js process spawning
+            Pattern.compile("(?i)\\bcreateprocess\\w*\\b"), // Windows process creation
 
-        // PowerShell threats
-        Pattern.compile("(?i)\\bpowershell\\b.{0,120}(?:-enc|-encodedcommand|-w\\s+hidden)"), // Encoded PowerShell
-        Pattern.compile("(?i)\\bpowershell\\b.{0,120}downloadstring"), // Remote script download
-        Pattern.compile("(?i)\\bpowershell\\b.{0,120}\\bbypass\\b"), // Security bypass
-        Pattern.compile("(?i)\\bpowershell\\b.{0,120}\\bhidden\\b"), // Hidden window
+            // PowerShell threats
+            Pattern.compile("(?i)\\bpowershell\\b.{0,120}(?:-enc|-encodedcommand|-w\\s+hidden)"), // Encoded PowerShell
+            Pattern.compile("(?i)\\bpowershell\\b.{0,120}downloadstring"), // Remote script download
+            Pattern.compile("(?i)\\bpowershell\\b.{0,120}\\bbypass\\b"), // Security bypass
+            Pattern.compile("(?i)\\bpowershell\\b.{0,120}\\bhidden\\b"), // Hidden window
 
-        // Network threats
-        Pattern.compile("(?i)\\bnew\\s+socket\\s*\\("), // Socket creation
-        Pattern.compile("(?i)\\bconnect\\s*\\(.*\\d{1,3}(?:\\.\\d{1,3}){3}"), // IP connection
-        Pattern.compile("(?i)\\bwget\\s+https?://"), // File download
-        Pattern.compile("(?i)\\bcurl\\b.{0,80}\\s-O\\b"), // File download
+            // Network threats
+            Pattern.compile("(?i)\\bnew\\s+socket\\s*\\("), // Socket creation
+            Pattern.compile("(?i)\\bconnect\\s*\\(.*\\d{1,3}(?:\\.\\d{1,3}){3}"), // IP connection
+            Pattern.compile("(?i)\\bwget\\s+https?://"), // File download
+            Pattern.compile("(?i)\\bcurl\\b.{0,80}\\s-O\\b"), // File download
 
-        // Registry manipulation
-        Pattern.compile("(?i)\\breg\\b.{0,80}\\badd\\b"), // Registry modification
-        Pattern.compile("(?i)\\bregistry\\.setvalue\\b"), // Registry API
+            // Registry manipulation
+            Pattern.compile("(?i)\\breg\\b.{0,80}\\badd\\b"), // Registry modification
+            Pattern.compile("(?i)\\bregistry\\.setvalue\\b"), // Registry API
 
-        // File system threats
-        Pattern.compile("(?i)\\.encrypt\\s*\\("), // File encryption
-        Pattern.compile("(?i)\\bchmod\\b.{0,40}\\b777\\b"), // Suspicious permissions
-        Pattern.compile("(?i)\\bicacls\\b.{0,80}\\bgrant\\b.{0,80}\\beveryone\\b"), // Windows permissions
+            // File system threats
+            Pattern.compile("(?i)\\.encrypt\\s*\\("), // File encryption
+            Pattern.compile("(?i)\\bchmod\\b.{0,40}\\b777\\b"), // Suspicious permissions
+            Pattern.compile("(?i)\\bicacls\\b.{0,80}\\bgrant\\b.{0,80}\\beveryone\\b"), // Windows permissions
 
-        // Data exfiltration
-        Pattern.compile("(?i)\\.upload\\s*\\("), // File upload
-        Pattern.compile("(?i)\\bpost\\b.{0,80}\\bpassword\\b"), // Password theft
-        Pattern.compile("(?i)\\bkeylog(?:ger)?\\b"), // Keylogging
+            // Data exfiltration
+            Pattern.compile("(?i)\\.upload\\s*\\("), // File upload
+            Pattern.compile("(?i)\\bpost\\b.{0,80}\\bpassword\\b"), // Password theft
+            Pattern.compile("(?i)\\bkeylog(?:ger)?\\b"), // Keylogging
 
-        // Persistence mechanisms
-        Pattern.compile("(?i)\\\\startup\\\\"), // Startup folder
-        Pattern.compile("(?i)\\\\system32\\\\drivers\\\\"), // Driver installation
-        Pattern.compile("(?i)\\\\tasks\\\\"), // Scheduled tasks
+            // Persistence mechanisms
+            Pattern.compile("(?i)\\\\startup\\\\"), // Startup folder
+            Pattern.compile("(?i)\\\\system32\\\\drivers\\\\"), // Driver installation
+            Pattern.compile("(?i)\\\\tasks\\\\"), // Scheduled tasks
 
-        // Obfuscation
-        Pattern.compile("(?i)\\bunescape\\b"), // String obfuscation
-        Pattern.compile("(?i)\\bdecode(?:uri)?\\b"), // Encoding
-        Pattern.compile("(?i)\\bfromcharcode\\b") // Character code obfuscation
+            // Obfuscation
+            Pattern.compile("(?i)\\bunescape\\b"), // String obfuscation
+            Pattern.compile("(?i)\\bdecode(?:uri)?\\b"), // Encoding
+            Pattern.compile("(?i)\\bfromcharcode\\b") // Character code obfuscation
     );
 
     @Override
@@ -151,7 +154,7 @@ public class SecurityServiceImpl implements SecurityService {
         result.setInfected(false);
         result.setScanType("FILE");
         result.setActionTaken("NONE");
-        
+
         try {
             if (!file.exists()) {
                 result.setThreatType("ERROR");
@@ -177,7 +180,7 @@ public class SecurityServiceImpl implements SecurityService {
 
             // Calculate file hash
             String fileHash = calculateFileHash(file);
-            
+
             // Check against known malware signatures
             if (KNOWN_MALWARE_SIGNATURES.contains(fileHash)) {
                 result.setInfected(true);
@@ -215,7 +218,7 @@ public class SecurityServiceImpl implements SecurityService {
             result.setThreatType("CLEAN");
             result.setThreatDetails("No threats detected");
             result.setActionTaken("NONE");
-            
+
         } catch (Exception e) {
             logger.error("Error scanning file: {}", e.getMessage());
             result.setThreatType("ERROR");
@@ -225,7 +228,7 @@ public class SecurityServiceImpl implements SecurityService {
 
         // Save the final result
         saveScanResult(result);
-        
+
         // Log the scan result
         logService.logScanResult(result);
 
@@ -296,7 +299,7 @@ public class SecurityServiceImpl implements SecurityService {
     @SuppressWarnings("unused")
     private List<String> scanFileContent(File file) throws IOException {
         List<String> threats = new ArrayList<>();
-        
+
         // Check if it's a ZIP file
         if (isZipFile(file)) {
             if (containsMaliciousZipContent(file)) {
@@ -307,30 +310,30 @@ public class SecurityServiceImpl implements SecurityService {
 
         try {
             byte[] content = readFilePrefix(file, (int) Math.min(file.length(), MAX_PATTERN_SCAN_BYTES));
-            
+
             // Check for malicious patterns
             if (containsSuspiciousPatterns(file)) {
                 threats.add("MALICIOUS_CODE");
                 return threats;
             }
-            
+
             // Convert to string for text-based checks
             String contentStr = new String(content, StandardCharsets.UTF_8);
             String[] lines = contentStr.split("\n");
-            
+
             for (String line : lines) {
                 // Check for potential ransomware markers
                 if (line.contains("Your files have been encrypted") ||
-                    line.contains("bitcoin") ||
-                    line.contains("ransom")) {
+                        line.contains("bitcoin") ||
+                        line.contains("ransom")) {
                     threats.add("RANSOMWARE");
                     return threats;
                 }
-                
+
                 // Check for keylogger indicators
                 if (line.contains("keylog") ||
-                    line.contains("GetAsyncKeyState") ||
-                    line.contains("keyboard_event")) {
+                        line.contains("GetAsyncKeyState") ||
+                        line.contains("keyboard_event")) {
                     threats.add("KEYLOGGER");
                     return threats;
                 }
@@ -338,14 +341,14 @@ public class SecurityServiceImpl implements SecurityService {
         } catch (Exception e) {
             logger.error("Error scanning file content: {}", e.getMessage());
         }
-        
+
         return threats;
     }
 
     private boolean isZipFile(File file) {
         return file.getName().toLowerCase().endsWith(".zip") ||
-               file.getName().toLowerCase().endsWith(".jar") ||
-               file.getName().toLowerCase().endsWith(".war");
+                file.getName().toLowerCase().endsWith(".jar") ||
+                file.getName().toLowerCase().endsWith(".war");
     }
 
     private boolean containsMaliciousZipContent(File file) {
@@ -365,7 +368,8 @@ public class SecurityServiceImpl implements SecurityService {
                 if (entrySize > 0) {
                     totalUncompressed += entrySize;
                     if (totalUncompressed > MAX_ZIP_UNCOMPRESSED_BYTES) {
-                        logger.warn("ZIP bomb suspected: uncompressed size exceeds {} bytes", MAX_ZIP_UNCOMPRESSED_BYTES);
+                        logger.warn("ZIP bomb suspected: uncompressed size exceeds {} bytes",
+                                MAX_ZIP_UNCOMPRESSED_BYTES);
                         return true;
                     }
                 }
@@ -393,8 +397,8 @@ public class SecurityServiceImpl implements SecurityService {
                     return true;
                 }
                 // Check for ELF header
-                if (content[0] == 0x7F && content[1] == 0x45 && 
-                    content[2] == 0x4C && content[3] == 0x46) {
+                if (content[0] == 0x7F && content[1] == 0x45 &&
+                        content[2] == 0x4C && content[3] == 0x46) {
                     return true;
                 }
             }
@@ -445,7 +449,7 @@ public class SecurityServiceImpl implements SecurityService {
 
     private byte[] readFilePrefix(File file, int maxBytes) throws IOException {
         try (InputStream is = new BufferedInputStream(Files.newInputStream(file.toPath()));
-             ByteArrayOutputStream out = new ByteArrayOutputStream(Math.min(maxBytes, 8 * 1024))) {
+                ByteArrayOutputStream out = new ByteArrayOutputStream(Math.min(maxBytes, 8 * 1024))) {
             byte[] buffer = new byte[8192];
             int remaining = maxBytes;
             int read;
@@ -486,37 +490,36 @@ public class SecurityServiceImpl implements SecurityService {
         AtomicInteger scannedFiles = new AtomicInteger(0);
         AtomicInteger skippedFiles = new AtomicInteger(0);
         long scanDeadline = System.currentTimeMillis() + MAX_SYSTEM_SCAN_DURATION_MS;
-        
+
         try {
             logger.info("Starting system scan...");
             File[] roots = File.listRoots();
             if (roots == null || roots.length == 0) {
                 throw new RuntimeException("No root directories found");
             }
-            
+
             logger.info("Found {} root directories to scan", roots.length);
-            
+
             // List of directories to skip
             Set<String> skipDirectories = new HashSet<>(Arrays.asList(
-                "$Recycle.Bin",
-                "System Volume Information",
-                "Windows",
-                "Program Files",
-                "Program Files (x86)",
-                "ProgramData",
-                "Recovery",
-                "Config.Msi",
-                "Documents and Settings"
-            ));
-            
+                    "$Recycle.Bin",
+                    "System Volume Information",
+                    "Windows",
+                    "Program Files",
+                    "Program Files (x86)",
+                    "ProgramData",
+                    "Recovery",
+                    "Config.Msi",
+                    "Documents and Settings"));
+
             for (File root : roots) {
                 if (stopSystemScan.get()) {
                     logger.info("System scan stopped by user");
                     break;
                 }
-                
+
                 logger.info("Scanning root directory: {}", root.getAbsolutePath());
-                
+
                 try {
                     scanDirectory(root.toPath(), skipDirectories, results, scannedFiles, skippedFiles, scanDeadline);
                 } catch (AccessDeniedException e) {
@@ -560,9 +563,9 @@ public class SecurityServiceImpl implements SecurityService {
                     }
                 }
             }
-            
-            logger.info("System scan completed. Scanned: {}, Skipped: {}, Total Results: {}", 
-                scannedFiles.get(), skippedFiles.get(), results.size());
+
+            logger.info("System scan completed. Scanned: {}, Skipped: {}, Total Results: {}",
+                    scannedFiles.get(), skippedFiles.get(), results.size());
             return results;
         } catch (Exception e) {
             logger.error("Critical error during system scan: {}", e.getMessage(), e);
@@ -573,15 +576,17 @@ public class SecurityServiceImpl implements SecurityService {
         }
     }
 
-    private void scanDirectory(Path directory, Set<String> skipDirectories, 
-                             List<ScanResult> results, 
-                             AtomicInteger scannedFiles,
-                             AtomicInteger skippedFiles,
-                             long scanDeadline) throws IOException {
+    private void scanDirectory(Path directory, Set<String> skipDirectories,
+            List<ScanResult> results,
+            AtomicInteger scannedFiles,
+            AtomicInteger skippedFiles,
+            long scanDeadline) throws IOException {
         try {
-            if (stopSystemScan.get() || System.currentTimeMillis() >= scanDeadline || results.size() >= MAX_SYSTEM_SCAN_RESULTS) {
+            if (stopSystemScan.get() || System.currentTimeMillis() >= scanDeadline
+                    || results.size() >= MAX_SYSTEM_SCAN_RESULTS) {
                 if (results.size() >= MAX_SYSTEM_SCAN_RESULTS) {
-                    logger.warn("System scan capped at {} results to avoid resource exhaustion", MAX_SYSTEM_SCAN_RESULTS);
+                    logger.warn("System scan capped at {} results to avoid resource exhaustion",
+                            MAX_SYSTEM_SCAN_RESULTS);
                 }
                 if (System.currentTimeMillis() >= scanDeadline) {
                     logger.warn("System scan stopped after exceeding {} ms", MAX_SYSTEM_SCAN_DURATION_MS);
@@ -591,8 +596,8 @@ public class SecurityServiceImpl implements SecurityService {
             }
 
             // Skip if directory should be excluded
-            if (skipDirectories.stream().anyMatch(dir -> 
-                directory.toString().toLowerCase().contains(dir.toLowerCase()))) {
+            if (skipDirectories.stream()
+                    .anyMatch(dir -> directory.toString().toLowerCase().contains(dir.toLowerCase()))) {
                 logger.debug("Skipping restricted directory: {}", directory);
                 skippedFiles.incrementAndGet();
                 return;
@@ -624,13 +629,14 @@ public class SecurityServiceImpl implements SecurityService {
                                 return;
                             }
                             scannedFiles.incrementAndGet();
-                            
+
                             if (result.isInfected()) {
-                                logger.warn("Infected file found: {} (Type: {})", 
-                                    path, result.getThreatType());
+                                logger.warn("Infected file found: {} (Type: {})",
+                                        path, result.getThreatType());
                             }
 
-                            if (System.currentTimeMillis() >= scanDeadline || results.size() >= MAX_SYSTEM_SCAN_RESULTS) {
+                            if (System.currentTimeMillis() >= scanDeadline
+                                    || results.size() >= MAX_SYSTEM_SCAN_RESULTS) {
                                 stopSystemScan.set(true);
                                 return;
                             }
@@ -691,7 +697,7 @@ public class SecurityServiceImpl implements SecurityService {
     @Override
     public boolean checkNetworkSafety() {
         return systemMonitorService.isRealtimeProtectionEnabled() &&
-               !systemMonitorService.getSystemStatus().containsValue(false);
+                !systemMonitorService.getSystemStatus().containsValue(false);
     }
 
     @Override
@@ -714,14 +720,14 @@ public class SecurityServiceImpl implements SecurityService {
     @Override
     public PagedResponse<ScanResult> getScanHistory(int page, int size) {
         Pageable pageable = PageRequest.of(page, normalizePageSize(size),
-            Sort.by(Sort.Direction.DESC, "scanDateTime"));
+                Sort.by(Sort.Direction.DESC, "scanDateTime"));
         return PagedResponse.from(scanResultRepository.findAllByOrderByScanDateTimeDesc(pageable));
     }
 
     @Override
     public PagedResponse<ScanResult> getInfectedFiles(int page, int size) {
         Pageable pageable = PageRequest.of(page, normalizePageSize(size),
-            Sort.by(Sort.Direction.DESC, "scanDateTime"));
+                Sort.by(Sort.Direction.DESC, "scanDateTime"));
         return PagedResponse.from(scanResultRepository.findByInfectedTrue(pageable));
     }
 
@@ -780,7 +786,7 @@ public class SecurityServiceImpl implements SecurityService {
     private ScanResult loadInfectedScanResult(Long scanResultId) {
         @SuppressWarnings("null")
         ScanResult result = scanResultRepository.findById(scanResultId)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Scan result not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Scan result not found"));
         if (!result.isInfected()) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only infected scan results can be modified");
         }
@@ -802,15 +808,15 @@ public class SecurityServiceImpl implements SecurityService {
     public boolean detectKeylogger() {
         // Check for known keylogger processes and patterns
         List<String> suspiciousProcesses = systemMonitorService.getSystemStatus()
-            .get("suspiciousProcesses") instanceof List<?> ?
-            (List<String>) systemMonitorService.getSystemStatus().get("suspiciousProcesses") :
-            new ArrayList<>();
+                .get("suspiciousProcesses") instanceof List<?>
+                        ? (List<String>) systemMonitorService.getSystemStatus().get("suspiciousProcesses")
+                        : new ArrayList<>();
 
         // Check if any suspicious process contains keylogger-related names
         for (String process : suspiciousProcesses) {
             if (process.toLowerCase().contains("keylog") ||
-                process.toLowerCase().contains("hook") ||
-                process.toLowerCase().contains("keyboard")) {
+                    process.toLowerCase().contains("hook") ||
+                    process.toLowerCase().contains("keyboard")) {
                 return true;
             }
         }
@@ -828,10 +834,9 @@ public class SecurityServiceImpl implements SecurityService {
             // Check file extension for common ransomware extensions
             String extension = getFileExtension(file).toLowerCase();
             Set<String> ransomwareExtensions = new HashSet<>(Arrays.asList(
-                ".encrypted", ".crypto", ".locked", ".crypted", ".crypt",
-                ".vault", ".petya", ".wannacry", ".wcry", ".wncry",
-                ".locky", ".zepto", ".thor", ".aesir", ".zzzzz"
-            ));
+                    ".encrypted", ".crypto", ".locked", ".crypted", ".crypt",
+                    ".vault", ".petya", ".wannacry", ".wcry", ".wncry",
+                    ".locky", ".zepto", ".thor", ".aesir", ".zzzzz"));
 
             if (ransomwareExtensions.contains(extension)) {
                 return true;
@@ -843,13 +848,13 @@ public class SecurityServiceImpl implements SecurityService {
                 while ((line = reader.readLine()) != null) {
                     // Check for common ransomware message patterns
                     if (line.toLowerCase().contains("your files have been encrypted") ||
-                        line.toLowerCase().contains("bitcoin") ||
-                        line.toLowerCase().contains("ransom") ||
-                        line.toLowerCase().contains("decrypt") ||
-                        line.toLowerCase().contains("payment") ||
-                        line.toLowerCase().contains("btc wallet") ||
-                        line.toLowerCase().contains("your important files") ||
-                        line.toLowerCase().matches(".*\\.(onion|tor).*")) {
+                            line.toLowerCase().contains("bitcoin") ||
+                            line.toLowerCase().contains("ransom") ||
+                            line.toLowerCase().contains("decrypt") ||
+                            line.toLowerCase().contains("payment") ||
+                            line.toLowerCase().contains("btc wallet") ||
+                            line.toLowerCase().contains("your important files") ||
+                            line.toLowerCase().matches(".*\\.(onion|tor).*")) {
                         return true;
                     }
                 }
@@ -879,8 +884,8 @@ public class SecurityServiceImpl implements SecurityService {
 
             // Check for common encryption headers
             return (header[0] == 0x00 && header[1] == 0x00 && header[2] == 0x00) || // Possible AES
-                   (header[0] == (byte)0x89 && header[1] == 0x50) || // Possible encrypted PNG
-                   (new String(header).startsWith("Salted__")); // OpenSSL encryption
+                    (header[0] == (byte) 0x89 && header[1] == 0x50) || // Possible encrypted PNG
+                    (new String(header).startsWith("Salted__")); // OpenSSL encryption
         } catch (Exception e) {
             return false;
         }
@@ -904,12 +909,12 @@ public class SecurityServiceImpl implements SecurityService {
         for (File f : files) {
             String name = f.getName().toLowerCase();
             if (name.contains("readme") && name.contains("txt") ||
-                name.contains("how_to_decrypt") ||
-                name.contains("recovery") ||
-                name.contains("help_decrypt")) {
+                    name.contains("how_to_decrypt") ||
+                    name.contains("recovery") ||
+                    name.contains("help_decrypt")) {
                 hasRansomNote = true;
             }
-            
+
             String ext = getFileExtension(f).toLowerCase();
             if (ext.length() > 4 && !ext.equals(".jpeg") && !ext.equals(".html")) {
                 encryptedCount++;
@@ -923,118 +928,17 @@ public class SecurityServiceImpl implements SecurityService {
     @Override
     public boolean detectTrojan(File file) {
         try {
-            // Known trojan file signatures
-            Set<String> trojanSignatures = new HashSet<>(Arrays.asList(
-                "backdoor", "rootkit", "trojan", "RAT",
-                "remote_access", "stealer", "inject",
-                "payload", "downloader"
-            ));
-
-            // Check file name for suspicious patterns
             String fileName = file.getName().toLowerCase();
-            for (String signature : trojanSignatures) {
-                if (fileName.contains(signature)) {
+            for (String sig : TROJAN_NAME_SIGNATURES) {
+                if (fileName.contains(sig))
                     return true;
-                }
             }
-
-            // Check file content for trojan patterns
-            try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    // Check for common trojan code patterns
-                    if (line.toLowerCase().contains("socket.connect") ||
-                        line.toLowerCase().contains("reverse_tcp") ||
-                        line.toLowerCase().contains("remote_shell") ||
-                        line.toLowerCase().contains("process.create") ||
-                        line.toLowerCase().contains("registry.write") ||
-                        line.toLowerCase().contains("wscript.shell") ||
-                        line.matches("(?i).*\\b(bind|reverse)\\s*shell\\b.*")) {
-                        return true;
-                    }
-                }
-            } catch (IOException e) {
-                // If we can't read as text, check binary patterns
-                return containsTrojanBinaryPatterns(file);
-            }
-
-            // Check for suspicious network behavior
-            return hasSuspiciousNetworkBehavior(file);
-
+            // Reuse the bounded streaming pattern scanner (already has 10 MB cap)
+            return containsSuspiciousPatterns(file);
         } catch (Exception e) {
             logger.error("Trojan detection failed for file: {}", file.getName(), e);
             return false;
         }
-    }
-
-    private boolean containsTrojanBinaryPatterns(File file) {
-        try (InputStream is = new FileInputStream(file)) {
-            byte[] buffer = new byte[4096];
-            int bytesRead;
-            
-            // Common binary patterns found in trojans
-            byte[][] patterns = {
-                // Common shellcode patterns
-                {(byte)0xFC, (byte)0xE8, (byte)0x82, (byte)0x00},
-                // Common reverse shell patterns
-                {(byte)0x68, (byte)0x7F, (byte)0x00, (byte)0x00, (byte)0x01},
-                // Common payload patterns
-                {(byte)0x4D, (byte)0x5A, (byte)0x90, (byte)0x00}
-            };
-
-            while ((bytesRead = is.read(buffer)) != -1) {
-                for (byte[] pattern : patterns) {
-                    if (containsPattern(buffer, bytesRead, pattern)) {
-                        return true;
-                    }
-                }
-            }
-        } catch (IOException e) {
-            return false;
-        }
-        return false;
-    }
-
-    private boolean containsPattern(byte[] buffer, int bufferLength, byte[] pattern) {
-        for (int i = 0; i <= bufferLength - pattern.length; i++) {
-            boolean found = true;
-            for (int j = 0; j < pattern.length; j++) {
-                if (buffer[i + j] != pattern[j]) {
-                    found = false;
-                    break;
-                }
-            }
-            if (found) return true;
-        }
-        return false;
-    }
-
-    private boolean hasSuspiciousNetworkBehavior(File file) {
-        // Check if the file has network-related strings
-        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
-            String line;
-            int networkPatternCount = 0;
-            
-            while ((line = reader.readLine()) != null) {
-                if (line.toLowerCase().contains("http://") ||
-                    line.toLowerCase().contains("https://") ||
-                    line.toLowerCase().contains("ftp://") ||
-                    line.matches(".*\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}.*") || // IP addresses
-                    line.contains("socket") ||
-                    line.contains("connect") ||
-                    line.contains("download")) {
-                    networkPatternCount++;
-                }
-                
-                // If we find multiple network-related patterns, consider it suspicious
-                if (networkPatternCount > 3) {
-                    return true;
-                }
-            }
-        } catch (IOException e) {
-            return false;
-        }
-        return false;
     }
 
     @Override
@@ -1092,11 +996,11 @@ public class SecurityServiceImpl implements SecurityService {
         try {
             // Check for common rootkit file locations
             String[] suspiciousLocations = {
-                "/proc/",
-                "/sys/",
-                "/boot/",
-                "C:\\Windows\\System32\\Drivers\\",
-                "C:\\Windows\\SysWOW64\\Drivers\\"
+                    "/proc/",
+                    "/sys/",
+                    "/boot/",
+                    "C:\\Windows\\System32\\Drivers\\",
+                    "C:\\Windows\\SysWOW64\\Drivers\\"
             };
 
             // Check if file is in a suspicious location
@@ -1120,12 +1024,12 @@ public class SecurityServiceImpl implements SecurityService {
 
             // Check for kernel manipulation patterns
             Pattern[] kernelPatterns = {
-                Pattern.compile("(?i).*kernel.*hook.*"),
-                Pattern.compile("(?i).*syscall.*table.*"),
-                Pattern.compile("(?i).*interrupt.*descriptor.*table.*"),
-                Pattern.compile("(?i).*idt.*hook.*"),
-                Pattern.compile("(?i).*process.*hiding.*"),
-                Pattern.compile("(?i).*driver.*load.*")
+                    Pattern.compile("(?i).*kernel.*hook.*"),
+                    Pattern.compile("(?i).*syscall.*table.*"),
+                    Pattern.compile("(?i).*interrupt.*descriptor.*table.*"),
+                    Pattern.compile("(?i).*idt.*hook.*"),
+                    Pattern.compile("(?i).*process.*hiding.*"),
+                    Pattern.compile("(?i).*driver.*load.*")
             };
 
             for (Pattern pattern : kernelPatterns) {
@@ -1158,18 +1062,19 @@ public class SecurityServiceImpl implements SecurityService {
 
     /**
      * Analyzes binary content for common rootkit patterns
+     * 
      * @param content The binary content to analyze
      * @return true if suspicious patterns are found
      */
     private boolean detectRootkitBinaryPatterns(byte[] content) {
         // Common rootkit binary signatures
         byte[][] signatures = {
-            // Example: Hidden process manipulation
-            new byte[] { 0x68, 0x69, 0x64, 0x65, 0x70, 0x72, 0x6F, 0x63 },
-            // Example: System call table modification
-            new byte[] { 0x73, 0x79, 0x73, 0x63, 0x61, 0x6C, 0x6C },
-            // Example: Kernel manipulation
-            new byte[] { 0x6B, 0x65, 0x72, 0x6E, 0x65, 0x6C, 0x33, 0x32 }
+                // Example: Hidden process manipulation
+                new byte[] { 0x68, 0x69, 0x64, 0x65, 0x70, 0x72, 0x6F, 0x63 },
+                // Example: System call table modification
+                new byte[] { 0x73, 0x79, 0x73, 0x63, 0x61, 0x6C, 0x6C },
+                // Example: Kernel manipulation
+                new byte[] { 0x6B, 0x65, 0x72, 0x6E, 0x65, 0x6C, 0x33, 0x32 }
         };
 
         // Check for each signature
@@ -1189,7 +1094,7 @@ public class SecurityServiceImpl implements SecurityService {
         if (content.length < sequence.length) {
             return false;
         }
-        
+
         for (int i = 0; i <= content.length - sequence.length; i++) {
             boolean found = true;
             for (int j = 0; j < sequence.length; j++) {
@@ -1225,7 +1130,7 @@ public class SecurityServiceImpl implements SecurityService {
             }
 
             Path dir = Paths.get(absolutePath);
-            
+
             // Validate directory
             if (!Files.exists(dir)) {
                 throw new IllegalArgumentException("Directory does not exist: " + absolutePath);
@@ -1243,9 +1148,9 @@ public class SecurityServiceImpl implements SecurityService {
             // First pass - count total files
             try (Stream<Path> paths = recursive ? Files.walk(dir) : Files.list(dir)) {
                 totalFiles.set((int) paths
-                    .filter(Files::isRegularFile)
-                    .filter(p -> !isFileExcluded(p))
-                    .count());
+                        .filter(Files::isRegularFile)
+                        .filter(p -> !isFileExcluded(p))
+                        .count());
             }
 
             logger.info("Found {} files to scan", totalFiles.get());
@@ -1253,48 +1158,48 @@ public class SecurityServiceImpl implements SecurityService {
             // Second pass - scan files
             try (Stream<Path> paths = recursive ? Files.walk(dir) : Files.list(dir)) {
                 paths.filter(Files::isRegularFile)
-                    .filter(p -> !isFileExcluded(p))
-                    .forEach(path -> {
-                        try {
-                            // Skip excluded files
-                            if (isFileExcluded(path)) {
-                                logSkippedFile(path, results, "File excluded by filter");
-                                return;
+                        .filter(p -> !isFileExcluded(p))
+                        .forEach(path -> {
+                            try {
+                                // Skip excluded files
+                                if (isFileExcluded(path)) {
+                                    logSkippedFile(path, results, "File excluded by filter");
+                                    return;
+                                }
+
+                                // Check file size
+                                if (Files.size(path) > 100 * 1024 * 1024) { // 100MB limit
+                                    logSkippedFile(path, results, "File too large (>100MB)");
+                                    return;
+                                }
+
+                                // Scan the file
+                                ScanResult result = scanFile(path.toFile());
+                                result.setScanType("DIRECTORY");
+                                results.add(result);
+
+                                // Update counters
+                                if (result.isInfected()) {
+                                    infectedFiles.incrementAndGet();
+                                }
+
+                                // Log progress
+                                int processed = processedFiles.incrementAndGet();
+                                if (processed % 10 == 0 || processed == totalFiles.get()) {
+                                    logProgress(processed, totalFiles.get(), infectedFiles.get());
+                                }
+
+                            } catch (AccessDeniedException e) {
+                                logger.debug("Access denied to file: {}", path);
+                                logErrorFile(path, results, SAFE_ERROR_MESSAGES.get("ACCESS_DENIED"));
+                            } catch (IOException e) {
+                                logger.error("IO error scanning file: {}", path, e);
+                                logErrorFile(path, results, SAFE_ERROR_MESSAGES.get("IO_ERROR"));
+                            } catch (Exception e) {
+                                logger.error("Unexpected error scanning file: {}", path, e);
+                                logErrorFile(path, results, SAFE_ERROR_MESSAGES.get("SCAN_ERROR"));
                             }
-
-                            // Check file size
-                            if (Files.size(path) > 100 * 1024 * 1024) { // 100MB limit
-                                logSkippedFile(path, results, "File too large (>100MB)");
-                                return;
-                            }
-
-                            // Scan the file
-                            ScanResult result = scanFile(path.toFile());
-                            result.setScanType("DIRECTORY");
-                            results.add(result);
-
-                            // Update counters
-                            if (result.isInfected()) {
-                                infectedFiles.incrementAndGet();
-                            }
-
-                            // Log progress
-                            int processed = processedFiles.incrementAndGet();
-                            if (processed % 10 == 0 || processed == totalFiles.get()) {
-                                logProgress(processed, totalFiles.get(), infectedFiles.get());
-                            }
-
-                        } catch (AccessDeniedException e) {
-                            logger.debug("Access denied to file: {}", path);
-                            logErrorFile(path, results, SAFE_ERROR_MESSAGES.get("ACCESS_DENIED"));
-                        } catch (IOException e) {
-                            logger.error("IO error scanning file: {}", path, e);
-                            logErrorFile(path, results, SAFE_ERROR_MESSAGES.get("IO_ERROR"));
-                        } catch (Exception e) {
-                            logger.error("Unexpected error scanning file: {}", path, e);
-                            logErrorFile(path, results, SAFE_ERROR_MESSAGES.get("SCAN_ERROR"));
-                        }
-                    });
+                        });
             }
 
             // Log final summary
@@ -1329,27 +1234,27 @@ public class SecurityServiceImpl implements SecurityService {
     private boolean isFileExcluded(Path path) {
         try {
             String fileName = path.getFileName().toString().toLowerCase();
-            
+
             // Skip hidden files
             if (Files.isHidden(path) || fileName.startsWith(".")) {
                 return true;
             }
 
             // Skip system files
-            if (fileName.equals("thumbs.db") || 
-                fileName.equals("desktop.ini") ||
-                fileName.equals(".ds_store")) {
+            if (fileName.equals("thumbs.db") ||
+                    fileName.equals("desktop.ini") ||
+                    fileName.equals(".ds_store")) {
                 return true;
             }
 
             // Skip certain directories
             String pathStr = path.toString().toLowerCase();
             return pathStr.contains("\\windows\\") ||
-                   pathStr.contains("\\program files\\") ||
-                   pathStr.contains("\\program files (x86)\\") ||
-                   pathStr.contains("\\appdata\\") ||
-                   pathStr.contains("/proc/") ||
-                   pathStr.contains("/sys/");
+                    pathStr.contains("\\program files\\") ||
+                    pathStr.contains("\\program files (x86)\\") ||
+                    pathStr.contains("\\appdata\\") ||
+                    pathStr.contains("/proc/") ||
+                    pathStr.contains("/sys/");
 
         } catch (IOException e) {
             logger.error("Error checking if file is excluded: {}", path, e);
@@ -1370,7 +1275,7 @@ public class SecurityServiceImpl implements SecurityService {
     }
 
     private void logErrorFile(Path path, List<ScanResult> results, String safeMessage) {
-        logger.error("Error scanning file: {}", path);  // detail in caller's log
+        logger.error("Error scanning file: {}", path); // detail in caller's log
         ScanResult errorResult = new ScanResult();
         errorResult.setFilePath(path.getFileName().toString());
         errorResult.setInfected(false);
@@ -1383,8 +1288,8 @@ public class SecurityServiceImpl implements SecurityService {
 
     private void logProgress(int processed, int total, int infected) {
         double percentage = (processed * 100.0) / total;
-        logger.info("Progress: {}% ({}/{} files scanned, {} infected)", 
-            String.format("%.2f", percentage), processed, total, infected);
+        logger.info("Progress: {}% ({}/{} files scanned, {} infected)",
+                String.format("%.2f", percentage), processed, total, infected);
     }
 
     private void logScanSummary(String directory, int totalFiles, int infectedFiles, int resultsSize) {
@@ -1394,7 +1299,8 @@ public class SecurityServiceImpl implements SecurityService {
         logger.info("Total results (including skipped/errors): {}", resultsSize);
     }
 
-    private ScanResult createErrorResult(String path, String safeMessage) {  // Step 7: callers pass SAFE_ERROR_MESSAGES.get(...) only
+    private ScanResult createErrorResult(String path, String safeMessage) { // Step 7: callers pass
+                                                                            // SAFE_ERROR_MESSAGES.get(...) only
         ScanResult result = new ScanResult();
         result.setFilePath(path);
         result.setInfected(false);
@@ -1415,4 +1321,4 @@ public class SecurityServiceImpl implements SecurityService {
             logger.debug("Saved batch of {} results to database", batch.size());
         }
     }
-} 
+}
