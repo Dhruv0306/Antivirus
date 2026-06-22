@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Typography,
@@ -101,6 +101,10 @@ function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  // F-05: Ref to expose the effect's fetchStatus to handleRefresh
+  const triggerRefreshRef = useRef(null);
+
+  // F-04: Effect 1 — poll system status every 5 seconds (no pagination deps)
   useEffect(() => {
     const controller = new AbortController();
 
@@ -121,6 +125,8 @@ function Dashboard() {
       }
     };
 
+    triggerRefreshRef.current = fetchStatus; // Expose via ref
+
     fetchStatus(); // initial fetch
     const statusInterval = setInterval(fetchStatus, 5000);
 
@@ -128,25 +134,7 @@ function Dashboard() {
       controller.abort();       // cancel any in-flight request
       clearInterval(statusInterval); // stop scheduling new ones
     };
-  }, [historyPage, historyRowsPerPage]);
-
-  const fetchSystemStatus = async () => {
-    try {
-      const response = await antivirusApi.get('/system/status');
-      setSystemStatus(response.data);
-      setError(null);
-    } catch (err) {
-      // M-08: Ignore aborted requests
-      if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') {
-        return;
-      }
-      // M-10: Use safe user-facing message instead of raw server error
-      setError(toUserMessage(err));
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+  }, []); // ← no pagination deps here
 
   const fetchScanHistory = async () => {
     try {
@@ -156,10 +144,16 @@ function Dashboard() {
       setScanHistory(response.data.content || []);
       setHistoryTotal(response.data.totalElements || 0);
     } catch (err) {
-      // M-10: Use safe user-facing message instead of raw server error
-      setError(toUserMessage(err));
+      if (err.name !== 'CanceledError' && err.code !== 'ERR_CANCELED') {
+        setError(toUserMessage(err));
+      }
     }
   };
+
+  // F-04: Effect 2 — reload scan history when page or page size changes
+  useEffect(() => {
+    fetchScanHistory();
+  }, [historyPage, historyRowsPerPage]); // ← pagination deps belong here
 
   const handleHistoryPageChange = (_event, newPage) => {
     setHistoryPage(newPage);
@@ -170,9 +164,10 @@ function Dashboard() {
     setHistoryPage(0);
   };
 
+  // F-05: handleRefresh uses the ref — no duplicate function needed
   const handleRefresh = () => {
     setRefreshing(true);
-    fetchSystemStatus();
+    triggerRefreshRef.current?.();
     fetchScanHistory();
   };
 

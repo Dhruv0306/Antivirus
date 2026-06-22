@@ -19,6 +19,7 @@ target/
 # Logs and databases
 *.log
 *.sql
+!V1__initial_schema.sql
 *.sqlite
 *.db
 logs/

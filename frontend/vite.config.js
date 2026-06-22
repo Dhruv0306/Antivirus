@@ -1,7 +1,8 @@
 import { defineConfig, transformWithEsbuild } from 'vite';
 import react from '@vitejs/plugin-react';
 
-export default defineConfig({
+// F-06: Use the callback form so mode is resolved by Vite from CLI flags
+export default defineConfig(({ mode }) => ({
   plugins: [
     {
       name: 'treat-js-files-as-jsx',
@@ -18,7 +19,8 @@ export default defineConfig({
     react(),
   ],
   esbuild: {
-    drop: process.env.NODE_ENV === 'production' ? ['console', 'debugger'] : [],
+    // mode is 'production' only when --mode production is used (vite build default)
+    drop: mode === 'production' ? ['console', 'debugger'] : [],
   },
   server: {
     port: 5000,
@@ -34,4 +36,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));
