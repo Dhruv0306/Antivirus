@@ -110,6 +110,8 @@ public class SecurityServiceImpl implements SecurityService {
             Pattern.compile("(?i)\\bbitcoin\\b.{0,80}(?:wallet|payment|transfer)"),
             Pattern.compile("(?i)\\bransom\\b.{0,80}(?:payment|demand|note)"));
 
+    private final ThreadLocal<Map<String, File[]>> dirListingCache = ThreadLocal.withInitial(HashMap::new);
+
     private static final int MAX_SYSTEM_SCAN_RESULTS = 2_000;
     private static final long MAX_SYSTEM_SCAN_DURATION_MS = 5 * 60 * 1000L;
     private static final long MAX_PATTERN_SCAN_BYTES = 10L * 1024 * 1024L;
@@ -901,29 +903,27 @@ public class SecurityServiceImpl implements SecurityService {
             return false;
         }
 
-        File[] files = parentDir.listFiles();
-        if (files == null) {
+        // Use cached listing — ONE listFiles() call per directory, not per file.
+        File[] files = dirListingCache.get()
+                .computeIfAbsent(parentDir.getAbsolutePath(), k -> parentDir.listFiles());
+        if (files == null)
             return false;
-        }
 
         int encryptedCount = 0;
         boolean hasRansomNote = false;
-
         for (File f : files) {
             String name = f.getName().toLowerCase();
-            if (name.contains("readme") && name.contains("txt") ||
+            if ((name.contains("readme") && name.contains("txt")) ||
                     name.contains("how_to_decrypt") ||
                     name.contains("recovery") ||
                     name.contains("help_decrypt")) {
                 hasRansomNote = true;
             }
-
             String ext = getFileExtension(f).toLowerCase();
             if (ext.length() > 4 && !ext.equals(".jpeg") && !ext.equals(".html")) {
                 encryptedCount++;
             }
         }
-
         return hasRansomNote && encryptedCount > 5;
     }
 
@@ -1086,6 +1086,7 @@ public class SecurityServiceImpl implements SecurityService {
         AtomicInteger processedFiles = new AtomicInteger(0);
         AtomicInteger infectedFiles = new AtomicInteger(0);
         String absolutePath;
+        dirListingCache.get().clear();
 
         try {
             if (directoryPath.startsWith("/") || directoryPath.matches("^[A-Za-z]:\\\\.*")) {
@@ -1109,13 +1110,6 @@ public class SecurityServiceImpl implements SecurityService {
 
             logger.info("Starting directory scan: {}", absolutePath);
             logger.info("Recursive mode: {}", recursive);
-
-            try (Stream<Path> paths = recursive ? Files.walk(dir) : Files.list(dir)) {
-                totalFiles.set((int) paths
-                        .filter(Files::isRegularFile)
-                        .filter(p -> !isFileExcluded(p))
-                        .count());
-            }
 
             logger.info("Found {} files to scan", totalFiles.get());
 
@@ -1143,8 +1137,8 @@ public class SecurityServiceImpl implements SecurityService {
                                 }
 
                                 int processed = processedFiles.incrementAndGet();
-                                if (processed % 10 == 0 || processed == totalFiles.get()) {
-                                    logProgress(processed, totalFiles.get(), infectedFiles.get());
+                                if (processed % 50 == 0 || processed == totalFiles.get()) {
+                                    logger.info("Scanned {} files, {} infected so far", processed, infectedFiles.get());
                                 }
 
                             } catch (AccessDeniedException e) {
@@ -1182,6 +1176,8 @@ public class SecurityServiceImpl implements SecurityService {
             results.add(errorResult);
             saveScanResult(errorResult);
             return results;
+        } finally {
+            dirListingCache.remove();
         }
     }
 
@@ -1235,12 +1231,6 @@ public class SecurityServiceImpl implements SecurityService {
         errorResult.setScanType("DIRECTORY");
         errorResult.setActionTaken("NONE");
         results.add(errorResult);
-    }
-
-    private void logProgress(int processed, int total, int infected) {
-        double percentage = (processed * 100.0) / total;
-        logger.info("Progress: {}% ({}/{} files scanned, {} infected)",
-                String.format("%.2f", percentage), processed, total, infected);
     }
 
     private void logScanSummary(String directory, int totalFiles, int infectedFiles, int resultsSize) {
