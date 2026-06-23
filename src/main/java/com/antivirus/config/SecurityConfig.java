@@ -30,6 +30,7 @@ import org.springframework.core.annotation.Order;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 
+import jakarta.annotation.PostConstruct;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -61,6 +62,16 @@ public class SecurityConfig {
             .maximumSize(50_000)
             .expireAfterWrite(2, TimeUnit.MINUTES)
             .build();
+
+    @PostConstruct
+    public void validateConfig() {
+        if (allowedOrigins == null || allowedOrigins.isBlank()
+                || allowedOrigins.contains("localhost")) {
+            throw new IllegalStateException(
+                    "CORS_ALLOWED_ORIGINS must be set to a real domain in production " +
+                            "(e.g. https://app.example.com). Do not use localhost.");
+        }
+    }
 
     @Bean
     @Order(2)
