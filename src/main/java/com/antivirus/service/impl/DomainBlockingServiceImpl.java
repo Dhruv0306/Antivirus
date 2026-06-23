@@ -81,7 +81,7 @@ public class DomainBlockingServiceImpl implements DomainBlockingService {
             try {
                 updateHostsFile();
             } catch (IOException e) {
-                logger.error("Failed to update hosts file for domain: " + domain, e);
+                logger.error("Failed to update hosts file for domain: {}", domain, e);
                 // Don't throw exception, just log the error
                 // The domain is still blocked in the database
             }
@@ -102,7 +102,7 @@ public class DomainBlockingServiceImpl implements DomainBlockingService {
                 try {
                     updateHostsFile();
                 } catch (IOException e) {
-                    logger.error("Failed to update hosts file while unblocking domain: " + normalizedDomain, e);
+                    logger.error("Failed to update hosts file while unblocking domain: {}", normalizedDomain, e);
                     // Don't throw exception, just log the error
                 }
             } else {

@@ -981,7 +981,7 @@ public class SecurityServiceImpl implements SecurityService {
 
             return false;
         } catch (Exception e) {
-            logger.error("Error during malware detection for file: " + file.getName(), e);
+            logger.error("Error during malware detection for file: {}", file.getName(), e);
             return false;
         }
     }
@@ -1027,7 +1027,7 @@ public class SecurityServiceImpl implements SecurityService {
 
             for (Pattern pattern : kernelPatterns) {
                 if (pattern.matcher(contentStr).find()) {
-                    logger.warn("Potential rootkit detected: Kernel manipulation pattern found in " + file.getName());
+                    logger.warn("Potential rootkit detected: Kernel manipulation pattern found in {}", file.getName());
                     return true;
                 }
             }
@@ -1038,7 +1038,7 @@ public class SecurityServiceImpl implements SecurityService {
             return false;
 
         } catch (IOException e) {
-            logger.error("Error during rootkit detection for file: " + file.getName(), e);
+            logger.error("Error during rootkit detection for file: {}", file.getName(), e);
             return false;
         }
     }
