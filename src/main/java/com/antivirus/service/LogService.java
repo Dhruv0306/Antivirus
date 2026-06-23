@@ -9,7 +9,6 @@ import java.io.*;
 import java.util.*;
 import java.nio.file.*;
 import java.nio.charset.StandardCharsets;
-import java.util.Base64;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,8 +24,8 @@ public class LogService {
 
     public LogService() {
         this.objectMapper = new ObjectMapper()
-            .registerModule(new JavaTimeModule())
-            .configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
+                .registerModule(new JavaTimeModule())
+                .configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
     }
 
     public void logScanResult(ScanResult result) {
@@ -45,27 +44,26 @@ public class LogService {
 
             // Create full path for log file
             Path logPath = logsDir.toPath().resolve(LOG_FILE);
-            
+
             // Convert ScanResult to JSON and encode
             String jsonResult = objectMapper.writeValueAsString(result);
             String encodedResult = Base64.getEncoder().encodeToString(jsonResult.getBytes(StandardCharsets.UTF_8));
-            
+
             // Append to log file with timestamp
             String logEntry = System.currentTimeMillis() + ":" + encodedResult + "\n";
-            
+
             // Ensure parent directories exist
             Files.createDirectories(logPath.getParent());
             rotateLogIfNeeded(logPath, logEntry.getBytes(StandardCharsets.UTF_8).length);
 
             // Write with all necessary options
             Files.write(
-                logPath,
-                logEntry.getBytes(StandardCharsets.UTF_8),
-                StandardOpenOption.CREATE,
-                StandardOpenOption.APPEND,
-                StandardOpenOption.WRITE
-            );
-            
+                    logPath,
+                    logEntry.getBytes(StandardCharsets.UTF_8),
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.APPEND,
+                    StandardOpenOption.WRITE);
+
             logger.debug("Successfully logged scan result for file: {}", result.getFileName());
         } catch (IOException e) {
             logger.error("Error writing to scan history log: {}", e.getMessage(), e);
@@ -81,12 +79,12 @@ public class LogService {
             }
 
             return lines.stream()
-                .filter(line -> line != null && !line.trim().isEmpty())
-                .sorted(Comparator.comparing(line -> Long.parseLong(line.split(":")[0]), Comparator.reverseOrder()))
-                .limit(5)
-                .map(this::decodeScanResult)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toList());
+                    .filter(line -> line != null && !line.trim().isEmpty())
+                    .sorted(Comparator.comparing(line -> Long.parseLong(line.split(":")[0]), Comparator.reverseOrder()))
+                    .limit(5)
+                    .map(this::decodeScanResult)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
         } catch (IOException e) {
             logger.error("Error reading scan history log: {}", e.getMessage(), e);
             return new ArrayList<>();
@@ -119,22 +117,19 @@ public class LogService {
 
     private List<String> readAllLogLines() throws IOException {
         List<String> lines = new ArrayList<>();
-        List<Path> logFiles = new ArrayList<>();
         Path currentLog = Paths.get(LOG_DIRECTORY).resolve(LOG_FILE);
 
-        for (int i = 1; i <= MAX_LOG_BACKUPS; i++) {
-            Path backup = currentLog.resolveSibling(LOG_FILE + "." + i);
-            if (Files.exists(backup)) {
-                logFiles.add(backup);
-            }
-        }
-
+        // Read current log only — if it has fewer than 5 entries, that is fine.
         if (Files.exists(currentLog)) {
-            logFiles.add(currentLog);
+            lines = Files.readAllLines(currentLog, StandardCharsets.UTF_8);
         }
 
-        for (Path logFile : logFiles) {
-            lines.addAll(Files.readAllLines(logFile));
+        // Only fall back to the most-recent backup if current log is empty.
+        if (lines.isEmpty()) {
+            Path backup = currentLog.resolveSibling(LOG_FILE + ".1");
+            if (Files.exists(backup)) {
+                lines = Files.readAllLines(backup, StandardCharsets.UTF_8);
+            }
         }
 
         return lines;
