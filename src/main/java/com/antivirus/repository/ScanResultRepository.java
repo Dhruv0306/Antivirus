@@ -10,9 +10,24 @@ import java.util.List;
 
 @Repository
 public interface ScanResultRepository extends JpaRepository<ScanResult, Long> {
+
     List<ScanResult> findByInfectedTrue();
+
     Page<ScanResult> findByInfectedTrue(Pageable pageable);
+
     Page<ScanResult> findAllByOrderByScanDateTimeDesc(Pageable pageable);
+
     List<ScanResult> findByScanType(String scanType);
+
     List<ScanResult> findByThreatType(String threatType);
-} 
+
+    /**
+     * User-scoped history — returns only results owned by the given username,
+     * most recent first. Used by GET /api/antivirus/history/me.
+     *
+     * ownerUsername is stored in lowercase (see
+     * SecurityServiceImpl.resolveCurrentUsername),
+     * so callers must normalize to lowercase before querying.
+     */
+    Page<ScanResult> findByOwnerUsernameOrderByScanDateTimeDesc(String ownerUsername, Pageable pageable);
+}

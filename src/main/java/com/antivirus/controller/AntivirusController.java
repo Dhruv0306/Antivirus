@@ -2,6 +2,7 @@ package com.antivirus.controller;
 
 import com.antivirus.dto.PagedResponse;
 import com.antivirus.model.ScanResult;
+import com.antivirus.repository.ScanResultRepository;
 import com.antivirus.service.SecurityService;
 import com.antivirus.service.SystemMonitorService;
 import com.antivirus.service.LogService;
@@ -12,6 +13,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,6 +29,7 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.security.Principal;
 
 @RestController
 @RequestMapping("/api/antivirus")
@@ -55,6 +58,9 @@ public class AntivirusController {
 
     @Autowired
     private SystemMonitorService systemMonitorService;
+
+    @Autowired
+    private ScanResultRepository scanResultRepository;
 
     @SuppressWarnings("unused")
     @Autowired
@@ -168,11 +174,38 @@ public class AntivirusController {
         return ResponseEntity.ok().build();
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @GetMapping("/history")
     public ResponseEntity<PagedResponse<ScanResult>> getScanHistory(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
         return ResponseEntity.ok(securityService.getScanHistory(page, size));
+    }
+
+    @GetMapping("/history/me")
+    public ResponseEntity<PagedResponse<ScanResult>> getMyHistory(
+            Principal principal,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+
+        if (principal == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        // ownerUsername is stored in lowercase by
+        // SecurityServiceImpl.resolveCurrentUsername()
+        String owner = principal.getName().trim().toLowerCase(java.util.Locale.ROOT);
+
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(
+                page, size,
+                org.springframework.data.domain.Sort.by("scanDateTime").descending());
+
+        org.springframework.data.domain.Page<ScanResult> resultPage = scanResultRepository
+                .findByOwnerUsernameOrderByScanDateTimeDesc(owner, pageable);
+
+        PagedResponse<ScanResult> response = PagedResponse.from(resultPage);
+
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/infected")
