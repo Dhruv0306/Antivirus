@@ -34,6 +34,7 @@ import { antivirusApi } from '../api/client';
 import { styled } from '@mui/material/styles';
 import { log, logError } from '../utils/logger';
 import { toUserMessage } from '../utils/errors';
+import { useAuth } from '../context/AuthContext';
 
 // Styled components using our theme
 const StyledCard = styled(Card)(({ theme }) => ({
@@ -103,15 +104,19 @@ function Dashboard() {
 
   // F-05: Ref to expose the effect's fetchStatus to handleRefresh
   const triggerRefreshRef = useRef(null);
+  const { isAdmin } = useAuth();
 
   // F-04: Effect 1 — poll system status every 5 seconds (no pagination deps)
   useEffect(() => {
+    if (!isAdmin) {
+      setLoading(false);
+      return;
+    }
     const controller = new AbortController();
-
     const fetchStatus = async () => {
       try {
         const response = await antivirusApi.get('/system/status', {
-          signal: controller.signal
+          signal: controller.signal,
         });
         setSystemStatus(response.data);
         setError(null);
@@ -124,21 +129,19 @@ function Dashboard() {
         setRefreshing(false);
       }
     };
-
-    triggerRefreshRef.current = fetchStatus; // Expose via ref
-
-    fetchStatus(); // initial fetch
+    triggerRefreshRef.current = fetchStatus;
+    fetchStatus();
     const statusInterval = setInterval(fetchStatus, 5000);
-
     return () => {
-      controller.abort();       // cancel any in-flight request
-      clearInterval(statusInterval); // stop scheduling new ones
+      controller.abort();
+      clearInterval(statusInterval);
     };
-  }, []); // ← no pagination deps here
+  }, [isAdmin])
 
   const fetchScanHistory = async () => {
     try {
-      const response = await antivirusApi.get('/history', {
+      const endpoint = isAdmin ? '/history' : '/history/me';
+      const response = await antivirusApi.get(endpoint, {
         params: { page: historyPage, size: historyRowsPerPage },
       });
       setScanHistory(response.data.content || []);
@@ -249,121 +252,40 @@ function Dashboard() {
       ) : (
         <Grid container spacing={3}>
           {/* System Status Card */}
-          <Grid item xs={12} md={6}>
-            <Fade in timeout={500}>
-              <StyledCard>
-                <CardContent>
-                  <Box sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    mb: 2
-                  }}>
-                    <SecurityIcon sx={{
-                      fontSize: 30,
-                      mr: 1,
-                      color: 'var(--primary-main)'
-                    }} />
-                    <Typography
-                      variant="h6"
-                      component="div"
-                      sx={{
-                        fontWeight: 600,
-                        color: 'var(--text-primary)'
-                      }}
-                    >
-                      System Status
-                    </Typography>
-                  </Box>
-                  <List>
-                    <ListItem>
-                      <ListItemIcon>
-                        <SecurityIcon sx={{
-                          color: systemStatus.systemProtected
-                            ? 'var(--success-main)'
-                            : 'var(--error-main)'
-                        }} />
-                      </ListItemIcon>
-                      <ListItemText
-                        primary={
-                          <Typography component="div" sx={{
-                            fontWeight: 500,
-                            color: 'var(--text-primary)'
-                          }}>
-                            System Protection
-                          </Typography>
-                        }
-                        secondary={
-                          <Typography component="div" sx={{
-                            color: 'var(--text-secondary)'
-                          }}>
-                            {systemStatus.systemProtected ? "Protected" : "At Risk"}
-                          </Typography>
-                        }
-                      />
-                    </ListItem>
-                    <ListItem>
-                      <ListItemIcon>
-                        <CheckCircleIcon sx={{
-                          color: systemStatus.realtimeProtection
-                            ? 'var(--success-main)'
-                            : 'var(--error-main)'
-                        }} />
-                      </ListItemIcon>
-                      <ListItemText
-                        primary={
-                          <Typography component="div" sx={{
-                            fontWeight: 500,
-                            color: 'var(--text-primary)'
-                          }}>
-                            Realtime Protection
-                          </Typography>
-                        }
-                        secondary={
-                          <Typography component="div" sx={{
-                            color: 'var(--text-secondary)'
-                          }}>
-                            {systemStatus.realtimeProtection ? "Active" : "Disabled"}
-                          </Typography>
-                        }
-                      />
-                    </ListItem>
-                  </List>
-                </CardContent>
-              </StyledCard>
-            </Fade>
-          </Grid>
-
-          {/* Storage Status Card */}
-          <Grid item xs={12} md={6}>
-            <Fade in timeout={500} style={{ transitionDelay: '100ms' }}>
-              <StyledCard>
-                <CardContent>
-                  <Box sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    mb: 2
-                  }}>
-                    <StorageIcon sx={{
-                      fontSize: 30,
-                      mr: 1,
-                      color: 'var(--primary-main)'
-                    }} />
-                    <Typography
-                      variant="h6"
-                      component="div"
-                      sx={{
-                        fontWeight: 600,
-                        color: 'var(--text-primary)'
-                      }}
-                    >
-                      Storage Status
-                    </Typography>
-                  </Box>
-                  <List>
-                    {systemStatus.diskUsage && systemStatus.diskUsage.map((disk, index) => (
-                      <ListItem key={index}>
+          {isAdmin && (
+            <Grid item xs={12} md={6}>
+              <Fade in timeout={500}>
+                <StyledCard>
+                  <CardContent>
+                    <Box sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      mb: 2
+                    }}>
+                      <SecurityIcon sx={{
+                        fontSize: 30,
+                        mr: 1,
+                        color: 'var(--primary-main)'
+                      }} />
+                      <Typography
+                        variant="h6"
+                        component="div"
+                        sx={{
+                          fontWeight: 600,
+                          color: 'var(--text-primary)'
+                        }}
+                      >
+                        System Status
+                      </Typography>
+                    </Box>
+                    <List>
+                      <ListItem>
                         <ListItemIcon>
-                          <StorageIcon sx={{ color: 'var(--primary-main)' }} />
+                          <SecurityIcon sx={{
+                            color: systemStatus.systemProtected
+                              ? 'var(--success-main)'
+                              : 'var(--error-main)'
+                          }} />
                         </ListItemIcon>
                         <ListItemText
                           primary={
@@ -371,43 +293,128 @@ function Dashboard() {
                               fontWeight: 500,
                               color: 'var(--text-primary)'
                             }}>
-                              {disk.name || disk.drive}
+                              System Protection
                             </Typography>
                           }
                           secondary={
-                            <Typography
-                              component="div"
-                              sx={{
-                                color: 'var(--text-secondary)',
-                                mt: 1
-                              }}
-                            >
-                              <Box
-                                component="span"
-                                sx={{
-                                  display: 'flex',
-                                  justifyContent: 'space-between',
-                                  mb: 0.5,
-                                  color: 'var(--text-secondary)'
-                                }}
-                              >
-                                <span>{formatBytes(disk.used)} used of {formatBytes(disk.total)}</span>
-                                <span>{Math.round((disk.used / disk.total) * 100)}%</span>
-                              </Box>
-                              <StyledProgress
-                                variant="determinate"
-                                value={(disk.used / disk.total) * 100}
-                              />
+                            <Typography component="div" sx={{
+                              color: 'var(--text-secondary)'
+                            }}>
+                              {systemStatus.systemProtected ? "Protected" : "At Risk"}
                             </Typography>
                           }
                         />
                       </ListItem>
-                    ))}
-                  </List>
-                </CardContent>
-              </StyledCard>
-            </Fade>
-          </Grid>
+                      <ListItem>
+                        <ListItemIcon>
+                          <CheckCircleIcon sx={{
+                            color: systemStatus.realtimeProtection
+                              ? 'var(--success-main)'
+                              : 'var(--error-main)'
+                          }} />
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={
+                            <Typography component="div" sx={{
+                              fontWeight: 500,
+                              color: 'var(--text-primary)'
+                            }}>
+                              Realtime Protection
+                            </Typography>
+                          }
+                          secondary={
+                            <Typography component="div" sx={{
+                              color: 'var(--text-secondary)'
+                            }}>
+                              {systemStatus.realtimeProtection ? "Active" : "Disabled"}
+                            </Typography>
+                          }
+                        />
+                      </ListItem>
+                    </List>
+                  </CardContent>
+                </StyledCard>
+              </Fade>
+            </Grid>
+          )}
+
+          {/* Storage Status Card */}
+          {isAdmin && (
+            <Grid item xs={12} md={6}>
+              <Fade in timeout={500} style={{ transitionDelay: '100ms' }}>
+                <StyledCard>
+                  <CardContent>
+                    <Box sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      mb: 2
+                    }}>
+                      <StorageIcon sx={{
+                        fontSize: 30,
+                        mr: 1,
+                        color: 'var(--primary-main)'
+                      }} />
+                      <Typography
+                        variant="h6"
+                        component="div"
+                        sx={{
+                          fontWeight: 600,
+                          color: 'var(--text-primary)'
+                        }}
+                      >
+                        Storage Status
+                      </Typography>
+                    </Box>
+                    <List>
+                      {systemStatus.diskUsage && systemStatus.diskUsage.map((disk, index) => (
+                        <ListItem key={index}>
+                          <ListItemIcon>
+                            <StorageIcon sx={{ color: 'var(--primary-main)' }} />
+                          </ListItemIcon>
+                          <ListItemText
+                            primary={
+                              <Typography component="div" sx={{
+                                fontWeight: 500,
+                                color: 'var(--text-primary)'
+                              }}>
+                                {disk.name || disk.drive}
+                              </Typography>
+                            }
+                            secondary={
+                              <Typography
+                                component="div"
+                                sx={{
+                                  color: 'var(--text-secondary)',
+                                  mt: 1
+                                }}
+                              >
+                                <Box
+                                  component="span"
+                                  sx={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    mb: 0.5,
+                                    color: 'var(--text-secondary)'
+                                  }}
+                                >
+                                  <span>{formatBytes(disk.used)} used of {formatBytes(disk.total)}</span>
+                                  <span>{Math.round((disk.used / disk.total) * 100)}%</span>
+                                </Box>
+                                <StyledProgress
+                                  variant="determinate"
+                                  value={(disk.used / disk.total) * 100}
+                                />
+                              </Typography>
+                            }
+                          />
+                        </ListItem>
+                      ))}
+                    </List>
+                  </CardContent>
+                </StyledCard>
+              </Fade>
+            </Grid>
+          )}
 
           {/* Scan History Card */}
           <Grid item xs={12}>
@@ -424,7 +431,7 @@ function Dashboard() {
                         color: 'var(--text-primary)'
                       }}
                     >
-                      Recent Scan History
+                      {isAdmin ? 'Scan history (all users)' : 'Your scan history'}
                     </Typography>
                   </Box>
                   <TableContainer>
