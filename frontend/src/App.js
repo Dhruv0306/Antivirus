@@ -6,8 +6,9 @@ import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
 import { getThemeColors } from './theme/colors';
 import { AuthProvider } from './context/AuthContext';
-import ProtectedRoute from './components/ProtectedRoute';
+import ProtectedRoute, { AdminRoute } from './components/ProtectedRoute';
 import Login from './components/Login';
+import Register from './components/Register';
 import Dashboard from './components/Dashboard';
 import FileScan from './components/FileScan';
 import DirectoryScan from './components/DirectoryScan';
@@ -36,12 +37,15 @@ function AppLayout() {
         >
           <Container maxWidth="xl" sx={{ mt: 0, mb: 0 }}>
             <Routes>
+              {/* Available to all authenticated users */}
               <Route path="/" element={<Dashboard />} />
               <Route path="/file-scan" element={<FileScan />} />
               <Route path="/directory-scan" element={<DirectoryScan />} />
-              <Route path="/system-scan" element={<SystemScan />} />
-              <Route path="/network-security" element={<NetworkScan />} />
-              <Route path="/auto-scan-guide" element={<AutoScanGuide />} />
+
+              {/* Admin only — non-admin users are redirected to / by AdminRoute */}
+              <Route path="/system-scan" element={<AdminRoute><SystemScan /></AdminRoute>} />
+              <Route path="/network-security" element={<AdminRoute><NetworkScan /></AdminRoute>} />
+              <Route path="/auto-scan-guide" element={<AdminRoute><AutoScanGuide /></AdminRoute>} />
             </Routes>
           </Container>
         </Box>
@@ -73,7 +77,11 @@ function App() {
         <ThemeProvider theme={theme}>
           <CssBaseline />
           <Routes>
+            {/* Public routes */}
             <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+
+            {/* Protected shell — Sidebar + nested routes */}
             <Route
               path="/*"
               element={(
