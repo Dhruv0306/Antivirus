@@ -38,7 +38,7 @@ export function AuthProvider({ children }) {
       setCsrfCredentials(postLoginCsrf);
 
       // Step 4: confirm the session is live
-      await antivirusApi.get('/system/status');
+      // await antivirusApi.get('/system/status');
 
       // Step 5: fetch role from /auth/me
       const { data: me } = await authApi.get('/me');
