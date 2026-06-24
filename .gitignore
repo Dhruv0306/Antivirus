@@ -161,10 +161,5 @@ Thumbs.db
 #Refrence images
 /refrenceImages
 
-# Temorary Files
-security_audit_report.jsx
-security_audit_part*.jsx
-security_audit_part*.md
-
 # Claude files
 .claude/
