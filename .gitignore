@@ -19,7 +19,7 @@ target/
 # Logs and databases
 *.log
 *.sql
-!V1__initial_schema.sql
+!src/main/resources/db/migration/*.sql
 *.sqlite
 *.db
 logs/
