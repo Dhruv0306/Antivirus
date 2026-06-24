@@ -8,15 +8,12 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.core.userdetails.User;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
@@ -45,9 +42,25 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+/**
+ * Spring Security configuration.
+ *
+ * Changes from the previous version:
+ * - InMemoryUserDetailsManager removed. UserServiceImpl (a @Service that
+ * implements UserDetailsService) is auto-discovered by Spring Security.
+ * Admin seeding now happens via UserServiceImpl.@PostConstruct.
+ * - @EnableMethodSecurity added for @PreAuthorize on admin-only controller
+ * methods as a defence-in-depth layer.
+ * - /api/auth/register added to permitAll and to the rate-limit filter.
+ * - /api/auth/me added (authenticated, any role).
+ * - Role-based access: USER may only reach /scan/file, /scan/directory, and
+ * /history/me. Everything else under /api/antivirus/** requires ADMIN.
+ */
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 public class SecurityConfig {
+
     private static final int AUTH_ATTEMPT_LIMIT = 10;
     private static final Duration AUTH_ATTEMPT_WINDOW = Duration.ofMinutes(1);
 
@@ -57,7 +70,7 @@ public class SecurityConfig {
     @Value("${app.trusted-proxy-ips:}")
     private String trustedProxyIps;
 
-    // N-05 Fix: Use Caffeine cache with size cap and time-based eviction
+    // N-05: Caffeine cache with size cap and time-based eviction
     private final Cache<String, AttemptWindow> authAttemptWindows = Caffeine.newBuilder()
             .maximumSize(50_000)
             .expireAfterWrite(2, TimeUnit.MINUTES)
@@ -81,10 +94,23 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                 .authorizeHttpRequests(auth -> auth
+                        // ── Public ─────────────────────────────────────────────────────────
                         .requestMatchers("/actuator/health").permitAll()
                         .requestMatchers("/api/auth/csrf").permitAll()
                         .requestMatchers("/api/auth/login").permitAll()
+                        .requestMatchers("/api/auth/register").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
+                        // ── USER + ADMIN (scan and own history) ────────────────────────────
+                        .requestMatchers(HttpMethod.POST, "/api/antivirus/scan/file").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/antivirus/scan/directory").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/antivirus/history/me").hasAnyRole("USER", "ADMIN")
+
+                        // ── ADMIN only ─────────────────────────────────────────────────────
+                        .requestMatchers("/api/antivirus/**").hasRole("ADMIN")
+                        .requestMatchers("/api/network-security/**").hasRole("ADMIN")
+
+                        // ── Any authenticated user (e.g. /auth/me, /auth/logout) ───────────
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().denyAll())
                 .formLogin(form -> form
@@ -129,10 +155,8 @@ public class SecurityConfig {
     }
 
     /**
-     * L-06: Dev-only security chain for H2 console.
-     * Requires ADMIN role, disables CSRF (H2 console uses POST forms),
-     * and sets frameOptions to sameOrigin (H2 console uses frames).
-     * Only active when the "dev" profile is set.
+     * Dev-only chain for H2 console.
+     * Unchanged from the previous version.
      */
     @Bean
     @Profile("dev")
@@ -148,6 +172,10 @@ public class SecurityConfig {
         return http.build();
     }
 
+    /**
+     * Rate-limits both login AND register endpoints: 10 attempts per IP+username
+     * per minute. Registration is included to prevent account-creation spam.
+     */
     @Bean
     public FilterRegistrationBean<OncePerRequestFilter> authRateLimitFilter() {
         FilterRegistrationBean<OncePerRequestFilter> bean = new FilterRegistrationBean<>();
@@ -158,27 +186,27 @@ public class SecurityConfig {
                     HttpServletRequest request,
                     HttpServletResponse response,
                     FilterChain filterChain) throws ServletException, IOException {
+
                 if (!"POST".equalsIgnoreCase(request.getMethod())) {
                     filterChain.doFilter(request, response);
                     return;
                 }
 
                 String rateLimitKey = resolveRateLimitKey(request);
-                // N-05 Fix: Use Caffeine's thread-safe get
                 AttemptWindow window = authAttemptWindows.get(rateLimitKey, key -> new AttemptWindow());
                 if (!window.tryAcquire(AUTH_ATTEMPT_WINDOW, AUTH_ATTEMPT_LIMIT)) {
                     response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
                     response.setContentType("application/json");
                     response.getWriter().write(
-                            "{\"success\":false,\"message\":\"Too many login attempts. Please try again later.\"}");
+                            "{\"success\":false,\"message\":\"Too many attempts. Please try again later.\"}");
                     return;
                 }
 
                 filterChain.doFilter(request, response);
-                // N-05 Fix: cleanupExpiredAttemptWindows() call removed; Caffeine handles this
             }
         });
-        bean.addUrlPatterns("/api/auth/login");
+        // Cover both login and register
+        bean.addUrlPatterns("/api/auth/login", "/api/auth/register");
         bean.setOrder(Ordered.HIGHEST_PRECEDENCE);
         return bean;
     }
@@ -209,28 +237,9 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
-    @Bean
-    public UserDetailsService userDetailsService(
-            @Value("${app.admin.username}") String username,
-            @Value("${app.admin.password}") String password,
-            PasswordEncoder passwordEncoder) {
-        UserDetails user = User.builder()
-                .username(username)
-                .password(resolveStoredPassword(password, passwordEncoder))
-                .roles("ADMIN")
-                .build();
-        return new InMemoryUserDetailsManager(user);
-    }
-
-    private static String resolveStoredPassword(String password, PasswordEncoder passwordEncoder) {
-        if (password.startsWith("{bcrypt}")) {
-            return password.substring("{bcrypt}".length());
-        }
-        if (password.startsWith("$2a$") || password.startsWith("$2b$")) {
-            return password;
-        }
-        return passwordEncoder.encode(password);
-    }
+    // resolveStoredPassword and the InMemoryUserDetailsManager bean are removed.
+    // UserServiceImpl (a @Service implementing UserDetailsService) is
+    // auto-discovered by Spring Security. Admin seeding lives there.
 
     private String resolveRateLimitKey(HttpServletRequest request) {
         String remoteAddr = request.getRemoteAddr();
@@ -268,11 +277,9 @@ public class SecurityConfig {
                 windowStart = now;
                 attempts = 0;
             }
-
             if (attempts >= maxAttempts) {
                 return false;
             }
-
             attempts++;
             return true;
         }
