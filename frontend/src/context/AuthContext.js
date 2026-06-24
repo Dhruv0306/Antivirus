@@ -1,5 +1,10 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { antivirusApi, clearAuthCredentials, setAuthCredentials } from '../api/client';
+import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import {
+  antivirusApi,
+  authApi,
+  clearCsrfCredentials,
+  setCsrfCredentials
+} from '../api/client';
 
 const AuthContext = createContext(null);
 
@@ -7,27 +12,33 @@ function readStoredUser() {
   return sessionStorage.getItem('auth_user');
 }
 
-function hasStoredSession() {
-  return Boolean(sessionStorage.getItem('auth_token'));
-}
-
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(readStoredUser);
-  const [isAuthenticated, setIsAuthenticated] = useState(hasStoredSession);
+  const [isAuthenticated, setIsAuthenticated] = useState(() => Boolean(readStoredUser()));
 
   const login = useCallback(async (username, password) => {
-    setAuthCredentials(username, password);
     try {
+      const { data: preLoginCsrf } = await authApi.get('/csrf');
+      setCsrfCredentials(preLoginCsrf);
+      const body = new URLSearchParams({ username, password });
+      await authApi.post(
+        '/login',
+        body,
+        {
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+        }
+      );
+      const { data: postLoginCsrf } = await authApi.get('/csrf');
+      setCsrfCredentials(postLoginCsrf);
       await antivirusApi.get('/system/status');
-      const token = btoa(`${username}:${password}`);
-      sessionStorage.setItem('auth_token', token);
       sessionStorage.setItem('auth_user', username);
       setUser(username);
       setIsAuthenticated(true);
       return { success: true };
     } catch (error) {
-      clearAuthCredentials();
-      sessionStorage.removeItem('auth_token');
+      clearCsrfCredentials();
       sessionStorage.removeItem('auth_user');
       setUser(null);
       setIsAuthenticated(false);
@@ -40,18 +51,10 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  useEffect(() => {
-    if (!hasStoredSession()
-        && import.meta.env.VITE_API_USERNAME
-        && import.meta.env.VITE_API_PASSWORD) {
-      login(import.meta.env.VITE_API_USERNAME, import.meta.env.VITE_API_PASSWORD);
-    }
-  }, [login]);
-
   const logout = useCallback(() => {
-    sessionStorage.removeItem('auth_token');
+    authApi.post('/logout').catch(() => {});
     sessionStorage.removeItem('auth_user');
-    clearAuthCredentials();
+    clearCsrfCredentials();
     setUser(null);
     setIsAuthenticated(false);
   }, []);

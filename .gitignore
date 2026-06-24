@@ -19,6 +19,7 @@ target/
 # Logs and databases
 *.log
 *.sql
+!V1__initial_schema.sql
 *.sqlite
 *.db
 logs/
@@ -128,6 +129,7 @@ application-*.properties
 !application-example.properties
 !application-dev.properties
 !application-prod.properties
+!application-local.properties
 
 # Test files
 /test-output/
@@ -158,3 +160,6 @@ Thumbs.db
 
 #Refrence images
 /refrenceImages
+
+# Claude files
+.claude/

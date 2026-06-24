@@ -6,9 +6,12 @@ import com.antivirus.service.NetworkSecurityService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.scheduling.annotation.Scheduled;
 
 import jakarta.annotation.PostConstruct;
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
 import java.net.Socket;
@@ -16,53 +19,60 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 /**
- * Implementation of network security service with enhanced scanning capabilities
+ * Implementation of network security service with enhanced scanning
+ * capabilities
  */
 @SuppressWarnings("unused")
 @Service
 public class NetworkSecurityServiceImpl implements NetworkSecurityService {
     private static final Logger logger = LoggerFactory.getLogger(NetworkSecurityServiceImpl.class);
-    
+
     // Security control flags
     private boolean firewallEnabled = true;
     private boolean webProtectionEnabled = true;
-    
+
     // Network monitoring data structures
     private Set<String> blockedDomains = ConcurrentHashMap.newKeySet();
     private List<Map<String, Object>> recentConnections = new CopyOnWriteArrayList<>();
     private Map<String, Integer> connectionAttempts = new ConcurrentHashMap<>();
     private Map<String, LocalDateTime> lastConnectionTime = new ConcurrentHashMap<>();
-    
+
     // Counters
     private AtomicInteger blockedAttempts = new AtomicInteger(0);
     private AtomicInteger activeConnections = new AtomicInteger(0);
     private AtomicInteger activeThreats = new AtomicInteger(0);
-    
+
     // Configuration constants
     private static final int[] COMMON_PORTS = {
-        20, 21, 22, 23, 25, 53, 80, 110, 143, 443, 465, 587, 993, 995, 1433, 1521, 
-        3306, 3389, 5432, 8080, 8443
+            20, 21, 22, 23, 25, 53, 80, 110, 143, 443, 465, 587, 993, 995, 1433, 1521,
+            3306, 3389, 5432, 8080, 8443
     };
-    
+
     private static final int MAX_CONNECTION_ATTEMPTS = 5;
     private static final int CONNECTION_TIMEOUT_MS = 1000;
     private static final int RATE_LIMIT_WINDOW_SECONDS = 60;
+    private static final ExecutorService PORT_SCAN_EXECUTOR = Executors.newFixedThreadPool(8, r -> {
+        Thread thread = new Thread(r, "port-scan");
+        thread.setDaemon(true);
+        return thread;
+    });
 
     @PostConstruct
     public void init() {
         // Initialize with common malicious domains
         blockedDomains.addAll(Arrays.asList(
-            "malware.example.com",
-            "phishing.example.com",
-            "spam.example.com"
-        ));
-        
-        // Start background monitoring
-        startNetworkMonitoring();
+                "malware.example.com",
+                "phishing.example.com",
+                "spam.example.com"));
     }
 
     @Override
@@ -92,9 +102,11 @@ public class NetworkSecurityServiceImpl implements NetworkSecurityService {
             logger.error("Error scanning network interfaces", e);
         }
 
-        // Enhanced port scanning
-        for (int port : COMMON_PORTS) {
-            if (isPortOpen("localhost", port)) {
+        // Enhanced port scanning with bounded parallelism
+        List<String> openPorts = getOpenPorts();
+        for (String openPort : openPorts) {
+            int port = Integer.parseInt(openPort);
+            if (port > 0) {
                 NetworkVulnerability vulnerability = new NetworkVulnerability();
                 vulnerability.setType("OPEN_PORT");
                 vulnerability.setDescription("Port " + port + " is open and potentially vulnerable");
@@ -134,7 +146,7 @@ public class NetworkSecurityServiceImpl implements NetworkSecurityService {
         result.setVulnerabilities(vulnerabilities);
         result.setScanTime(LocalDateTime.now());
         result.setStatus("COMPLETED");
-        result.setOpenPorts(getOpenPorts());
+        result.setOpenPorts(openPorts);
         result.setSuspiciousConnections(suspiciousIPs);
         result.setFirewallEnabled(firewallEnabled);
         result.setWebProtectionEnabled(webProtectionEnabled);
@@ -148,17 +160,17 @@ public class NetworkSecurityServiceImpl implements NetworkSecurityService {
     @Override
     public Map<String, Object> getNetworkStatus() {
         Map<String, Object> status = new HashMap<>();
-        
+
         // Add security controls status in the expected structure
         Map<String, Object> securityControls = new HashMap<>();
         securityControls.put("firewallEnabled", firewallEnabled);
         securityControls.put("webProtectionEnabled", webProtectionEnabled);
         status.put("securityControls", securityControls);
-        
+
         // Add network statistics
         status.put("activeConnections", activeConnections.get());
         status.put("blockedAttempts", blockedAttempts.get());
-        
+
         // Add blocked domains list
         List<Map<String, Object>> blockedDomainsList = new ArrayList<>();
         for (String domain : blockedDomains) {
@@ -168,34 +180,40 @@ public class NetworkSecurityServiceImpl implements NetworkSecurityService {
             blockedDomainsList.add(domainInfo);
         }
         status.put("blockedDomains", blockedDomainsList);
-        
+
         // Add active threats and recent connections
         status.put("activeThreats", activeThreats.get());
         status.put("recentConnections", recentConnections);
-        
+
         return status;
     }
 
+    // O-04 Fix: prevent underflow by checking for state changes and using
+    // Math.max(0, v - 1)
     @Override
     public void toggleFirewall(Boolean enabled) {
-        logger.info("Toggling firewall: {}", enabled);
-        this.firewallEnabled = enabled != null ? enabled : !this.firewallEnabled;
-        if (this.firewallEnabled) {
-            activeThreats.decrementAndGet();
-        } else {
-            activeThreats.incrementAndGet();
+        boolean was = this.firewallEnabled;
+        this.firewallEnabled = enabled != null ? enabled : !was;
+        if (!was && this.firewallEnabled) {
+            activeThreats.updateAndGet(v -> Math.max(0, v - 1)); // enabling: safe decrement
+        } else if (was && !this.firewallEnabled) {
+            activeThreats.incrementAndGet(); // disabling: increment
         }
+        logger.info("Toggling firewall: {}", this.firewallEnabled);
     }
 
+    // O-04 Fix: prevent underflow by checking for state changes and using
+    // Math.max(0, v - 1)
     @Override
     public void toggleWebProtection(Boolean enabled) {
-        logger.info("Toggling web protection: {}", enabled);
-        this.webProtectionEnabled = enabled != null ? enabled : !this.webProtectionEnabled;
-        if (this.webProtectionEnabled) {
-            activeThreats.decrementAndGet();
-        } else {
-            activeThreats.incrementAndGet();
+        boolean was = this.webProtectionEnabled;
+        this.webProtectionEnabled = enabled != null ? enabled : !was;
+        if (!was && this.webProtectionEnabled) {
+            activeThreats.updateAndGet(v -> Math.max(0, v - 1)); // enabling: safe decrement
+        } else if (was && !this.webProtectionEnabled) {
+            activeThreats.incrementAndGet(); // disabling: increment
         }
+        logger.info("Toggling web protection: {}", this.webProtectionEnabled);
     }
 
     @Override
@@ -252,13 +270,24 @@ public class NetworkSecurityServiceImpl implements NetworkSecurityService {
     }
 
     private List<String> getOpenPorts() {
-        List<String> openPorts = new ArrayList<>();
-        for (int port : COMMON_PORTS) {
-            if (isPortOpen("localhost", port)) {
-                openPorts.add(String.valueOf(port));
-            }
-        }
-        return openPorts;
+        List<CompletableFuture<Optional<String>>> futures = IntStream.of(COMMON_PORTS)
+                .mapToObj(port -> CompletableFuture.supplyAsync(
+                        () -> isPortOpen("localhost", port)
+                                ? Optional.of(String.valueOf(port))
+                                : Optional.<String>empty(),
+                        PORT_SCAN_EXECUTOR))
+                .collect(Collectors.toList());
+
+        return futures.stream()
+                .map(future -> {
+                    try {
+                        return future.get(2, TimeUnit.SECONDS);
+                    } catch (Exception e) {
+                        return Optional.<String>empty();
+                    }
+                })
+                .flatMap(Optional::stream)
+                .collect(Collectors.toList());
     }
 
     private List<String> getSuspiciousConnections() {
@@ -270,29 +299,15 @@ public class NetworkSecurityServiceImpl implements NetworkSecurityService {
         return suspicious;
     }
 
-    private void startNetworkMonitoring() {
-        // Start a background thread for continuous monitoring
-        Thread monitorThread = new Thread(() -> {
-            while (true) {
-                try {
-                    // Monitor active connections
-                    updateActiveConnections(getCurrentActiveConnections());
-                    
-                    // Check for suspicious activities
-                    checkSuspiciousActivities();
-                    
-                    // Clean up old connection records
-                    cleanupOldConnections();
-                    
-                    Thread.sleep(5000); // Check every 5 seconds
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    break;
-                }
-            }
-        });
-        monitorThread.setDaemon(true);
-        monitorThread.start();
+    @Scheduled(fixedDelay = 5000, initialDelay = 5000)
+    public void scheduledNetworkMonitor() {
+        try {
+            updateActiveConnections(getCurrentActiveConnections());
+            checkSuspiciousActivities();
+            cleanupOldConnections();
+        } catch (Exception e) {
+            logger.error("Network monitor tick failed", e);
+        }
     }
 
     private void checkSuspiciousActivities() {
@@ -309,42 +324,63 @@ public class NetworkSecurityServiceImpl implements NetworkSecurityService {
     private void cleanupOldConnections() {
         LocalDateTime cutoff = LocalDateTime.now().minusSeconds(RATE_LIMIT_WINDOW_SECONDS);
         lastConnectionTime.entrySet().removeIf(entry -> entry.getValue().isBefore(cutoff));
-        connectionAttempts.entrySet().removeIf(entry -> 
-            !lastConnectionTime.containsKey(entry.getKey()) || 
-            lastConnectionTime.get(entry.getKey()).isBefore(cutoff)
-        );
+        connectionAttempts.entrySet().removeIf(entry -> !lastConnectionTime.containsKey(entry.getKey()) ||
+                lastConnectionTime.get(entry.getKey()).isBefore(cutoff));
     }
 
+    // N-08 Fix: Use OS-level netstat/ss to get actual established TCP connections
     private int getCurrentActiveConnections() {
         try {
-            return (int) NetworkInterface.getNetworkInterfaces()
-                .asIterator()
-                .next()
-                .getInterfaceAddresses()
-                .size();
+            ProcessBuilder pb;
+            if (System.getProperty("os.name").toLowerCase().contains("win")) {
+                pb = new ProcessBuilder("netstat", "-n");
+            } else {
+                pb = new ProcessBuilder("ss", "-tn", "state", "established");
+            }
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+
+            boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
+
+            @SuppressWarnings("resource")
+            long count = new BufferedReader(
+                    new InputStreamReader(process.getInputStream()))
+                    .lines()
+                    .filter(l -> isWindows ? l.contains("ESTABLISHED")
+                            : (!l.startsWith("Netid") && !l.startsWith("State") && !l.isBlank()))
+                    .count();
+
+            process.waitFor(1, TimeUnit.SECONDS);
+            return (int) count;
         } catch (Exception e) {
-            logger.error("Error getting active connections", e);
-            return 0;
+            logger.debug("Could not read active connections", e);
+            return activeConnections.get(); // fall back to manual counter
         }
     }
 
     private String getPortSeverity(int port) {
-        if (port < 1024) return "HIGH";
-        if (port == 3389 || port == 22 || port == 23) return "MEDIUM";
+        if (port < 1024)
+            return "HIGH";
+        if (port == 3389 || port == 22 || port == 23)
+            return "MEDIUM";
         return "LOW";
     }
 
     private String getPortRecommendation(int port) {
         switch (port) {
-            case 3389: return "Restrict RDP access to trusted IPs only";
-            case 22: return "Use SSH key authentication and disable password login";
-            case 23: return "Disable Telnet and use SSH instead";
-            default: return "Close unnecessary ports or restrict access";
+            case 3389:
+                return "Restrict RDP access to trusted IPs only";
+            case 22:
+                return "Use SSH key authentication and disable password login";
+            case 23:
+                return "Disable Telnet and use SSH instead";
+            default:
+                return "Close unnecessary ports or restrict access";
         }
     }
 
-    private void addSecurityControlVulnerability(List<NetworkVulnerability> vulnerabilities, 
-                                               String type, String severity) {
+    private void addSecurityControlVulnerability(List<NetworkVulnerability> vulnerabilities,
+            String type, String severity) {
         NetworkVulnerability vulnerability = new NetworkVulnerability();
         vulnerability.setType(type);
         vulnerability.setDescription(type.replace("_", " ").toLowerCase() + " is currently disabled");
@@ -352,4 +388,4 @@ public class NetworkSecurityServiceImpl implements NetworkSecurityService {
         vulnerability.setRecommendation("Enable " + type.replace("_", " ").toLowerCase() + " protection");
         vulnerabilities.add(vulnerability);
     }
-} 
+}

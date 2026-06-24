@@ -25,6 +25,8 @@ import {
 } from '@mui/icons-material';
 import { antivirusApi } from '../api/client';
 import { styled } from '@mui/material/styles';
+import { log, logError } from '../utils/logger';
+import { toUserMessage } from '../utils/errors'; // Import the error normalizer
 
 // Styled components
 const StyledPaper = styled(Paper)(({ theme }) => ({
@@ -73,6 +75,10 @@ const StyledProgress = styled(LinearProgress)(({ theme }) => ({
   }
 }));
 
+function getDisplayName(result) {
+  return result?.fileName || result?.filePath || 'Unknown file';
+}
+
 function DirectoryScan() {
   const [selectedDirectory, setSelectedDirectory] = useState('');
   const [scanning, setScanning] = useState(false);
@@ -94,7 +100,7 @@ function DirectoryScan() {
           const files = Array.from(e.target.files);
           const firstFile = files[0];
           const directoryName = firstFile.webkitRelativePath.split('/')[0];
-          
+
           // Store both the directory name and the FileList for scanning
           setSelectedDirectory(directoryName);
           setSelectedFiles(files);
@@ -106,8 +112,8 @@ function DirectoryScan() {
 
       input.click();
     } catch (err) {
-      console.error('Directory selection error:', err);
-      setError('Error selecting directory: ' + err.message);
+      logError('Directory selection error:', err);
+      setError(toUserMessage(err));
     }
   };
 
@@ -127,7 +133,7 @@ function DirectoryScan() {
       const formData = new FormData();
       formData.append('directoryName', selectedDirectory);
       formData.append('recursive', recursive);
-      
+
       // Append all files while maintaining their relative paths
       for (const file of selectedFiles) {
         formData.append('files', file, file.webkitRelativePath);
@@ -156,9 +162,9 @@ function DirectoryScan() {
         throw new Error('No scan result received');
       }
     } catch (err) {
-      console.error('Scan error:', err);
-      const errorMessage = err.response?.data?.error || err.message || 'Unknown error';
-      setError('Error scanning directory: ' + errorMessage);
+      logError('Scan error:', err);
+      // F-01: Use safe, normalized user-facing message instead of raw server error
+      setError(toUserMessage(err));
     } finally {
       setScanning(false);
     }
@@ -166,13 +172,13 @@ function DirectoryScan() {
 
   return (
     <Box sx={{ width: '100%', maxWidth: 1200, margin: '0 auto', p: 3 }}>
-      <Typography 
-        variant="h4" 
-        gutterBottom 
-        sx={{ 
+      <Typography
+        variant="h4"
+        gutterBottom
+        sx={{
           mb: 4,
           color: 'var(--text-primary)',
-          fontWeight: 600 
+          fontWeight: 600
         }}
       >
         Directory Scan
@@ -199,12 +205,12 @@ function DirectoryScan() {
                 >
                   {scanning ? (
                     <>
-                      <CircularProgress 
-                        size={24} 
-                        sx={{ 
+                      <CircularProgress
+                        size={24}
+                        sx={{
                           mr: 1,
-                          color: 'var(--primary-light)' 
-                        }} 
+                          color: 'var(--primary-light)'
+                        }}
                       />
                       Scanning...
                     </>
@@ -229,8 +235,8 @@ function DirectoryScan() {
               </Box>
 
               {selectedDirectory && (
-                <Typography 
-                  variant="body2" 
+                <Typography
+                  variant="body2"
                   sx={{ color: 'var(--text-secondary)' }}
                 >
                   Selected Directory: {selectedDirectory}
@@ -240,12 +246,12 @@ function DirectoryScan() {
               {scanning && (
                 <Box sx={{ width: '100%', mt: 2 }}>
                   <StyledProgress variant="determinate" value={progress} />
-                  <Typography 
-                    variant="body2" 
-                    sx={{ 
+                  <Typography
+                    variant="body2"
+                    sx={{
                       mt: 1,
                       color: 'var(--text-secondary)',
-                      textAlign: 'center' 
+                      textAlign: 'center'
                     }}
                   >
                     {Math.round(progress)}% Complete
@@ -254,9 +260,9 @@ function DirectoryScan() {
               )}
 
               {error && (
-                <Alert 
-                  severity="error" 
-                  sx={{ 
+                <Alert
+                  severity="error"
+                  sx={{
                     mt: 2,
                     backgroundColor: 'var(--error-main)',
                     color: '#FFFFFF',
@@ -276,12 +282,12 @@ function DirectoryScan() {
           <>
             <Grid item xs={12} md={6}>
               <StyledPaper sx={{ p: 3 }}>
-                <Typography 
-                  variant="h6" 
+                <Typography
+                  variant="h6"
                   gutterBottom
-                  sx={{ 
+                  sx={{
                     color: 'var(--text-primary)',
-                    fontWeight: 600 
+                    fontWeight: 600
                   }}
                 >
                   Scan Summary
@@ -358,12 +364,12 @@ function DirectoryScan() {
                   <Divider sx={{ borderColor: 'var(--border-main)' }} />
                   <StyledListItem>
                     <ListItemIcon>
-                      <CheckCircleIcon 
-                        sx={{ 
-                          color: scanResult.infectedFiles > 0 
-                            ? 'var(--error-main)' 
-                            : 'var(--success-main)' 
-                        }} 
+                      <CheckCircleIcon
+                        sx={{
+                          color: scanResult.infectedFiles > 0
+                            ? 'var(--error-main)'
+                            : 'var(--success-main)'
+                        }}
                       />
                     </ListItemIcon>
                     <ListItemText
@@ -374,8 +380,8 @@ function DirectoryScan() {
                       }
                       secondary={
                         <Typography component="div" sx={{ color: 'var(--text-secondary)' }}>
-                          {scanResult.infectedFiles > 0 
-                            ? `Threats Found (${scanResult.infectedFiles} infected files)` 
+                          {scanResult.infectedFiles > 0
+                            ? `Threats Found (${scanResult.infectedFiles} infected files)`
                             : "Clean"}
                         </Typography>
                       }
@@ -387,89 +393,89 @@ function DirectoryScan() {
 
             <Grid item xs={12} md={6}>
               <StyledPaper sx={{ p: 3 }}>
-                <Typography 
-                  variant="h6" 
+                <Typography
+                  variant="h6"
                   gutterBottom
-                  sx={{ 
+                  sx={{
                     color: 'var(--text-primary)',
-                    fontWeight: 600 
+                    fontWeight: 600
                   }}
                 >
                   Scan Details
                 </Typography>
-                <Typography 
-                  variant="body2" 
+                <Typography
+                  variant="body2"
                   component="div"
-                  sx={{ 
+                  sx={{
                     mb: 2,
-                    color: 'var(--text-secondary)' 
+                    color: 'var(--text-secondary)'
                   }}
                 >
-                  {scanResult.infectedFiles > 0 
-                    ? "Showing only infected and error files" 
+                  {scanResult.infectedFiles > 0
+                    ? "Showing only infected and error files"
                     : "No threats found in this directory"}
                 </Typography>
                 <List sx={{ maxHeight: 400, overflow: 'auto' }}>
                   {scanResult.results && scanResult.results
                     .filter(result => result.infected || result.threatType === "ERROR")
                     .map((result, index) => (
-                    <React.Fragment key={index}>
-                      <StyledListItem>
-                        <ListItemIcon>
-                          {result.infected ? (
-                            <ErrorIcon sx={{ color: 'var(--error-main)' }} />
-                          ) : (
-                            <WarningIcon sx={{ color: 'var(--warning-main)' }} />
-                          )}
-                        </ListItemIcon>
-                        <ListItemText
-                          primary={
-                            <Typography 
-                              component="div"
-                              sx={{ 
-                                color: 'var(--text-primary)',
-                                wordBreak: 'break-all' 
-                              }}
-                            >
-                              {result.filePath}
-                            </Typography>
-                          }
-                          secondary={
-                            <Box>
-                              <Typography 
-                                component="div" 
-                                variant="body2" 
-                                sx={{ color: 'var(--text-primary)' }}
+                      <React.Fragment key={index}>
+                        <StyledListItem>
+                          <ListItemIcon>
+                            {result.infected ? (
+                              <ErrorIcon sx={{ color: 'var(--error-main)' }} />
+                            ) : (
+                              <WarningIcon sx={{ color: 'var(--warning-main)' }} />
+                            )}
+                          </ListItemIcon>
+                          <ListItemText
+                            primary={
+                              <Typography
+                                component="div"
+                                sx={{
+                                  color: 'var(--text-primary)',
+                                  wordBreak: 'break-all'
+                                }}
                               >
-                                Status: {result.infected ? 'Infected' : 'Error'}
+                                {getDisplayName(result)}
                               </Typography>
-                              {result.threatType && (
-                                <Typography 
-                                  component="div" 
-                                  variant="body2" 
-                                  sx={{ color: 'var(--text-secondary)' }}
+                            }
+                            secondary={
+                              <Box>
+                                <Typography
+                                  component="div"
+                                  variant="body2"
+                                  sx={{ color: 'var(--text-primary)' }}
                                 >
-                                  {' | Type: ' + result.threatType}
+                                  Status: {result.infected ? 'Infected' : 'Error'}
                                 </Typography>
-                              )}
-                              {result.threatDetails && (
-                                <Typography 
-                                  component="div" 
-                                  variant="body2" 
-                                  sx={{ color: 'var(--text-secondary)' }}
-                                >
-                                  {' | ' + result.threatDetails}
-                                </Typography>
-                              )}
-                            </Box>
-                          }
-                        />
-                      </StyledListItem>
-                      {index < scanResult.results.filter(r => r.infected || r.threatType === "ERROR").length - 1 && (
-                        <Divider sx={{ borderColor: 'var(--border-main)' }} />
-                      )}
-                    </React.Fragment>
-                  ))}
+                                {result.threatType && (
+                                  <Typography
+                                    component="div"
+                                    variant="body2"
+                                    sx={{ color: 'var(--text-secondary)' }}
+                                  >
+                                    {' | Type: ' + result.threatType}
+                                  </Typography>
+                                )}
+                                {result.threatDetails && (
+                                  <Typography
+                                    component="div"
+                                    variant="body2"
+                                    sx={{ color: 'var(--text-secondary)' }}
+                                  >
+                                    {' | ' + result.threatDetails}
+                                  </Typography>
+                                )}
+                              </Box>
+                            }
+                          />
+                        </StyledListItem>
+                        {index < scanResult.results.filter(r => r.infected || r.threatType === "ERROR").length - 1 && (
+                          <Divider sx={{ borderColor: 'var(--border-main)' }} />
+                        )}
+                      </React.Fragment>
+                    ))}
                 </List>
               </StyledPaper>
             </Grid>
@@ -480,4 +486,4 @@ function DirectoryScan() {
   );
 }
 
-export default DirectoryScan; 
+export default DirectoryScan;

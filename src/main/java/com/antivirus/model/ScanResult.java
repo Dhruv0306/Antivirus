@@ -1,15 +1,14 @@
 package com.antivirus.model;
 
-import lombok.Data;
-import lombok.Getter;
-import lombok.Setter;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 /**
  * Model class representing the result of an antivirus scan
  */
-@SuppressWarnings("unused")
 @Entity
 @Table(name = "scan_results")
 public class ScanResult {
@@ -19,6 +18,12 @@ public class ScanResult {
 
     @Column(nullable = false)
     private String filePath;
+
+    @Transient
+    private String fileName;
+
+    @Column(name = "owner_username")
+    private String ownerUsername;
 
     @Column(nullable = false)
     private String threatType; // VIRUS, MALWARE, TROJAN, RANSOMWARE, KEYLOGGER
@@ -52,12 +57,43 @@ public class ScanResult {
         this.id = id;
     }
     
+    @JsonIgnore
     public String getFilePath() {
         return filePath;
     }
     
     public void setFilePath(String filePath) {
         this.filePath = filePath;
+    }
+
+    public String getFileName() {
+        if (fileName != null && !fileName.isBlank()) {
+            return fileName;
+        }
+        if (filePath == null || filePath.isBlank()) {
+            return null;
+        }
+
+        try {
+            Path path = Paths.get(filePath);
+            Path name = path.getFileName();
+            return name != null ? name.toString() : filePath;
+        } catch (Exception e) {
+            return filePath;
+        }
+    }
+
+    public void setFileName(String fileName) {
+        this.fileName = fileName;
+    }
+
+    @JsonIgnore
+    public String getOwnerUsername() {
+        return ownerUsername;
+    }
+
+    public void setOwnerUsername(String ownerUsername) {
+        this.ownerUsername = ownerUsername;
     }
     
     public String getThreatType() {
@@ -107,4 +143,4 @@ public class ScanResult {
     public void setActionTaken(String actionTaken) {
         this.actionTaken = actionTaken;
     }
-} 
+}

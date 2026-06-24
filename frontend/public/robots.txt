@@ -1,3 +1,7 @@
 # https://www.robotstxt.org/robotstxt.html
+# Disallow all crawler bots from accessing this admin dashboard API.
 User-agent: *
-Disallow:
+Disallow: /
+
+# Allow specific resources needed by the web app (favicon, manifests) to remain accessible for proper UI rendering
+Sitemap: <your-sitemap-url-here> or leave empty if no sitemap exists
