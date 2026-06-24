@@ -3,6 +3,7 @@ package com.antivirus.config;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.core.Ordered;
 import org.springframework.security.config.Customizer;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -23,6 +24,7 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.annotation.Order;
+import org.springframework.core.env.Environment;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
@@ -70,6 +72,9 @@ public class SecurityConfig {
     @Value("${app.trusted-proxy-ips:}")
     private String trustedProxyIps;
 
+    @Autowired
+    private Environment environment;
+
     // N-05: Caffeine cache with size cap and time-based eviction
     private final Cache<String, AttemptWindow> authAttemptWindows = Caffeine.newBuilder()
             .maximumSize(50_000)
@@ -78,6 +83,10 @@ public class SecurityConfig {
 
     @PostConstruct
     public void validateConfig() {
+        // Dev profile uses localhost defaults — skip the production CORS check
+        if (Arrays.asList(environment.getActiveProfiles()).contains("dev")) {
+            return;
+        }
         if (allowedOrigins == null || allowedOrigins.isBlank()
                 || allowedOrigins.contains("localhost")) {
             throw new IllegalStateException(
