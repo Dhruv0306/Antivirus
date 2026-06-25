@@ -26,7 +26,7 @@ logs/
 data/
 *.trace.db
 *.mv.db
-.env
+.env*
 !.env.example
 # Package Files
 *.jar
