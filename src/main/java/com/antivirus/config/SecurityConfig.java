@@ -47,16 +47,16 @@ import java.util.stream.Collectors;
 /**
  * Spring Security configuration.
  *
- * Changes from the previous version:
- * - InMemoryUserDetailsManager removed. UserServiceImpl (a @Service that
- * implements UserDetailsService) is auto-discovered by Spring Security.
- * Admin seeding now happens via UserServiceImpl.@PostConstruct.
- * - @EnableMethodSecurity added for @PreAuthorize on admin-only controller
- * methods as a defence-in-depth layer.
+ * Key changes from original:
+ * - InMemoryUserDetailsManager removed; UserServiceImpl (a @Service
+ * implementing
+ * UserDetailsService) is auto-discovered by Spring Security.
+ * - @EnableMethodSecurity added for @PreAuthorize on admin-only endpoints.
  * - /api/auth/register added to permitAll and to the rate-limit filter.
- * - /api/auth/me added (authenticated, any role).
- * - Role-based access: USER may only reach /scan/file, /scan/directory, and
- * /history/me. Everything else under /api/antivirus/** requires ADMIN.
+ * - Role-based rules: USER may only reach scan/file, scan/directory,
+ * history/me.
+ * - Dev profile skips CORS origin validation so localhost origins work locally.
+ * - H2 console is permitAll in dev (no auth dependency for local debugging).
  */
 @Configuration
 @EnableWebSecurity
@@ -66,25 +66,28 @@ public class SecurityConfig {
     private static final int AUTH_ATTEMPT_LIMIT = 10;
     private static final Duration AUTH_ATTEMPT_WINDOW = Duration.ofMinutes(1);
 
+    @Autowired
+    private Environment environment;
+
     @Value("${app.cors.allowed-origins:http://localhost:5000,http://localhost:3000}")
     private String allowedOrigins;
 
     @Value("${app.trusted-proxy-ips:}")
     private String trustedProxyIps;
 
-    @Autowired
-    private Environment environment;
-
-    // N-05: Caffeine cache with size cap and time-based eviction
     private final Cache<String, AttemptWindow> authAttemptWindows = Caffeine.newBuilder()
             .maximumSize(50_000)
             .expireAfterWrite(2, TimeUnit.MINUTES)
             .build();
 
+    /**
+     * Skipped in dev profile so localhost origins don't block local startup.
+     * Enforced strictly in every other profile.
+     */
     @PostConstruct
     public void validateConfig() {
-        // Dev profile uses localhost defaults — skip the production CORS check
-        if (Arrays.asList(environment.getActiveProfiles()).contains("dev")) {
+        boolean isDev = Arrays.asList(environment.getActiveProfiles()).contains("dev");
+        if (isDev) {
             return;
         }
         if (allowedOrigins == null || allowedOrigins.isBlank()
@@ -103,23 +106,23 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                 .authorizeHttpRequests(auth -> auth
-                        // ── Public ─────────────────────────────────────────────────────────
+                        // ── Public ──────────────────────────────────────────────────────────
                         .requestMatchers("/actuator/health").permitAll()
                         .requestMatchers("/api/auth/csrf").permitAll()
                         .requestMatchers("/api/auth/login").permitAll()
                         .requestMatchers("/api/auth/register").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-                        // ── USER + ADMIN (scan and own history) ────────────────────────────
+                        // ── USER + ADMIN ─────────────────────────────────────────────────────
                         .requestMatchers(HttpMethod.POST, "/api/antivirus/scan/file").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/antivirus/scan/directory").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/antivirus/history/me").hasAnyRole("USER", "ADMIN")
 
-                        // ── ADMIN only ─────────────────────────────────────────────────────
+                        // ── ADMIN only ───────────────────────────────────────────────────────
                         .requestMatchers("/api/antivirus/**").hasRole("ADMIN")
                         .requestMatchers("/api/network-security/**").hasRole("ADMIN")
 
-                        // ── Any authenticated user (e.g. /auth/me, /auth/logout) ───────────
+                        // ── Any authenticated user (/auth/me, /auth/logout) ──────────────────
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().denyAll())
                 .formLogin(form -> form
@@ -164,8 +167,7 @@ public class SecurityConfig {
     }
 
     /**
-     * Dev-only chain for H2 console.
-     * Unchanged from the previous version.
+     * Dev-only chain for H2 console — open without auth for local debugging.
      */
     @Bean
     @Profile("dev")
@@ -174,7 +176,7 @@ public class SecurityConfig {
         http
                 .securityMatcher("/h2-console/**")
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/h2-console/**").hasRole("ADMIN"))
+                        .requestMatchers("/h2-console/**").permitAll())
                 .csrf(csrf -> csrf.disable())
                 .headers(headers -> headers
                         .frameOptions(frame -> frame.sameOrigin()));
@@ -182,8 +184,7 @@ public class SecurityConfig {
     }
 
     /**
-     * Rate-limits both login AND register endpoints: 10 attempts per IP+username
-     * per minute. Registration is included to prevent account-creation spam.
+     * Rate-limits login AND register: 10 POSTs per IP per minute.
      */
     @Bean
     public FilterRegistrationBean<OncePerRequestFilter> authRateLimitFilter() {
@@ -210,11 +211,9 @@ public class SecurityConfig {
                             "{\"success\":false,\"message\":\"Too many attempts. Please try again later.\"}");
                     return;
                 }
-
                 filterChain.doFilter(request, response);
             }
         });
-        // Cover both login and register
         bean.addUrlPatterns("/api/auth/login", "/api/auth/register");
         bean.setOrder(Ordered.HIGHEST_PRECEDENCE);
         return bean;
@@ -246,13 +245,8 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
-    // resolveStoredPassword and the InMemoryUserDetailsManager bean are removed.
-    // UserServiceImpl (a @Service implementing UserDetailsService) is
-    // auto-discovered by Spring Security. Admin seeding lives there.
-
     private String resolveRateLimitKey(HttpServletRequest request) {
         String remoteAddr = request.getRemoteAddr();
-
         Set<String> trustedProxies = Arrays.stream(trustedProxyIps.split(","))
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
@@ -286,9 +280,8 @@ public class SecurityConfig {
                 windowStart = now;
                 attempts = 0;
             }
-            if (attempts >= maxAttempts) {
+            if (attempts >= maxAttempts)
                 return false;
-            }
             attempts++;
             return true;
         }
