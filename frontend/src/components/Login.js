@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import {
   Alert,
   Box,
@@ -13,15 +13,18 @@ import {
 import { Security as SecurityIcon } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { logError } from '../utils/logger';
-import { toUserMessage } from '../utils/errors'; // Import the error normalizer
 
 function Login() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { login, isAuthenticated } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  // Show a success banner when redirected here after registration
+  const justRegistered = searchParams.get('registered') === 'true';
 
   React.useEffect(() => {
     if (isAuthenticated) {
@@ -40,6 +43,7 @@ function Login() {
     if (result.success) {
       navigate('/', { replace: true });
     } else {
+      logError('Login failed', result.message);
       setError(result.message);
     }
   };
@@ -67,6 +71,12 @@ function Login() {
           <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
             Sign in with your application credentials to access the dashboard.
           </Typography>
+
+          {justRegistered && (
+            <Alert severity="success" sx={{ mb: 2 }}>
+              Account created. You can now sign in.
+            </Alert>
+          )}
 
           <Box component="form" onSubmit={handleSubmit}>
             <TextField
@@ -105,6 +115,13 @@ function Login() {
             >
               {loading ? <CircularProgress size={24} color="inherit" /> : 'Sign In'}
             </Button>
+
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 2, textAlign: 'center' }}>
+              Don't have an account?{' '}
+              <Link to="/register" style={{ color: 'inherit', fontWeight: 500 }}>
+                Register
+              </Link>
+            </Typography>
           </Box>
         </CardContent>
       </Card>

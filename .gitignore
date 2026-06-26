@@ -19,14 +19,14 @@ target/
 # Logs and databases
 *.log
 *.sql
-!V1__initial_schema.sql
+!src/main/resources/db/migration/*.sql
 *.sqlite
 *.db
 logs/
 data/
 *.trace.db
 *.mv.db
-.env
+.env*
 !.env.example
 # Package Files
 *.jar

@@ -10,9 +10,20 @@ import java.util.List;
 
 @Repository
 public interface ScanResultRepository extends JpaRepository<ScanResult, Long> {
+
     List<ScanResult> findByInfectedTrue();
+
     Page<ScanResult> findByInfectedTrue(Pageable pageable);
+
     Page<ScanResult> findAllByOrderByScanDateTimeDesc(Pageable pageable);
+
     List<ScanResult> findByScanType(String scanType);
+
     List<ScanResult> findByThreatType(String threatType);
-} 
+
+    /**
+     * User-scoped history. ownerUsername is stored lowercase by
+     * SecurityServiceImpl.resolveCurrentUsername() — normalize before calling.
+     */
+    Page<ScanResult> findByOwnerUsernameOrderByScanDateTimeDesc(String ownerUsername, Pageable pageable);
+}

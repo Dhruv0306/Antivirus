@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_ROOT = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+const API_ROOT = `${window.location.protocol}//${window.location.hostname}:8080`;
 
 let runtimeCsrf = null;
 
@@ -68,6 +68,7 @@ function createApiClient(basePath) {
     (error) => {
       if (error.response?.status === 401 && !window.location.pathname.startsWith('/login')) {
         sessionStorage.removeItem('auth_user');
+        sessionStorage.removeItem('auth_role'); // prevent stale role surviving session expiry
         clearCsrfCredentials();
         window.location.assign('/login');
       }

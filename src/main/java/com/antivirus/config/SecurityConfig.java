@@ -3,20 +3,18 @@ package com.antivirus.config;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.core.Ordered;
 import org.springframework.security.config.Customizer;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.core.userdetails.User;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
@@ -26,6 +24,7 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.annotation.Order;
+import org.springframework.core.env.Environment;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
@@ -45,11 +44,30 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+/**
+ * Spring Security configuration.
+ *
+ * Key changes from original:
+ * - InMemoryUserDetailsManager removed; UserServiceImpl (a @Service
+ * implementing
+ * UserDetailsService) is auto-discovered by Spring Security.
+ * - @EnableMethodSecurity added for @PreAuthorize on admin-only endpoints.
+ * - /api/auth/register added to permitAll and to the rate-limit filter.
+ * - Role-based rules: USER may only reach scan/file, scan/directory,
+ * history/me.
+ * - Dev profile skips CORS origin validation so localhost origins work locally.
+ * - H2 console is permitAll in dev (no auth dependency for local debugging).
+ */
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 public class SecurityConfig {
+
     private static final int AUTH_ATTEMPT_LIMIT = 10;
     private static final Duration AUTH_ATTEMPT_WINDOW = Duration.ofMinutes(1);
+
+    @Autowired
+    private Environment environment;
 
     @Value("${app.cors.allowed-origins:http://localhost:5000,http://localhost:3000}")
     private String allowedOrigins;
@@ -57,14 +75,21 @@ public class SecurityConfig {
     @Value("${app.trusted-proxy-ips:}")
     private String trustedProxyIps;
 
-    // N-05 Fix: Use Caffeine cache with size cap and time-based eviction
     private final Cache<String, AttemptWindow> authAttemptWindows = Caffeine.newBuilder()
             .maximumSize(50_000)
             .expireAfterWrite(2, TimeUnit.MINUTES)
             .build();
 
+    /**
+     * Skipped in dev profile so localhost origins don't block local startup.
+     * Enforced strictly in every other profile.
+     */
     @PostConstruct
     public void validateConfig() {
+        boolean isDev = Arrays.asList(environment.getActiveProfiles()).contains("dev");
+        if (isDev) {
+            return;
+        }
         if (allowedOrigins == null || allowedOrigins.isBlank()
                 || allowedOrigins.contains("localhost")) {
             throw new IllegalStateException(
@@ -81,10 +106,23 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                 .authorizeHttpRequests(auth -> auth
+                        // ── Public ──────────────────────────────────────────────────────────
                         .requestMatchers("/actuator/health").permitAll()
                         .requestMatchers("/api/auth/csrf").permitAll()
                         .requestMatchers("/api/auth/login").permitAll()
+                        .requestMatchers("/api/auth/register").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
+                        // ── USER + ADMIN ─────────────────────────────────────────────────────
+                        .requestMatchers(HttpMethod.POST, "/api/antivirus/scan/file").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/antivirus/scan/directory").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/antivirus/history/me").hasAnyRole("USER", "ADMIN")
+
+                        // ── ADMIN only ───────────────────────────────────────────────────────
+                        .requestMatchers("/api/antivirus/**").hasRole("ADMIN")
+                        .requestMatchers("/api/network-security/**").hasRole("ADMIN")
+
+                        // ── Any authenticated user (/auth/me, /auth/logout) ──────────────────
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().denyAll())
                 .formLogin(form -> form
@@ -129,10 +167,7 @@ public class SecurityConfig {
     }
 
     /**
-     * L-06: Dev-only security chain for H2 console.
-     * Requires ADMIN role, disables CSRF (H2 console uses POST forms),
-     * and sets frameOptions to sameOrigin (H2 console uses frames).
-     * Only active when the "dev" profile is set.
+     * Dev-only chain for H2 console — open without auth for local debugging.
      */
     @Bean
     @Profile("dev")
@@ -141,13 +176,16 @@ public class SecurityConfig {
         http
                 .securityMatcher("/h2-console/**")
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/h2-console/**").hasRole("ADMIN"))
+                        .requestMatchers("/h2-console/**").permitAll())
                 .csrf(csrf -> csrf.disable())
                 .headers(headers -> headers
                         .frameOptions(frame -> frame.sameOrigin()));
         return http.build();
     }
 
+    /**
+     * Rate-limits login AND register: 10 POSTs per IP per minute.
+     */
     @Bean
     public FilterRegistrationBean<OncePerRequestFilter> authRateLimitFilter() {
         FilterRegistrationBean<OncePerRequestFilter> bean = new FilterRegistrationBean<>();
@@ -158,27 +196,25 @@ public class SecurityConfig {
                     HttpServletRequest request,
                     HttpServletResponse response,
                     FilterChain filterChain) throws ServletException, IOException {
+
                 if (!"POST".equalsIgnoreCase(request.getMethod())) {
                     filterChain.doFilter(request, response);
                     return;
                 }
 
                 String rateLimitKey = resolveRateLimitKey(request);
-                // N-05 Fix: Use Caffeine's thread-safe get
                 AttemptWindow window = authAttemptWindows.get(rateLimitKey, key -> new AttemptWindow());
                 if (!window.tryAcquire(AUTH_ATTEMPT_WINDOW, AUTH_ATTEMPT_LIMIT)) {
                     response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
                     response.setContentType("application/json");
                     response.getWriter().write(
-                            "{\"success\":false,\"message\":\"Too many login attempts. Please try again later.\"}");
+                            "{\"success\":false,\"message\":\"Too many attempts. Please try again later.\"}");
                     return;
                 }
-
                 filterChain.doFilter(request, response);
-                // N-05 Fix: cleanupExpiredAttemptWindows() call removed; Caffeine handles this
             }
         });
-        bean.addUrlPatterns("/api/auth/login");
+        bean.addUrlPatterns("/api/auth/login", "/api/auth/register");
         bean.setOrder(Ordered.HIGHEST_PRECEDENCE);
         return bean;
     }
@@ -209,32 +245,8 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
-    @Bean
-    public UserDetailsService userDetailsService(
-            @Value("${app.admin.username}") String username,
-            @Value("${app.admin.password}") String password,
-            PasswordEncoder passwordEncoder) {
-        UserDetails user = User.builder()
-                .username(username)
-                .password(resolveStoredPassword(password, passwordEncoder))
-                .roles("ADMIN")
-                .build();
-        return new InMemoryUserDetailsManager(user);
-    }
-
-    private static String resolveStoredPassword(String password, PasswordEncoder passwordEncoder) {
-        if (password.startsWith("{bcrypt}")) {
-            return password.substring("{bcrypt}".length());
-        }
-        if (password.startsWith("$2a$") || password.startsWith("$2b$")) {
-            return password;
-        }
-        return passwordEncoder.encode(password);
-    }
-
     private String resolveRateLimitKey(HttpServletRequest request) {
         String remoteAddr = request.getRemoteAddr();
-
         Set<String> trustedProxies = Arrays.stream(trustedProxyIps.split(","))
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
@@ -268,11 +280,8 @@ public class SecurityConfig {
                 windowStart = now;
                 attempts = 0;
             }
-
-            if (attempts >= maxAttempts) {
+            if (attempts >= maxAttempts)
                 return false;
-            }
-
             attempts++;
             return true;
         }
