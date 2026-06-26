@@ -18,15 +18,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Locale;
+import java.util.Optional;
 
-/**
- * Replaces InMemoryUserDetailsManager from SecurityConfig.
- *
- * On startup (@PostConstruct) it seeds the admin account from env vars if it
- * does not already exist in app_users. This makes the transition from the
- * previous in-memory setup transparent: existing admin credentials continue
- * to work with no change to .env.
- */
 @Service
 public class UserServiceImpl implements UserDetailsService, UserService {
 
@@ -46,19 +39,27 @@ public class UserServiceImpl implements UserDetailsService, UserService {
         this.passwordEncoder = passwordEncoder;
     }
 
-    // ── Admin seeding ─────────────────────────────────────────────────────────
     /**
-     * Seeds the admin account from env vars on every startup.
-     * Idempotent — does nothing if the account already exists.
-     * The same password formats accepted by the old SecurityConfig are
-     * supported here: plaintext, {bcrypt}-prefixed, and raw $2a$/$2b$ hashes.
+     * Seeds the admin account on every startup.
+     * If the account exists but has the wrong role (e.g. was created as USER
+     * during an earlier broken run), the role is corrected to ADMIN.
      */
     @PostConstruct
     @Transactional
     public void seedAdminUser() {
         String normalizedAdmin = adminUsername.trim().toLowerCase(Locale.ROOT);
-        if (userRepository.existsByUsername(normalizedAdmin)) {
-            logger.debug("Admin account '{}' already exists — skipping seed", normalizedAdmin);
+
+        Optional<AppUser> existing = userRepository.findByUsername(normalizedAdmin);
+
+        if (existing.isPresent()) {
+            AppUser admin = existing.get();
+            if (!"ADMIN".equals(admin.getRole())) {
+                admin.setRole("ADMIN");
+                userRepository.save(admin);
+                logger.info("Corrected admin account '{}' role to ADMIN", normalizedAdmin);
+            } else {
+                logger.debug("Admin account '{}' already exists with correct role", normalizedAdmin);
+            }
             return;
         }
 
@@ -72,7 +73,6 @@ public class UserServiceImpl implements UserDetailsService, UserService {
         logger.info("Admin account '{}' seeded into app_users", normalizedAdmin);
     }
 
-    // ── UserDetailsService (Spring Security) ─────────────────────────────────
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
         String normalized = username.trim().toLowerCase(Locale.ROOT);
@@ -82,31 +82,26 @@ public class UserServiceImpl implements UserDetailsService, UserService {
         return User.builder()
                 .username(appUser.getUsername())
                 .password(appUser.getPassword())
-                .roles(appUser.getRole())       // Spring prefixes with ROLE_
+                .roles(appUser.getRole())
                 .disabled(!appUser.isEnabled())
                 .build();
     }
 
-    // ── UserService (registration) ────────────────────────────────────────────
     @Override
     @Transactional
     public void register(RegisterRequest request) {
         String normalizedUsername = request.getUsername().trim().toLowerCase(Locale.ROOT);
-        String normalizedEmail    = request.getEmail().trim().toLowerCase(Locale.ROOT);
+        String normalizedEmail = request.getEmail().trim().toLowerCase(Locale.ROOT);
 
-        // Block registration under the reserved admin username
         if (adminUsername.trim().equalsIgnoreCase(normalizedUsername)) {
             throw new RegistrationException("Username is not available");
         }
-
         if (userRepository.existsByUsername(normalizedUsername)) {
             throw new RegistrationException("Username is already taken");
         }
-
         if (userRepository.existsByEmail(normalizedEmail)) {
             throw new RegistrationException("An account with this email already exists");
         }
-
         if (!request.getPassword().equals(request.getConfirmPassword())) {
             throw new RegistrationException("Passwords do not match");
         }
@@ -118,7 +113,6 @@ public class UserServiceImpl implements UserDetailsService, UserService {
         newUser.setRole("USER");
         newUser.setEnabled(true);
         userRepository.save(newUser);
-
         logger.info("New USER account registered: {}", normalizedUsername);
     }
 
@@ -130,11 +124,6 @@ public class UserServiceImpl implements UserDetailsService, UserService {
                 .orElseThrow(() -> new UsernameNotFoundException("No account found for: " + username));
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
-    /**
-     * Mirrors the logic that was previously in SecurityConfig.resolveStoredPassword().
-     * Supports plaintext, {bcrypt}-prefixed, and raw BCrypt hashes.
-     */
     private String resolveStoredPassword(String password) {
         if (password.startsWith("{bcrypt}")) {
             return password.substring("{bcrypt}".length());
