@@ -13,7 +13,6 @@ import {
 import { Security as SecurityIcon } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { logError } from '../utils/logger';
-import { toUserMessage } from '../utils/errors';
 
 function Login() {
   const navigate = useNavigate();

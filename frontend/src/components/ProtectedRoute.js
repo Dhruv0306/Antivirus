@@ -18,8 +18,7 @@ function ProtectedRoute({ children }) {
 
 /**
  * Blocks access for non-admin users.
- * Authenticated users with ROLE_USER are redirected to the dashboard root
- * instead of being bounced to /login.
+ * Authenticated users with ROLE_USER are redirected to / instead of /login.
  */
 export function AdminRoute({ children }) {
   const { isAuthenticated, isAdmin } = useAuth();

@@ -35,9 +35,7 @@ const StyledPaper = styled(Paper)(({ theme }) => ({
   position: 'sticky',
   top: 16,
   transition: 'all 0.2s ease-in-out',
-  '&:hover': {
-    boxShadow: 'var(--shadow-xlarge)'
-  }
+  '&:hover': { boxShadow: 'var(--shadow-xlarge)' },
 }));
 
 const LogoContainer = styled(Box)(({ theme }) => ({
@@ -46,7 +44,7 @@ const LogoContainer = styled(Box)(({ theme }) => ({
   alignItems: 'center',
   gap: 8,
   borderBottom: '1px solid var(--border-main)',
-  background: 'linear-gradient(145deg, var(--background-dark), var(--background-paper))'
+  background: 'linear-gradient(145deg, var(--background-dark), var(--background-paper))',
 }));
 
 const LogoIcon = styled(SecurityIcon)(({ theme }) => ({
@@ -56,8 +54,8 @@ const LogoIcon = styled(SecurityIcon)(({ theme }) => ({
   '@keyframes pulse': {
     '0%': { opacity: 0.6 },
     '50%': { opacity: 1 },
-    '100%': { opacity: 0.6 }
-  }
+    '100%': { opacity: 0.6 },
+  },
 }));
 
 const LogoText = styled(Typography)(({ theme }) => ({
@@ -66,14 +64,14 @@ const LogoText = styled(Typography)(({ theme }) => ({
   fontWeight: 600,
   background: 'linear-gradient(45deg, var(--primary-main), var(--primary-light))',
   WebkitBackgroundClip: 'text',
-  WebkitTextFillColor: 'transparent'
+  WebkitTextFillColor: 'transparent',
 }));
 
 const StyledListItem = styled(ListItem)(({ theme }) => ({
   color: 'var(--text-primary)',
   '&:hover': {
     backgroundColor: 'var(--primary-transparent-hover)',
-    '& .MuiListItemIcon-root': { color: 'var(--primary-main)' }
+    '& .MuiListItemIcon-root': { color: 'var(--primary-main)' },
   },
   transition: 'all 0.2s ease',
   borderRadius: 'var(--border-radius-medium)',
@@ -86,16 +84,16 @@ const StyledListItem = styled(ListItem)(({ theme }) => ({
     '& .MuiListItemIcon-root': { color: 'var(--primary-main)' },
     '& .MuiListItemText-root .MuiTypography-root': {
       fontWeight: 600,
-      color: 'var(--text-primary)'
-    }
-  }
+      color: 'var(--text-primary)',
+    },
+  },
 }));
 
 const StyledListItemIcon = styled(ListItemIcon)(({ theme }) => ({
   color: 'var(--text-secondary)',
   transition: 'color 0.2s ease',
   minWidth: '35px',
-  '& .MuiSvgIcon-root': { fontSize: '1.3rem' }
+  '& .MuiSvgIcon-root': { fontSize: '1.3rem' },
 }));
 
 const StyledListItemText = styled(ListItemText)(({ theme }) => ({
@@ -103,11 +101,11 @@ const StyledListItemText = styled(ListItemText)(({ theme }) => ({
   '& .MuiTypography-root': {
     fontWeight: 400,
     fontSize: '0.9rem',
-    color: 'var(--text-secondary)'
-  }
+    color: 'var(--text-secondary)',
+  },
 }));
 
-// All menu items declared with an optional adminOnly flag
+// All menu items — adminOnly items are filtered out for USER role
 const ALL_MENU_ITEMS = [
   { text: 'Dashboard', icon: <DashboardIcon />, path: '/' },
   { text: 'File Scan', icon: <FileIcon />, path: '/file-scan' },
@@ -127,7 +125,6 @@ function Sidebar() {
     navigate('/login');
   };
 
-  // Regular users only see Dashboard, File Scan, Directory Scan
   const menuItems = isAdmin
     ? ALL_MENU_ITEMS
     : ALL_MENU_ITEMS.filter((item) => !item.adminOnly);

@@ -1,9 +1,5 @@
 package com.antivirus.dto;
 
-/**
- * Response body for GET /api/auth/me.
- * The frontend uses this to drive role-based UI gating after login.
- */
 public class AuthUserResponse {
 
     private final String username;

@@ -5,11 +5,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
-/**
- * Incoming payload for POST /api/auth/register.
- * All validation constraints are enforced by @Valid in the controller before
- * the service layer is called.
- */
 public class RegisterRequest {
 
     @NotBlank(message = "Username is required")

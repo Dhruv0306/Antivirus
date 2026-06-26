@@ -27,10 +27,6 @@ public class AuthController {
         this.userService = userService;
     }
 
-    /**
-     * Returns CSRF token details so the frontend can attach the token to
-     * subsequent state-changing requests. Unchanged from before.
-     */
     @GetMapping("/csrf")
     public Map<String, String> csrf(CsrfToken token) {
         return Map.of(
@@ -39,16 +35,6 @@ public class AuthController {
                 "token", token.getToken());
     }
 
-    /**
-     * Registers a new USER-role account.
-     *
-     * Flow:
-     * 1. @Valid runs Jakarta Validation constraints on RegisterRequest.
-     * 2. UserService.register() checks uniqueness and admin-username conflicts.
-     * 3. Returns 201 Created on success.
-     * 4. Returns 409 Conflict if username/email is already taken.
-     * 5. Returns 400 Bad Request if Jakarta Validation fails.
-     */
     @PostMapping("/register")
     public ResponseEntity<Map<String, Object>> register(@Valid @RequestBody RegisterRequest request) {
         try {
@@ -65,10 +51,7 @@ public class AuthController {
 
     /**
      * Returns the authenticated user's username and role.
-     * The frontend calls this immediately after a successful login to determine
-     * which navigation items and pages to show.
-     *
-     * Requires any authenticated session — no specific role needed.
+     * Called by the frontend immediately after login to drive UI gating.
      */
     @GetMapping("/me")
     public ResponseEntity<AuthUserResponse> me(Principal principal) {

@@ -136,7 +136,7 @@ function Dashboard() {
       controller.abort();
       clearInterval(statusInterval);
     };
-  }, [isAdmin])
+  }, [isAdmin]);
 
   const fetchScanHistory = async () => {
     try {

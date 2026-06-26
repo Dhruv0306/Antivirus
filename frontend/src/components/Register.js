@@ -30,16 +30,15 @@ function Register() {
         setError(null);
     };
 
-    // Client-side guard before hitting the server
     const validate = () => {
-        if (form.password !== form.confirmPassword) {
-            return 'Passwords do not match';
+        if (!/^[a-zA-Z0-9_]+$/.test(form.username)) {
+            return 'Username may only contain letters, digits, and underscores';
         }
         if (form.password.length < 8) {
             return 'Password must be at least 8 characters';
         }
-        if (!/^[a-zA-Z0-9_]+$/.test(form.username)) {
-            return 'Username may only contain letters, digits, and underscores';
+        if (form.password !== form.confirmPassword) {
+            return 'Passwords do not match';
         }
         return null;
     };
@@ -56,7 +55,6 @@ function Register() {
 
         setLoading(true);
         try {
-            // Fetch a fresh CSRF token before the state-changing POST
             const { data: csrf } = await authApi.get('/csrf');
             setCsrfCredentials(csrf);
 
@@ -67,7 +65,6 @@ function Register() {
                 confirmPassword: form.confirmPassword,
             });
 
-            // Redirect to login with a success flag so Login.js can show a banner
             navigate('/login?registered=true', { replace: true });
         } catch (err) {
             const serverMessage = err.response?.data?.message;

@@ -1,8 +1,6 @@
 -- V2__add_users_table.sql
--- Adds the app_users table for DB-backed authentication.
--- The scan_results.owner_username column already exists from V1 and requires
--- no modification — SecurityServiceImpl.resolveCurrentUsername() was already
--- writing to it via SecurityContextHolder.
+-- Creates the app_users table for DB-backed authentication.
+-- scan_results.owner_username already exists from V1 — no change needed there.
 CREATE TABLE app_users (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(50) NOT NULL UNIQUE,

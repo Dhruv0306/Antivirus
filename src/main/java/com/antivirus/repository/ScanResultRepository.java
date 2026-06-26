@@ -22,12 +22,8 @@ public interface ScanResultRepository extends JpaRepository<ScanResult, Long> {
     List<ScanResult> findByThreatType(String threatType);
 
     /**
-     * User-scoped history — returns only results owned by the given username,
-     * most recent first. Used by GET /api/antivirus/history/me.
-     *
-     * ownerUsername is stored in lowercase (see
-     * SecurityServiceImpl.resolveCurrentUsername),
-     * so callers must normalize to lowercase before querying.
+     * User-scoped history. ownerUsername is stored lowercase by
+     * SecurityServiceImpl.resolveCurrentUsername() — normalize before calling.
      */
     Page<ScanResult> findByOwnerUsernameOrderByScanDateTimeDesc(String ownerUsername, Pageable pageable);
 }
