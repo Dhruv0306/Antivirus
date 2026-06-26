@@ -19,12 +19,13 @@ export default defineConfig(({ mode }) => ({
     react(),
   ],
   esbuild: {
-    // mode is 'production' only when --mode production is used (vite build default)
+    // Drop console/debugger only in production builds
     drop: mode === 'production' ? ['console', 'debugger'] : [],
   },
   server: {
     port: 5000,
     strictPort: true,
+    host: true, // bind to 0.0.0.0 so the dev server is reachable via LAN IP
   },
   preview: {
     port: 5000,
