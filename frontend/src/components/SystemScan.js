@@ -287,7 +287,7 @@ function SystemScan() {
 
                 {calculateScanSummary(scanResults) && (
                   <Grid container spacing={2} sx={{ mb: 3 }}>
-                    <Grid item xs={3}>
+                    <Grid item xs={6} sm={3}>
                       <StyledPaper>
                         <StatusIcon status="success">
                           <CheckCircleIcon />
@@ -296,7 +296,7 @@ function SystemScan() {
                         <Typography variant="body2" color="textSecondary">Clean Files</Typography>
                       </StyledPaper>
                     </Grid>
-                    <Grid item xs={3}>
+                    <Grid item xs={6} sm={3}>
                       <StyledPaper>
                         <StatusIcon status="error">
                           <ErrorIcon />
@@ -305,7 +305,7 @@ function SystemScan() {
                         <Typography variant="body2" color="textSecondary">Threats Found</Typography>
                       </StyledPaper>
                     </Grid>
-                    <Grid item xs={3}>
+                    <Grid item xs={6} sm={3}>
                       <StyledPaper>
                         <StatusIcon status="warning">
                           <WarningIcon />
@@ -314,7 +314,7 @@ function SystemScan() {
                         <Typography variant="body2" color="textSecondary">Scan Errors</Typography>
                       </StyledPaper>
                     </Grid>
-                    <Grid item xs={3}>
+                    <Grid item xs={6} sm={3}>
                       <StyledPaper>
                         <StatusIcon>
                           <FileIcon />
