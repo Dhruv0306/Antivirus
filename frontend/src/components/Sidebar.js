@@ -137,7 +137,7 @@ const ALL_MENU_ITEMS = [
 
 // Shared menu + account content, reused by both the desktop card and the
 // mobile drawer so the two stay visually consistent.
-function SidebarContent({ onNavigate }) {
+function SidebarContent({ onNavigate = () => {} }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, isAdmin, logout } = useAuth();
