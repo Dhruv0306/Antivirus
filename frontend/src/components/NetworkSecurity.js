@@ -175,7 +175,7 @@ function NetworkSecurity() {
 
       <Grid container spacing={3}>
         <Grid item xs={12} md={6}>
-          <StyledPaper sx={{ p: { xs: 2, sm: 3 } }}>
+          <StyledPaper sx={{ p: 3 }}>
             <Typography
               variant="h6"
               gutterBottom
@@ -256,7 +256,7 @@ function NetworkSecurity() {
         </Grid>
 
         <Grid item xs={12} md={6}>
-          <StyledPaper sx={{ p: { xs: 2, sm: 3 } }}>
+          <StyledPaper sx={{ p: 3 }}>
             <Typography
               variant="h6"
               gutterBottom
@@ -328,7 +328,7 @@ function NetworkSecurity() {
         </Grid>
 
         <Grid item xs={12}>
-          <StyledPaper sx={{ p: { xs: 2, sm: 3 } }}>
+          <StyledPaper sx={{ p: 3 }}>
             <Typography
               variant="h6"
               gutterBottom
@@ -353,7 +353,7 @@ function NetworkSecurity() {
         </Grid>
 
         <Grid item xs={12}>
-          <StyledPaper sx={{ p: { xs: 2, sm: 3 } }}>
+          <StyledPaper sx={{ p: 3 }}>
             <Typography
               variant="h6"
               gutterBottom
