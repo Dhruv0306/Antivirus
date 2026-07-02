@@ -23,8 +23,8 @@ import NetworkScan from './components/NetworkScan';
 import AutoScanGuide from './components/AutoScanGuide';
 import Sidebar, { SIDEBAR_MOBILE_BREAKPOINT } from './components/Sidebar';
 
-// Only rendered below the md breakpoint. Desktop/laptop layout never mounts
-// this — the sidebar stays permanently visible there, same as before.
+// Only displayed below the md breakpoint. Desktop/laptop layout hides this
+// app bar — the sidebar stays permanently visible there, same as before.
 function MobileAppBar({ onMenuClick }) {
   return (
     <AppBar
