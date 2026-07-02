@@ -42,23 +42,26 @@ const StyledPaper = styled(Paper)(({ theme }) => ({
   backgroundColor: '#ffffff',
   border: '1px solid rgba(0, 0, 0, 0.12)',
   borderRadius: '8px',
-  marginBottom: '16px'
+  marginBottom: '16px',
+  [theme.breakpoints.down('sm')]: {
+    padding: '16px',
+  },
 }));
 
 const AutoScanGuide = () => {
   return (
-    <Box sx={{ 
-      p: 3, 
+    <Box sx={{
+      p: { xs: 2, sm: 3 },
       color: '#2c3e50',
       backgroundColor: '#f5f5f5',
       minHeight: '100vh'
     }}>
       {/* Main Title */}
-      <Typography 
-        variant="h3" 
-        gutterBottom 
-        align="center" 
-        sx={{ 
+      <Typography
+        variant="h3"
+        gutterBottom
+        align="center"
+        sx={{
           color: '#2c3e50',
           mb: 4,
           fontWeight: 600
@@ -70,7 +73,7 @@ const AutoScanGuide = () => {
       {/* Introduction */}
       <StyledPaper elevation={3} sx={{ mb: 4 }}>
         <Typography variant="body1" paragraph>
-          You can automate virus scanning using Windows Task Scheduler to run scans at regular intervals. 
+          You can automate virus scanning using Windows Task Scheduler to run scans at regular intervals.
           This guide will walk you through the process of setting up automated scans using Windows built-in tools.
         </Typography>
         <Alert severity="info" sx={{ mt: 2 }}>
@@ -87,7 +90,7 @@ const AutoScanGuide = () => {
               Step-by-Step Setup Guide
             </Typography>
           </Box>
-          
+
           <List>
             {/* Step 1 */}
             <ListItem>
@@ -105,9 +108,9 @@ const AutoScanGuide = () => {
                 }
               />
             </ListItem>
-            
+
             <Divider sx={{ my: 2 }} />
-            
+
             {/* Step 2 */}
             <ListItem>
               <ListItemIcon>
@@ -124,9 +127,9 @@ const AutoScanGuide = () => {
                 }
               />
             </ListItem>
-            
+
             <Divider sx={{ my: 2 }} />
-            
+
             {/* Step 3 */}
             <ListItem>
               <ListItemIcon>
@@ -144,9 +147,9 @@ const AutoScanGuide = () => {
                 }
               />
             </ListItem>
-            
+
             <Divider sx={{ my: 2 }} />
-            
+
             {/* Step 4 */}
             <ListItem>
               <ListItemIcon>
@@ -256,11 +259,11 @@ const AutoScanGuide = () => {
 
       {/* Warning Note */}
       <Alert severity="warning" sx={{ mt: 3 }}>
-        Remember to periodically check the Task Scheduler to ensure your scheduled scans are running properly 
+        Remember to periodically check the Task Scheduler to ensure your scheduled scans are running properly
         and review the scan logs to verify the effectiveness of your automated scanning setup.
       </Alert>
     </Box>
   );
 };
 
-export default AutoScanGuide; 
+export default AutoScanGuide;

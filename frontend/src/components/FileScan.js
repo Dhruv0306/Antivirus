@@ -94,7 +94,7 @@ function FileScan() {
           },
         }
       );
-      
+
       if (response.data) {
         setScanResult(response.data);
       } else {
@@ -110,20 +110,20 @@ function FileScan() {
   };
 
   return (
-    <Box sx={{ width: '100%', maxWidth: 1200, margin: '0 auto', p: 3 }}>
-      <Typography 
-        variant="h4" 
-        gutterBottom 
-        sx={{ 
+    <Box sx={{ width: '100%', maxWidth: 1200, margin: '0 auto', p: { xs: 2, sm: 3 } }}>
+      <Typography
+        variant="h4"
+        gutterBottom
+        sx={{
           mb: 4,
           color: 'var(--text-primary)',
-          fontWeight: 600 
+          fontWeight: 600
         }}
       >
         File Scan
       </Typography>
 
-      <StyledPaper sx={{ p: 3, mb: 3 }}>
+      <StyledPaper sx={{ p: { xs: 2, sm: 3 }, mb: 3 }}>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <StyledButton
@@ -141,12 +141,12 @@ function FileScan() {
               />
             </StyledButton>
             {selectedFile && (
-              <Typography 
-                variant="body1" 
-                sx={{ 
-                  flexGrow: 1, 
+              <Typography
+                variant="body1"
+                sx={{
+                  flexGrow: 1,
                   wordBreak: 'break-all',
-                  color: 'var(--text-secondary)' 
+                  color: 'var(--text-secondary)'
                 }}
               >
                 Selected: {selectedFile.name}
@@ -162,12 +162,12 @@ function FileScan() {
           >
             {scanning ? (
               <>
-                <CircularProgress 
-                  size={24} 
-                  sx={{ 
+                <CircularProgress
+                  size={24}
+                  sx={{
                     mr: 1,
-                    color: 'var(--primary-light)' 
-                  }} 
+                    color: 'var(--primary-light)'
+                  }}
                 />
                 Scanning...
               </>
@@ -177,9 +177,9 @@ function FileScan() {
           </StyledButton>
 
           {error && (
-            <Alert 
-              severity="error" 
-              sx={{ 
+            <Alert
+              severity="error"
+              sx={{
                 mt: 2,
                 backgroundColor: 'var(--error-main)',
                 color: '#FFFFFF',
@@ -195,13 +195,13 @@ function FileScan() {
       </StyledPaper>
 
       {scanResult && (
-        <StyledPaper sx={{ p: 3 }}>
-          <Typography 
-            variant="h6" 
+        <StyledPaper sx={{ p: { xs: 2, sm: 3 } }}>
+          <Typography
+            variant="h6"
             gutterBottom
-            sx={{ 
+            sx={{
               color: 'var(--text-primary)',
-              fontWeight: 600 
+              fontWeight: 600
             }}
           >
             Scan Results
@@ -224,10 +224,10 @@ function FileScan() {
                   <StyledTableCell>
                     <Alert
                       severity={scanResult.infected ? 'error' : 'success'}
-                      sx={{ 
+                      sx={{
                         display: 'inline-flex',
-                        backgroundColor: scanResult.infected 
-                          ? 'var(--error-main)' 
+                        backgroundColor: scanResult.infected
+                          ? 'var(--error-main)'
                           : 'var(--success-main)',
                         color: '#FFFFFF',
                         '& .MuiAlert-icon': {
@@ -250,4 +250,4 @@ function FileScan() {
   );
 }
 
-export default FileScan; 
+export default FileScan;

@@ -274,7 +274,7 @@ function NetworkScan() {
   };
 
   return (
-    <Box sx={{ p: 3, color: 'var(--text-primary)' }}>
+    <Box sx={{ p: { xs: 2, sm: 3 }, color: 'var(--text-primary)' }}>
       <Typography
         variant="h3"
         gutterBottom
