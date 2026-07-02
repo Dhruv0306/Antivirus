@@ -52,7 +52,8 @@ const DrawerContent = styled(Box)(({ theme }) => ({
   backgroundColor: 'var(--background-paper)',
   color: 'var(--text-primary)',
   height: '100%',
-  overflow: 'hidden',
+  overflowX: 'hidden',
+  overflowY: 'auto',
   display: 'flex',
   flexDirection: 'column',
 }));
