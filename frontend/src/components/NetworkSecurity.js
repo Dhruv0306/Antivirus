@@ -145,22 +145,22 @@ function NetworkSecurity() {
 
   return (
     <Box>
-      <Typography 
-        variant="h4" 
-        gutterBottom 
-        sx={{ 
+      <Typography
+        variant="h4"
+        gutterBottom
+        sx={{
           mb: 4,
           color: 'var(--text-primary)',
-          fontWeight: 600 
+          fontWeight: 600
         }}
       >
         Network Security
       </Typography>
 
       {error && (
-        <Alert 
-          severity="error" 
-          sx={{ 
+        <Alert
+          severity="error"
+          sx={{
             mb: 3,
             backgroundColor: 'var(--error-main)',
             color: '#FFFFFF',
@@ -175,13 +175,13 @@ function NetworkSecurity() {
 
       <Grid container spacing={3}>
         <Grid item xs={12} md={6}>
-          <StyledPaper sx={{ p: 3 }}>
-            <Typography 
-              variant="h6" 
+          <StyledPaper sx={{ p: { xs: 2, sm: 3 } }}>
+            <Typography
+              variant="h6"
               gutterBottom
-              sx={{ 
+              sx={{
                 color: 'var(--text-primary)',
-                fontWeight: 600 
+                fontWeight: 600
               }}
             >
               Security Controls
@@ -189,10 +189,10 @@ function NetworkSecurity() {
             <List>
               <StyledListItem>
                 <ListItemIcon>
-                  <SecurityIcon sx={{ 
-                    color: firewallEnabled 
-                      ? 'var(--primary-main)' 
-                      : 'var(--text-disabled)' 
+                  <SecurityIcon sx={{
+                    color: firewallEnabled
+                      ? 'var(--primary-main)'
+                      : 'var(--text-disabled)'
                   }} />
                 </ListItemIcon>
                 <ListItemText
@@ -221,10 +221,10 @@ function NetworkSecurity() {
               </StyledListItem>
               <StyledListItem>
                 <ListItemIcon>
-                  <WebIcon sx={{ 
-                    color: webProtectionEnabled 
-                      ? 'var(--primary-main)' 
-                      : 'var(--text-disabled)' 
+                  <WebIcon sx={{
+                    color: webProtectionEnabled
+                      ? 'var(--primary-main)'
+                      : 'var(--text-disabled)'
                   }} />
                 </ListItemIcon>
                 <ListItemText
@@ -256,13 +256,13 @@ function NetworkSecurity() {
         </Grid>
 
         <Grid item xs={12} md={6}>
-          <StyledPaper sx={{ p: 3 }}>
-            <Typography 
-              variant="h6" 
+          <StyledPaper sx={{ p: { xs: 2, sm: 3 } }}>
+            <Typography
+              variant="h6"
               gutterBottom
-              sx={{ 
+              sx={{
                 color: 'var(--text-primary)',
-                fontWeight: 600 
+                fontWeight: 600
               }}
             >
               Network Status
@@ -270,10 +270,10 @@ function NetworkSecurity() {
             <List>
               <StyledListItem>
                 <ListItemIcon>
-                  <WarningIcon sx={{ 
-                    color: networkStatus.threats > 0 
-                      ? 'var(--error-main)' 
-                      : 'var(--success-main)' 
+                  <WarningIcon sx={{
+                    color: networkStatus.threats > 0
+                      ? 'var(--error-main)'
+                      : 'var(--success-main)'
                   }} />
                 </ListItemIcon>
                 <ListItemText
@@ -328,13 +328,13 @@ function NetworkSecurity() {
         </Grid>
 
         <Grid item xs={12}>
-          <StyledPaper sx={{ p: 3 }}>
-            <Typography 
-              variant="h6" 
+          <StyledPaper sx={{ p: { xs: 2, sm: 3 } }}>
+            <Typography
+              variant="h6"
               gutterBottom
-              sx={{ 
+              sx={{
                 color: 'var(--text-primary)',
-                fontWeight: 600 
+                fontWeight: 600
               }}
             >
               Blocked Domains
@@ -353,13 +353,13 @@ function NetworkSecurity() {
         </Grid>
 
         <Grid item xs={12}>
-          <StyledPaper sx={{ p: 3 }}>
-            <Typography 
-              variant="h6" 
+          <StyledPaper sx={{ p: { xs: 2, sm: 3 } }}>
+            <Typography
+              variant="h6"
               gutterBottom
-              sx={{ 
+              sx={{
                 color: 'var(--text-primary)',
-                fontWeight: 600 
+                fontWeight: 600
               }}
             >
               Recent Connections
@@ -404,4 +404,4 @@ function NetworkSecurity() {
   );
 }
 
-export default NetworkSecurity; 
+export default NetworkSecurity;
