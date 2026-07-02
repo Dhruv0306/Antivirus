@@ -171,7 +171,7 @@ function DirectoryScan() {
   };
 
   return (
-    <Box sx={{ width: '100%', maxWidth: 1200, margin: '0 auto', p: 3 }}>
+    <Box sx={{ width: '100%', maxWidth: 1200, margin: '0 auto', p: { xs: 2, sm: 3 } }}>
       <Typography
         variant="h4"
         gutterBottom
@@ -186,9 +186,9 @@ function DirectoryScan() {
 
       <Grid container spacing={3}>
         <Grid item xs={12}>
-          <StyledPaper sx={{ p: 3 }}>
+          <StyledPaper sx={{ p: { xs: 2, sm: 3 } }}>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+              <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
                 <StyledButton
                   variant="contained"
                   startIcon={<FolderIcon />}
@@ -281,7 +281,7 @@ function DirectoryScan() {
         {scanResult && (
           <>
             <Grid item xs={12} md={6}>
-              <StyledPaper sx={{ p: 3 }}>
+              <StyledPaper sx={{ p: { xs: 2, sm: 3 } }}>
                 <Typography
                   variant="h6"
                   gutterBottom
@@ -392,7 +392,7 @@ function DirectoryScan() {
             </Grid>
 
             <Grid item xs={12} md={6}>
-              <StyledPaper sx={{ p: 3 }}>
+              <StyledPaper sx={{ p: { xs: 2, sm: 3 } }}>
                 <Typography
                   variant="h6"
                   gutterBottom
