@@ -144,6 +144,7 @@ function SidebarContent({ onNavigate }) {
 
   const handleLogout = () => {
     logout();
+    onNavigate();
     navigate('/login');
   };
 
