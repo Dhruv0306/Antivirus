@@ -76,7 +76,7 @@ function AppLayout() {
       pt: { xs: 0, [SIDEBAR_MOBILE_BREAKPOINT]: 2 },
       pb: 2,
     }}>
-      <MobileAppBar onMenuClick={() => setMobileOpen(true)} />
+      <MobileAppBar onMenuClick={() => setMobileOpen((prev) => !prev)} />
 
       <Box sx={{ display: 'flex', alignItems: 'flex-start' }}>
         <Sidebar
