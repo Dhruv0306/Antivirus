@@ -95,7 +95,7 @@ function Register() {
             }}
         >
             <Card sx={{ width: '100%', maxWidth: 420 }}>
-                <CardContent sx={{ p: 4 }}>
+                <CardContent sx={{ p: { xs: 3, sm: 4 } }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', mb: 3, gap: 1 }}>
                         <SecurityIcon color="primary" />
                         <Typography variant="h5" component="h1" fontWeight={600}>
