@@ -43,25 +43,34 @@ public class ScanResult {
     @Column
     private String actionTaken; // QUARANTINED, DELETED, CLEANED
 
+    @Column(nullable = false)
+    private String verdict = "CLEAN"; // CLEAN, SUSPICIOUS, MALICIOUS
+
+    @Column(name = "risk_score", nullable = false)
+    private int riskScore = 0; // 0-100 aggregate confidence score
+
+    @Column(name = "detection_signals", length = 500)
+    private String detectionSignals; // comma-separated list of triggered signal names
+
     @PrePersist
     protected void onCreate() {
         scanDateTime = LocalDateTime.now();
     }
-    
+
     // Getters and Setters
     public Long getId() {
         return id;
     }
-    
+
     public void setId(Long id) {
         this.id = id;
     }
-    
+
     @JsonIgnore
     public String getFilePath() {
         return filePath;
     }
-    
+
     public void setFilePath(String filePath) {
         this.filePath = filePath;
     }
@@ -95,52 +104,76 @@ public class ScanResult {
     public void setOwnerUsername(String ownerUsername) {
         this.ownerUsername = ownerUsername;
     }
-    
+
     public String getThreatType() {
         return threatType;
     }
-    
+
     public void setThreatType(String threatType) {
         this.threatType = threatType;
     }
-    
+
     public boolean isInfected() {
         return infected;
     }
-    
+
     public void setInfected(boolean infected) {
         this.infected = infected;
     }
-    
+
     public String getThreatDetails() {
         return threatDetails;
     }
-    
+
     public void setThreatDetails(String threatDetails) {
         this.threatDetails = threatDetails;
     }
-    
+
     public LocalDateTime getScanDateTime() {
         return scanDateTime;
     }
-    
+
     public void setScanDateTime(LocalDateTime scanDateTime) {
         this.scanDateTime = scanDateTime;
     }
-    
+
     public String getScanType() {
         return scanType;
     }
-    
+
     public void setScanType(String scanType) {
         this.scanType = scanType;
     }
-    
+
     public String getActionTaken() {
         return actionTaken;
     }
-    
+
     public void setActionTaken(String actionTaken) {
         this.actionTaken = actionTaken;
+    }
+
+    public String getVerdict() {
+        return verdict;
+    }
+
+    public void setVerdict(String verdict) {
+        this.verdict = verdict;
+    }
+
+    public int getRiskScore() {
+        return riskScore;
+    }
+
+    public void setRiskScore(int riskScore) {
+        this.riskScore = riskScore;
+    }
+
+    public String getDetectionSignals() {
+        return detectionSignals;
+    }
+
+    public void setDetectionSignals(String detectionSignals) {
+        this.detectionSignals = detectionSignals;
     }
 }
