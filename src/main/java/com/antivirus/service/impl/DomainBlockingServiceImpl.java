@@ -91,6 +91,7 @@ public class DomainBlockingServiceImpl implements DomainBlockingService {
         }
     }
 
+    @SuppressWarnings("null")
     @Override
     @Transactional
     public void unblockDomain(String domain) {

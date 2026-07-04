@@ -192,9 +192,9 @@ public class SecurityConfig {
         bean.setFilter(new OncePerRequestFilter() {
             @Override
             protected void doFilterInternal(
-                    HttpServletRequest request,
-                    HttpServletResponse response,
-                    FilterChain filterChain) throws ServletException, IOException {
+                    @SuppressWarnings("null") HttpServletRequest request,
+                    @SuppressWarnings("null") HttpServletResponse response,
+                    @SuppressWarnings("null") FilterChain filterChain) throws ServletException, IOException {
 
                 if (!"POST".equalsIgnoreCase(request.getMethod())) {
                     filterChain.doFilter(request, response);

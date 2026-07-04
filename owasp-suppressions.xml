@@ -1,6 +1,3 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<suppressions xmlns="https://www.owasp.org/dependency-check/schema/dependency-suppression">
-    <!--
-    Add suppression entries here for false positives or accepted risks.
-    -->
+<suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.3.xsd">
 </suppressions>

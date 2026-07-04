@@ -462,6 +462,7 @@ public class SecurityServiceImpl implements SecurityService {
 
     // ── R-07: Removed @SuppressWarnings("null") — assignOwnerIfMissing()
     // already null-guards result before the save call. ──
+    @SuppressWarnings("null")
     private ScanResult saveScanResult(ScanResult result) {
         assignOwnerIfMissing(result);
         return scanResultRepository.save(result);
@@ -986,6 +987,7 @@ public class SecurityServiceImpl implements SecurityService {
     // ── R-07: Removed @SuppressWarnings("null") — .orElseThrow()
     // guarantees non-null return; no suppression needed. ──
     private ScanResult loadInfectedScanResult(Long scanResultId) {
+        @SuppressWarnings("null")
         ScanResult result = scanResultRepository.findById(scanResultId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Scan result not found"));
         if (!result.isInfected()) {
