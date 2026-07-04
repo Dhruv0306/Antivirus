@@ -34,6 +34,7 @@ import { antivirusApi } from '../api/client';
 import { styled } from '@mui/material/styles';
 import { log, logError } from '../utils/logger';
 import { toUserMessage } from '../utils/errors';
+import { getVerdictLabel, getVerdictSeverity } from '../utils/verdict';
 import { useAuth } from '../context/AuthContext';
 
 // Styled components using our theme
@@ -462,7 +463,7 @@ function Dashboard() {
                             </TableCell>
                             <TableCell>
                               <Alert
-                                severity={scan.infected ? 'error' : 'success'}
+                                severity={getVerdictSeverity(scan)}
                                 sx={{
                                   display: 'inline-flex',
                                   py: 0,
@@ -470,7 +471,7 @@ function Dashboard() {
                                   '& .MuiAlert-message': { py: 0.5 }
                                 }}
                               >
-                                {scan.infected ? 'Infected' : 'Clean'}
+                                {getVerdictLabel(scan)}
                               </Alert>
                             </TableCell>
                             <TableCell>{scan.threatType || 'N/A'}</TableCell>
