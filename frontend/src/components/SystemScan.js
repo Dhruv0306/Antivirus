@@ -28,7 +28,8 @@ import {
 import { antivirusApi } from '../api/client';
 import { styled } from '@mui/material/styles';
 import { log, logError } from '../utils/logger';
-import { toUserMessage } from '../utils/errors'; // Import the error normalizer
+import { toUserMessage } from '../utils/errors';
+import { getVerdictStatus, getVerdictLabel, getVerdictColorVar, isSuspicious, isMalicious } from '../utils/verdict';
 
 // Styled components with light theme
 const StyledPaper = styled(Paper)(({ theme }) => ({
@@ -208,9 +209,10 @@ function SystemScan() {
 
     return {
       totalFiles: results.length,
-      threats: results.filter(r => r.infected).length,
+      threats: results.filter(isMalicious).length,
+      suspicious: results.filter(isSuspicious).length,
       errors: results.filter(r => r.threatType === 'ERROR').length,
-      clean: results.filter(r => !r.infected && r.threatType !== 'ERROR').length
+      clean: results.filter(r => getVerdictStatus(r) === 'clean').length
     };
   };
 
@@ -287,7 +289,7 @@ function SystemScan() {
 
                 {calculateScanSummary(scanResults) && (
                   <Grid container spacing={2} sx={{ mb: 3 }}>
-                    <Grid item xs={6} sm={3}>
+                    <Grid item xs={6} sm={2.4}>
                       <StyledPaper>
                         <StatusIcon status="success">
                           <CheckCircleIcon />
@@ -296,16 +298,25 @@ function SystemScan() {
                         <Typography variant="body2" color="textSecondary">Clean Files</Typography>
                       </StyledPaper>
                     </Grid>
-                    <Grid item xs={6} sm={3}>
+                    <Grid item xs={6} sm={2.4}>
                       <StyledPaper>
                         <StatusIcon status="error">
                           <ErrorIcon />
                         </StatusIcon>
                         <Typography variant="h6">{calculateScanSummary(scanResults).threats}</Typography>
-                        <Typography variant="body2" color="textSecondary">Threats Found</Typography>
+                        <Typography variant="body2" color="textSecondary">Malicious Files</Typography>
                       </StyledPaper>
                     </Grid>
-                    <Grid item xs={6} sm={3}>
+                    <Grid item xs={6} sm={2.4}>
+                      <StyledPaper>
+                        <StatusIcon status="warning">
+                          <WarningIcon />
+                        </StatusIcon>
+                        <Typography variant="h6">{calculateScanSummary(scanResults).suspicious}</Typography>
+                        <Typography variant="body2" color="textSecondary">Suspicious Files</Typography>
+                      </StyledPaper>
+                    </Grid>
+                    <Grid item xs={6} sm={2.4}>
                       <StyledPaper>
                         <StatusIcon status="warning">
                           <WarningIcon />
@@ -314,7 +325,7 @@ function SystemScan() {
                         <Typography variant="body2" color="textSecondary">Scan Errors</Typography>
                       </StyledPaper>
                     </Grid>
-                    <Grid item xs={6} sm={3}>
+                    <Grid item xs={6} sm={2.4}>
                       <StyledPaper>
                         <StatusIcon>
                           <FileIcon />
@@ -331,8 +342,10 @@ function SystemScan() {
                     <React.Fragment key={index}>
                       <StyledListItem>
                         <ListItemIcon>
-                          {result.infected ? (
+                          {isMalicious(result) ? (
                             <ErrorIcon color="error" />
+                          ) : isSuspicious(result) ? (
+                            <WarningIcon color="warning" />
                           ) : result.threatType === 'ERROR' ? (
                             <WarningIcon color="warning" />
                           ) : (
@@ -348,9 +361,7 @@ function SystemScan() {
                               fontWeight: 500
                             },
                             '& .MuiListItemText-secondary': {
-                              color: result.infected ? 'var(--error-main)' :
-                                result.threatType === 'ERROR' ? 'var(--warning-main)' :
-                                  'var(--text-secondary)'
+                              color: getVerdictColorVar(result)
                             }
                           }}
                         />
