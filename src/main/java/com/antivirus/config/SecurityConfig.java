@@ -190,7 +190,6 @@ public class SecurityConfig {
     public FilterRegistrationBean<OncePerRequestFilter> authRateLimitFilter() {
         FilterRegistrationBean<OncePerRequestFilter> bean = new FilterRegistrationBean<>();
         bean.setFilter(new OncePerRequestFilter() {
-            @SuppressWarnings("null")
             @Override
             protected void doFilterInternal(
                     HttpServletRequest request,
@@ -233,6 +232,7 @@ public class SecurityConfig {
         return source;
     }
 
+    @SuppressWarnings("null")
     private List<String> parseAllowedOrigins() {
         return Arrays.stream(allowedOrigins.split(","))
                 .map(String::trim)
@@ -247,6 +247,7 @@ public class SecurityConfig {
 
     private String resolveRateLimitKey(HttpServletRequest request) {
         String remoteAddr = request.getRemoteAddr();
+        @SuppressWarnings("null")
         Set<String> trustedProxies = Arrays.stream(trustedProxyIps.split(","))
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())

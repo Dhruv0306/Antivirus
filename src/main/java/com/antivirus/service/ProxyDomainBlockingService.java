@@ -308,6 +308,7 @@ public class ProxyDomainBlockingService {
         }
     }
 
+    @SuppressWarnings("null")
     public boolean isDomainBlocked(String domain) {
         if (domain == null || domain.isBlank()) {
             return false;

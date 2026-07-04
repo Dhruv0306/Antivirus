@@ -116,6 +116,7 @@ public class UserServiceImpl implements UserDetailsService, UserService {
         logger.info("New USER account registered: {}", normalizedUsername);
     }
 
+    @SuppressWarnings("null")
     @Override
     public String getRoleForUser(String username) {
         String normalized = username.trim().toLowerCase(Locale.ROOT);

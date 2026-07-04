@@ -1055,6 +1055,7 @@ public class SecurityServiceImpl implements SecurityService {
     // replaces the old "extension longer than 4 chars" check, which matched
     // ordinary extensions like .json, .yaml, and .properties and flagged
     // almost any project directory containing a readme.txt.
+    @SuppressWarnings("null")
     private int scoreRansomwareDirectoryBehavior(File file) {
         File parentDir = file.getParentFile();
         if (parentDir == null || !parentDir.exists()) {

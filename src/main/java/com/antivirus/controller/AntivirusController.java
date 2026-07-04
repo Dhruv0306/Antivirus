@@ -258,6 +258,7 @@ public class AntivirusController {
      * @param files         List of files to scan from the directory
      * @return Scan results for all files
      */
+    @SuppressWarnings("deprecation")
     @PostMapping("/scan/directory")
     public ResponseEntity<?> scanDirectory(
             @RequestParam("directoryName") String directoryName,
