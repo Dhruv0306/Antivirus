@@ -18,6 +18,7 @@ import { antivirusApi } from '../api/client';
 import { styled } from '@mui/material/styles';
 import { log, logError } from '../utils/logger';
 import { toUserMessage } from '../utils/errors'; // Import the error normalizer
+import { getVerdictLabel, getVerdictSeverity, getVerdictColorVar } from '../utils/verdict';
 
 // Styled components
 const StyledPaper = styled(Paper)(({ theme }) => ({
@@ -213,6 +214,7 @@ function FileScan() {
                   <StyledTableCell>File Name</StyledTableCell>
                   <StyledTableCell>Status</StyledTableCell>
                   <StyledTableCell>Threat Type</StyledTableCell>
+                  <StyledTableCell>Risk Score</StyledTableCell>
                   <StyledTableCell>Details</StyledTableCell>
                 </StyledTableRow>
               </TableHead>
@@ -223,23 +225,35 @@ function FileScan() {
                   </StyledTableCell>
                   <StyledTableCell>
                     <Alert
-                      severity={scanResult.infected ? 'error' : 'success'}
+                      severity={getVerdictSeverity(scanResult)}
                       sx={{
                         display: 'inline-flex',
-                        backgroundColor: scanResult.infected
-                          ? 'var(--error-main)'
-                          : 'var(--success-main)',
+                        backgroundColor: getVerdictColorVar(scanResult),
                         color: '#FFFFFF',
                         '& .MuiAlert-icon': {
                           color: '#FFFFFF'
                         }
                       }}
                     >
-                      {scanResult.infected ? 'Infected' : 'Clean'}
+                      {getVerdictLabel(scanResult)}
                     </Alert>
                   </StyledTableCell>
                   <StyledTableCell>{scanResult.threatType || 'N/A'}</StyledTableCell>
-                  <StyledTableCell>{scanResult.threatDetails || 'No threats found'}</StyledTableCell>
+                  <StyledTableCell>
+                    {typeof scanResult.riskScore === 'number' ? `${scanResult.riskScore}/100` : 'N/A'}
+                  </StyledTableCell>
+                  <StyledTableCell>
+                    {scanResult.threatDetails || 'No threats found'}
+                    {scanResult.detectionSignals && (
+                      <Typography
+                        component="div"
+                        variant="body2"
+                        sx={{ color: 'var(--text-secondary)', mt: 0.5 }}
+                      >
+                        Signals: {scanResult.detectionSignals}
+                      </Typography>
+                    )}
+                  </StyledTableCell>
                 </StyledTableRow>
               </TableBody>
             </Table>
