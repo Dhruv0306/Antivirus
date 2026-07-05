@@ -295,14 +295,15 @@ public class SecurityServiceImpl implements SecurityService {
             }
 
             // Zip-bomb / archive-abuse protection is a resource-safety check,
-            // not a content-based threat verdict, so it is evaluated and
-            // reported separately rather than folded into the malware score.
+            // not a content-based threat verdict, so it is reported as
+            // SUSPICIOUS (not scored against the malware engine) rather than
+            // folded into the malware score.
             if (isZipFile(file)) {
                 ZipEvaluation zipEval = evaluateZipArchive(file);
                 if (zipEval.bomb()) {
-                    result.setThreatType("WARNING");
-                    result.setThreatDetails("Archive exceeds safe processing limits (possible zip bomb)");
-                    result.setActionTaken("NONE");
+                    applyVerdict(result, "SUSPICIOUS", "WARNING",
+                            "Archive exceeds safe processing limits (possible zip bomb)",
+                            THRESHOLD_SUSPICIOUS, List.of("ZIP_BOMB_LIMIT_EXCEEDED"));
                     saveScanResult(result);
                     logService.logScanResult(result);
                     return result;
@@ -462,7 +463,6 @@ public class SecurityServiceImpl implements SecurityService {
 
     // ── R-07: Removed @SuppressWarnings("null") — assignOwnerIfMissing()
     // already null-guards result before the save call. ──
-    @SuppressWarnings("null")
     private ScanResult saveScanResult(ScanResult result) {
         assignOwnerIfMissing(result);
         return scanResultRepository.save(result);
@@ -523,6 +523,7 @@ public class SecurityServiceImpl implements SecurityService {
         int entryCount = 0;
         int suspiciousEntries = 0;
         long totalUncompressed = 0L;
+        byte[] buffer = new byte[8192];
 
         try (ZipInputStream zis = new ZipInputStream(new BufferedInputStream(new FileInputStream(file)))) {
             ZipEntry entry;
@@ -533,9 +534,15 @@ public class SecurityServiceImpl implements SecurityService {
                     return new ZipEvaluation(true, suspiciousEntries);
                 }
 
-                long entrySize = entry.getSize();
-                if (entrySize > 0) {
-                    totalUncompressed += entrySize;
+                // ZipEntry#getSize() is frequently -1 for entries written with
+                // a data descriptor (size unknown until the entry is fully
+                // read), which let oversized entries slip past a getSize()-only
+                // check. Read the actual decompressed bytes instead, and bail
+                // out mid-entry the moment the running total crosses the limit
+                // rather than waiting for the whole entry to finish.
+                int read;
+                while ((read = zis.read(buffer)) != -1) {
+                    totalUncompressed += read;
                     if (totalUncompressed > MAX_ZIP_UNCOMPRESSED_BYTES) {
                         logger.warn("ZIP bomb suspected: uncompressed size exceeds {} bytes",
                                 MAX_ZIP_UNCOMPRESSED_BYTES);
@@ -987,7 +994,6 @@ public class SecurityServiceImpl implements SecurityService {
     // ── R-07: Removed @SuppressWarnings("null") — .orElseThrow()
     // guarantees non-null return; no suppression needed. ──
     private ScanResult loadInfectedScanResult(Long scanResultId) {
-        @SuppressWarnings("null")
         ScanResult result = scanResultRepository.findById(scanResultId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Scan result not found"));
         if (!result.isInfected()) {
