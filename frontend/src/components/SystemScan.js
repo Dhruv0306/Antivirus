@@ -29,7 +29,7 @@ import { antivirusApi } from '../api/client';
 import { styled } from '@mui/material/styles';
 import { log, logError } from '../utils/logger';
 import { toUserMessage } from '../utils/errors';
-import { getVerdictStatus, getVerdictLabel, getVerdictColorVar, isSuspicious, isMalicious } from '../utils/verdict';
+import { getVerdictStatus, getVerdictColorVar, isSuspicious, isMalicious } from '../utils/verdict';
 
 // Styled components with light theme
 const StyledPaper = styled(Paper)(({ theme }) => ({
