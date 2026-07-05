@@ -157,11 +157,12 @@ function DirectoryScan() {
         setScanResult({
           totalFiles: response.data.totalFiles || 0,
           infectedFiles: response.data.infectedFiles || 0,
-          // The backend only aggregates infectedFiles (MALICIOUS verdicts);
-          // SUSPICIOUS-tier files are computed here from the per-file
-          // results so a directory full of "worth a look" files isn't
-          // silently folded into the clean count.
-          suspiciousFiles: results.filter(isSuspicious).length,
+          // Prefer the backend's count now that AntivirusController computes
+          // it directly; fall back to a client-side count for older backend
+          // responses that don't include suspiciousFiles yet.
+          suspiciousFiles: typeof response.data.suspiciousFiles === 'number'
+            ? response.data.suspiciousFiles
+            : results.filter(isSuspicious).length,
           skippedFiles: response.data.skippedFiles || 0,
           results
         });
