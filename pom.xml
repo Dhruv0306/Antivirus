@@ -149,19 +149,6 @@
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
 
-        <!--
-            TEMPORARY, for migration only: prints diagnostics at startup for
-            any renamed/removed configuration properties and migrates them at
-            runtime so the app doesn't silently misbehave. Remove this
-            dependency once the migration is verified clean, it is a
-            diagnostic tool, not something to ship long-term.
-        -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-properties-migrator</artifactId>
-            <scope>runtime</scope>
-        </dependency>
-
     </dependencies>
 
     <build>
