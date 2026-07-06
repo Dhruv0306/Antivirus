@@ -119,66 +119,99 @@ public class SecurityServiceImpl implements SecurityService {
     private static final int MAX_ZIP_ENTRIES = 1_000;
     private static final long MAX_ZIP_UNCOMPRESSED_BYTES = 500L * 1024 * 1024L;
 
-    // Malicious code patterns (includes high-signal ransomware patterns for
-    // defense-in-depth)
-    private static final List<Pattern> MALICIOUS_PATTERNS = Arrays.asList(
-            // JavaScript threats
+    // ── Scoring engine ──────────────────────────────────────────────────
+    // Every detector below contributes points instead of an instant true/false
+    // verdict. A single weak signal (one JS pattern, one weird extension) can
+    // no longer condemn a file on its own; only corroborating signals push a
+    // file across the SUSPICIOUS or MALICIOUS threshold. This is what actually
+    // fixes the false-positive rate, the old model treated any single regex
+    // hit as proof of infection.
+    private static final int SCORE_KNOWN_HASH = 100;
+    private static final int SCORE_EXTENSION_MASQUERADE = 70;
+    private static final int SCORE_RANSOMWARE_EXTENSION = 60;
+    private static final int SCORE_RANSOMWARE_TEXT_PATTERN = 45;
+    private static final int SCORE_RANSOMWARE_DIR_BEHAVIOR = 55;
+    private static final int SCORE_ROOTKIT_BINARY = 65;
+    private static final int SCORE_ROOTKIT_TEXT = 20;
+    private static final int SCORE_TROJAN_NAME = 35;
+    private static final int SCORE_STRONG_PATTERN = 30;
+    private static final int SCORE_WEAK_PATTERN = 8;
+    private static final int MAX_WEAK_PATTERN_SCORE = 32;
+    private static final int SCORE_ZIP_SUSPICIOUS_ENTRY = 15;
+
+    private static final int THRESHOLD_MALICIOUS = 60;
+    private static final int THRESHOLD_SUSPICIOUS = 25;
+
+    // Strong patterns require a specific, hard-to-hit combination of tokens
+    // (e.g. PowerShell + a real encoding/bypass flag together, not either
+    // alone). These carry real weight because legitimate code rarely matches
+    // them by accident.
+    private static final List<Pattern> STRONG_PATTERNS = List.of(
+            Pattern.compile("(?i)\\bpowershell\\b.{0,120}(?:-enc\\b|-encodedcommand|-w\\s+hidden)"),
+            Pattern.compile("(?i)\\bpowershell\\b.{0,120}downloadstring"),
+            Pattern.compile("(?i)\\bpowershell\\b.{0,120}\\bbypass\\b"),
+            Pattern.compile("(?i)\\bicacls\\b.{0,80}\\bgrant\\b.{0,80}\\beveryone\\b"),
+            Pattern.compile("(?i)\\bconnect\\s*\\(.*\\d{1,3}(?:\\.\\d{1,3}){3}"),
+            Pattern.compile("(?i)\\bpost\\b.{0,80}\\bpassword\\b.{0,80}(?:https?://|socket|connect)"),
+            Pattern.compile("(?i)\\bkeylog(?:ger)?\\b.{0,80}(?:getasynckeystate|setwindowshookex|keyboard_event)"));
+
+    // Weak patterns show up constantly in ordinary code (JS libraries, web
+    // pages, admin scripts). Each one alone is near-meaningless, so they are
+    // capped in total contribution rather than being individually decisive.
+    private static final List<Pattern> WEAK_PATTERNS = List.of(
             Pattern.compile("(?i)\\beval\\s*\\("),
             Pattern.compile("(?i)\\bdocument\\.write\\s*\\("),
             Pattern.compile("(?i)<script\\b"),
             Pattern.compile("(?i)\\bbase64_decode\\b"),
-
-            // Shell execution
             Pattern.compile("(?i)\\bshell_exec\\s*\\("),
             Pattern.compile("(?i)\\bruntime\\.exec\\s*\\("),
             Pattern.compile("(?i)\\bsystem\\s*\\("),
             Pattern.compile("(?i)\\bpassthru\\s*\\("),
-
-            // Process manipulation
             Pattern.compile("(?i)\\bprocess\\.spawn\\b"),
             Pattern.compile("(?i)\\bcreateprocess\\w*\\b"),
-
-            // PowerShell threats
-            Pattern.compile("(?i)\\bpowershell\\b.{0,120}(?:-enc|-encodedcommand|-w\\s+hidden)"),
-            Pattern.compile("(?i)\\bpowershell\\b.{0,120}downloadstring"),
-            Pattern.compile("(?i)\\bpowershell\\b.{0,120}\\bbypass\\b"),
-            Pattern.compile("(?i)\\bpowershell\\b.{0,120}\\bhidden\\b"),
-
-            // Network threats
             Pattern.compile("(?i)\\bnew\\s+socket\\s*\\("),
-            Pattern.compile("(?i)\\bconnect\\s*\\(.*\\d{1,3}(?:\\.\\d{1,3}){3}"),
             Pattern.compile("(?i)\\bwget\\s+https?://"),
             Pattern.compile("(?i)\\bcurl\\b.{0,80}\\s-O\\b"),
-
-            // Registry manipulation
             Pattern.compile("(?i)\\breg\\b.{0,80}\\badd\\b"),
             Pattern.compile("(?i)\\bregistry\\.setvalue\\b"),
-
-            // File system threats
             Pattern.compile("(?i)\\.encrypt\\s*\\("),
             Pattern.compile("(?i)\\bchmod\\b.{0,40}\\b777\\b"),
-            Pattern.compile("(?i)\\bicacls\\b.{0,80}\\bgrant\\b.{0,80}\\beveryone\\b"),
-
-            // Data exfiltration
             Pattern.compile("(?i)\\.upload\\s*\\("),
-            Pattern.compile("(?i)\\bpost\\b.{0,80}\\bpassword\\b"),
-            Pattern.compile("(?i)\\bkeylog(?:ger)?\\b"),
-
-            // Persistence mechanisms
             Pattern.compile("(?i)\\\\startup\\\\"),
             Pattern.compile("(?i)\\\\system32\\\\drivers\\\\"),
             Pattern.compile("(?i)\\\\tasks\\\\"),
-
-            // Obfuscation
             Pattern.compile("(?i)\\bunescape\\b"),
             Pattern.compile("(?i)\\bdecode(?:uri)?\\b"),
-            Pattern.compile("(?i)\\bfromcharcode\\b"),
+            Pattern.compile("(?i)\\bfromcharcode\\b"));
 
-            // ── Ransomware patterns (defense-in-depth) ──
-            Pattern.compile("(?i)\\byour files have been encrypted\\b"),
-            Pattern.compile("(?i)\\bbtc wallet\\b"),
-            Pattern.compile("(?i)\\.(?:onion|tor)\\b"),
-            Pattern.compile("(?i)\\bdecrypt.{0,30}ransom|ransom.{0,30}decrypt\\b"));
+    // Narrower kernel-manipulation phrases. Dropped the old bare "driver load"
+    // pattern, since it matched routine system/driver documentation and logs.
+    private static final Pattern[] KERNEL_PATTERNS = {
+            Pattern.compile("(?i)kernel.{0,20}hook"),
+            Pattern.compile("(?i)syscall.{0,20}table"),
+            Pattern.compile("(?i)interrupt.{0,20}descriptor.{0,20}table"),
+            Pattern.compile("(?i)idt.{0,20}hook"),
+            Pattern.compile("(?i)process.{0,20}hiding")
+    };
+
+    // Extensions a scan directory is expected to contain in normal use.
+    // Used to spot ransomware's mass-rename behavior without blocklisting
+    // every non-media, non-office extension the way the old code did.
+    private static final Set<String> COMMON_EXTENSIONS = Set.of(
+            ".txt", ".md", ".json", ".yaml", ".yml", ".xml", ".java", ".js", ".ts", ".jsx", ".tsx",
+            ".py", ".c", ".cpp", ".h", ".css", ".html", ".htm", ".jpg", ".jpeg", ".png", ".gif",
+            ".bmp", ".svg", ".ico", ".mp3", ".mp4", ".wav", ".avi", ".mov", ".mkv", ".pdf", ".doc",
+            ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".csv", ".zip", ".rar", ".7z", ".tar", ".gz",
+            ".properties", ".gitignore", ".env", ".log", ".sql", ".sh", ".bat", ".ini", ".conf",
+            ".lock", ".toml", ".class", ".jar", ".exe", ".dll");
+
+    // Lightweight result of any scoring sub-check: points contributed plus the
+    // human-readable signal names that produced them (stored on ScanResult
+    // for later review/audit instead of a single opaque boolean).
+    private record ScoreResult(int total, List<String> signals) {
+        @SuppressWarnings("unused")
+        static final ScoreResult NONE = new ScoreResult(0, List.of());
+    }
 
     // ── Generic bounded pattern scanner ───────────────────────────────
     private boolean scanWithPatterns(File file, List<Pattern> patterns) {
@@ -218,6 +251,8 @@ public class SecurityServiceImpl implements SecurityService {
         result.setFilePath(file.getAbsolutePath());
         result.setOwnerUsername(resolveCurrentUsername());
         result.setInfected(false);
+        result.setVerdict("CLEAN");
+        result.setRiskScore(0);
         result.setScanType("FILE");
         result.setActionTaken("NONE");
 
@@ -247,43 +282,90 @@ public class SecurityServiceImpl implements SecurityService {
             // Calculate file hash (SHA-256 — R-06)
             String fileHash = calculateFileHash(file);
 
-            // Check against known malware signatures (thread-safe — R-04)
+            // Check against known malware signatures (thread-safe — R-04).
+            // This is the only check allowed to short-circuit straight to
+            // MALICIOUS on its own: an exact hash match against a curated
+            // threat-intel feed is a confirmed identification, not a heuristic.
             if (KNOWN_MALWARE_SIGNATURES.contains(fileHash)) {
-                result.setInfected(true);
-                result.setThreatType("VIRUS");
-                result.setThreatDetails("Known malware signature detected");
-                result.setActionTaken("REPORTED");
+                applyVerdict(result, "MALICIOUS", "VIRUS", "Known malware signature detected",
+                        SCORE_KNOWN_HASH, List.of("KNOWN_HASH_MATCH"));
                 saveScanResult(result);
                 logService.logScanResult(result);
                 return result;
             }
 
-            // Check for ransomware FIRST (bounded scan + extension/behavioral checks)
-            if (detectRansomware(file)) {
-                result.setInfected(true);
-                result.setThreatType("RANSOMWARE");
-                result.setThreatDetails("Potential ransomware detected");
-                result.setActionTaken("REPORTED");
-                saveScanResult(result);
-                logService.logScanResult(result);
-                return result;
+            // Zip-bomb / archive-abuse protection is a resource-safety check,
+            // not a content-based threat verdict, so it is reported as
+            // SUSPICIOUS (not scored against the malware engine) rather than
+            // folded into the malware score.
+            if (isZipFile(file)) {
+                ZipEvaluation zipEval = evaluateZipArchive(file);
+                if (zipEval.bomb()) {
+                    applyVerdict(result, "SUSPICIOUS", "WARNING",
+                            "Archive exceeds safe processing limits (possible zip bomb)",
+                            THRESHOLD_SUSPICIOUS, List.of("ZIP_BOMB_LIMIT_EXCEEDED"));
+                    saveScanResult(result);
+                    logService.logScanResult(result);
+                    return result;
+                }
             }
 
-            // General malicious-pattern scan (bounded to MAX_PATTERN_SCAN_BYTES)
-            if (containsSuspiciousPatterns(file)) {
-                result.setInfected(true);
-                result.setThreatType("MALWARE");
-                result.setThreatDetails("Suspicious code patterns detected");
-                result.setActionTaken("REPORTED");
-                saveScanResult(result);
-                logService.logScanResult(result);
-                return result;
+            int score = 0;
+            List<String> signals = new ArrayList<>();
+
+            byte[] header = readFilePrefix(file, 8);
+
+            int masqueradeScore = checkExtensionMasquerade(file, header);
+            if (masqueradeScore > 0) {
+                score += masqueradeScore;
+                signals.add("EXTENSION_MASQUERADE");
             }
 
-            // If no threats found
-            result.setThreatType("CLEAN");
-            result.setThreatDetails("No threats detected");
-            result.setActionTaken("NONE");
+            String extension = getFileExtension(file).toLowerCase();
+            if (RANSOMWARE_EXTENSIONS.contains(extension)) {
+                score += SCORE_RANSOMWARE_EXTENSION;
+                signals.add("RANSOMWARE_EXTENSION");
+            }
+            if (containsRansomwarePatterns(file)) {
+                score += SCORE_RANSOMWARE_TEXT_PATTERN;
+                signals.add("RANSOMWARE_NOTE_TEXT");
+            }
+            int dirBehaviorScore = scoreRansomwareDirectoryBehavior(file);
+            if (dirBehaviorScore > 0) {
+                score += dirBehaviorScore;
+                signals.add("RANSOMWARE_DIRECTORY_BEHAVIOR");
+            }
+
+            String fileName = file.getName().toLowerCase();
+            for (String sig : TROJAN_NAME_SIGNATURES) {
+                if (fileName.contains(sig)) {
+                    score += SCORE_TROJAN_NAME;
+                    signals.add("TROJAN_NAME_SIGNATURE");
+                    break;
+                }
+            }
+
+            ScoreResult patternScore = scorePatterns(file);
+            score += patternScore.total();
+            signals.addAll(patternScore.signals());
+
+            ScoreResult rootkitScore = scoreRootkit(file, header);
+            score += rootkitScore.total();
+            signals.addAll(rootkitScore.signals());
+
+            if (isZipFile(file)) {
+                ZipEvaluation zipEval = evaluateZipArchive(file);
+                if (zipEval.suspiciousEntries() > 0) {
+                    score += SCORE_ZIP_SUSPICIOUS_ENTRY;
+                    signals.add("ZIP_CONTAINS_EXECUTABLE_ENTRY");
+                }
+            }
+
+            score = Math.min(score, 100);
+            String verdict = score >= THRESHOLD_MALICIOUS ? "MALICIOUS"
+                    : score >= THRESHOLD_SUSPICIOUS ? "SUSPICIOUS" : "CLEAN";
+
+            applyVerdictFromScore(result, verdict, score, signals);
 
         } catch (Exception e) {
             logger.error("Error scanning file: {}", e.getMessage());
@@ -295,6 +377,63 @@ public class SecurityServiceImpl implements SecurityService {
         saveScanResult(result);
         logService.logScanResult(result);
         return result;
+    }
+
+    // Sets a confirmed, single-signal verdict (currently only used for the
+    // exact-hash match, which needs no scoring since it is not a heuristic).
+    private void applyVerdict(ScanResult result, String verdict, String threatType, String details,
+            int score, List<String> signals) {
+        result.setVerdict(verdict);
+        result.setRiskScore(Math.min(score, 100));
+        result.setDetectionSignals(String.join(",", signals));
+        result.setInfected("MALICIOUS".equals(verdict));
+        result.setThreatType(threatType);
+        result.setThreatDetails(details);
+        result.setActionTaken("MALICIOUS".equals(verdict) ? "REPORTED" : "NONE");
+    }
+
+    // Sets the verdict derived from the aggregate heuristic score.
+    private void applyVerdictFromScore(ScanResult result, String verdict, int score, List<String> signals) {
+        result.setVerdict(verdict);
+        result.setRiskScore(score);
+        result.setDetectionSignals(signals.isEmpty() ? null : String.join(",", signals));
+
+        switch (verdict) {
+            case "MALICIOUS" -> {
+                result.setInfected(true);
+                result.setThreatType(inferThreatType(signals));
+                result.setThreatDetails("Multiple corroborating threat signals detected (score " + score + "/100)");
+                result.setActionTaken("REPORTED");
+            }
+            case "SUSPICIOUS" -> {
+                result.setInfected(false);
+                result.setThreatType("SUSPICIOUS");
+                result.setThreatDetails(
+                        "Some suspicious indicators found (score " + score + "/100); manual review recommended");
+                result.setActionTaken("NONE");
+            }
+            default -> {
+                result.setInfected(false);
+                result.setThreatType("CLEAN");
+                result.setThreatDetails("No threats detected");
+                result.setActionTaken("NONE");
+            }
+        }
+    }
+
+    private String inferThreatType(List<String> signals) {
+        for (String s : signals) {
+            if (s.startsWith("RANSOMWARE")) {
+                return "RANSOMWARE";
+            }
+            if (s.startsWith("ROOTKIT")) {
+                return "ROOTKIT";
+            }
+            if (s.startsWith("TROJAN")) {
+                return "TROJAN";
+            }
+        }
+        return "MALWARE";
     }
 
     private String resolveCurrentUsername() {
@@ -362,49 +501,11 @@ public class SecurityServiceImpl implements SecurityService {
         return name.substring(lastIndexOf);
     }
 
-    @SuppressWarnings("unused")
-    private List<String> scanFileContent(File file) throws IOException {
-        List<String> threats = new ArrayList<>();
-
-        if (isZipFile(file)) {
-            if (containsMaliciousZipContent(file)) {
-                threats.add("MALICIOUS_ARCHIVE");
-            }
-            return threats;
-        }
-
-        try {
-            byte[] content = readFilePrefix(file, (int) Math.min(file.length(), MAX_PATTERN_SCAN_BYTES));
-
-            if (containsSuspiciousPatterns(file)) {
-                threats.add("MALICIOUS_CODE");
-                return threats;
-            }
-
-            String contentStr = new String(content, StandardCharsets.UTF_8);
-            String[] lines = contentStr.split("\n");
-
-            for (String line : lines) {
-                if (line.contains("Your files have been encrypted") ||
-                        line.contains("bitcoin") ||
-                        line.contains("ransom")) {
-                    threats.add("RANSOMWARE");
-                    return threats;
-                }
-
-                if (line.contains("keylog") ||
-                        line.contains("GetAsyncKeyState") ||
-                        line.contains("keyboard_event")) {
-                    threats.add("KEYLOGGER");
-                    return threats;
-                }
-            }
-        } catch (Exception e) {
-            logger.error("Error scanning file content: {}", e.getMessage());
-        }
-
-        return threats;
-    }
+    // NOTE: the old scanFileContent()/containsMaliciousZipContent() pair was
+    // never actually called from scanFile() (both were dead code left over
+    // from an earlier version), which meant zip-bomb protection existed on
+    // paper but never ran. evaluateZipArchive() below is now wired directly
+    // into scanFile().
 
     private boolean isZipFile(File file) {
         return file.getName().toLowerCase().endsWith(".zip") ||
@@ -412,9 +513,17 @@ public class SecurityServiceImpl implements SecurityService {
                 file.getName().toLowerCase().endsWith(".war");
     }
 
-    private boolean containsMaliciousZipContent(File file) {
+    // Resource-safety result (entry count / decompression bomb) kept separate
+    // from a content-based suspicious-entry count, since the former is a
+    // hard block and the latter is only a minor scoring signal.
+    private record ZipEvaluation(boolean bomb, int suspiciousEntries) {
+    }
+
+    private ZipEvaluation evaluateZipArchive(File file) {
         int entryCount = 0;
+        int suspiciousEntries = 0;
         long totalUncompressed = 0L;
+        byte[] buffer = new byte[8192];
 
         try (ZipInputStream zis = new ZipInputStream(new BufferedInputStream(new FileInputStream(file)))) {
             ZipEntry entry;
@@ -422,32 +531,43 @@ public class SecurityServiceImpl implements SecurityService {
                 entryCount++;
                 if (entryCount > MAX_ZIP_ENTRIES) {
                     logger.warn("ZIP bomb suspected: entry count exceeds {}", MAX_ZIP_ENTRIES);
-                    return true;
+                    return new ZipEvaluation(true, suspiciousEntries);
                 }
 
-                long entrySize = entry.getSize();
-                if (entrySize > 0) {
-                    totalUncompressed += entrySize;
+                // ZipEntry#getSize() is frequently -1 for entries written with
+                // a data descriptor (size unknown until the entry is fully
+                // read), which let oversized entries slip past a getSize()-only
+                // check. Read the actual decompressed bytes instead, and bail
+                // out mid-entry the moment the running total crosses the limit
+                // rather than waiting for the whole entry to finish.
+                int read;
+                while ((read = zis.read(buffer)) != -1) {
+                    totalUncompressed += read;
                     if (totalUncompressed > MAX_ZIP_UNCOMPRESSED_BYTES) {
                         logger.warn("ZIP bomb suspected: uncompressed size exceeds {} bytes",
                                 MAX_ZIP_UNCOMPRESSED_BYTES);
-                        return true;
+                        return new ZipEvaluation(true, suspiciousEntries);
                     }
                 }
 
                 if (SUSPICIOUS_EXTENSIONS.contains(getFileExtension(new File(entry.getName())))) {
-                    return true;
+                    suspiciousEntries++;
                 }
 
                 zis.closeEntry();
             }
         } catch (IOException e) {
             logger.error("Error scanning ZIP file {}: {}", file.getAbsolutePath(), e.getMessage(), e);
-            return false;
+            return new ZipEvaluation(false, 0);
         }
-        return false;
+        return new ZipEvaluation(false, suspiciousEntries);
     }
 
+    // Executable magic-byte check (MZ for PE, 0x7F 'ELF' for ELF binaries).
+    // This is deliberately NOT used to flag files with executable extensions,
+    // since every real .exe/.dll on the system would trip it. It is only
+    // meaningful when the extension claims the file is something else, see
+    // checkExtensionMasquerade() below.
     private boolean containsSuspiciousBytes(byte[] content) {
         try {
             if (content.length >= 4) {
@@ -466,17 +586,72 @@ public class SecurityServiceImpl implements SecurityService {
         }
     }
 
-    private boolean containsSuspiciousPatterns(File file) {
-        boolean textMatch = scanWithPatterns(file, MALICIOUS_PATTERNS);
-        if (textMatch) {
-            return true;
+    // Flags a file only when it is disguised: an executable header hiding
+    // behind a non-executable extension (e.g. "invoice.pdf" that is really a
+    // PE binary). A .exe or .dll legitimately having an MZ header is expected
+    // and not scored at all.
+    private int checkExtensionMasquerade(File file, byte[] header) {
+        String ext = getFileExtension(file).toLowerCase();
+        if (ext.isEmpty() || SUSPICIOUS_EXTENSIONS.contains(ext)) {
+            return 0;
         }
-        try {
-            return containsSuspiciousBytes(readFilePrefix(file, 8));
+        return containsSuspiciousBytes(header) ? SCORE_EXTENSION_MASQUERADE : 0;
+    }
+
+    // Aggregates strong- and weak-pattern hits into a single bounded score in
+    // one pass over the file, instead of returning true on the first match.
+    private ScoreResult scorePatterns(File file) {
+        Set<String> matchedStrong = new LinkedHashSet<>();
+        Set<String> matchedWeak = new LinkedHashSet<>();
+
+        try (Reader reader = new BufferedReader(new InputStreamReader(
+                new FileInputStream(file), StandardCharsets.UTF_8))) {
+            char[] buffer = new char[8192];
+            StringBuilder window = new StringBuilder(MAX_PATTERN_WINDOW_CHARS);
+            long charsRead = 0L;
+            int read;
+
+            while ((read = reader.read(buffer)) != -1 && charsRead < MAX_PATTERN_SCAN_BYTES) {
+                charsRead += read;
+                window.append(buffer, 0, read);
+
+                for (Pattern pattern : STRONG_PATTERNS) {
+                    if (pattern.matcher(window).find()) {
+                        matchedStrong.add(pattern.pattern());
+                    }
+                }
+                for (Pattern pattern : WEAK_PATTERNS) {
+                    if (pattern.matcher(window).find()) {
+                        matchedWeak.add(pattern.pattern());
+                    }
+                }
+
+                if (window.length() > MAX_PATTERN_WINDOW_CHARS) {
+                    window.delete(0, window.length() - MAX_PATTERN_WINDOW_CHARS);
+                }
+
+                // Stop early once strong matches alone already cross the
+                // MALICIOUS threshold; no need to keep reading the file.
+                if (matchedStrong.size() * SCORE_STRONG_PATTERN >= THRESHOLD_MALICIOUS) {
+                    break;
+                }
+            }
         } catch (IOException e) {
-            logger.error("Error reading file header for binary check: {}", e.getMessage(), e);
-            return false;
+            logger.error("Error scanning {} with patterns: {}",
+                    file.getAbsolutePath(), e.getMessage(), e);
         }
+
+        int strongScore = matchedStrong.size() * SCORE_STRONG_PATTERN;
+        int weakScore = Math.min(matchedWeak.size() * SCORE_WEAK_PATTERN, MAX_WEAK_PATTERN_SCORE);
+
+        List<String> signals = new ArrayList<>();
+        if (strongScore > 0) {
+            signals.add("STRONG_CODE_PATTERN(x" + matchedStrong.size() + ")");
+        }
+        if (weakScore > 0) {
+            signals.add("WEAK_CODE_PATTERN(x" + matchedWeak.size() + ")");
+        }
+        return new ScoreResult(strongScore + weakScore, signals);
     }
 
     private boolean containsRansomwarePatterns(File file) {
@@ -856,86 +1031,90 @@ public class SecurityServiceImpl implements SecurityService {
         return false;
     }
 
+    // Individual detect*() methods below are kept for API/controller
+    // compatibility, but now mirror the scoring model: each runs its own
+    // slice of the scoring logic and only returns true once the aggregate
+    // score for that category crosses THRESHOLD_MALICIOUS. This intentionally
+    // makes them stricter than before, since a single weak signal (e.g. one
+    // suspicious filename fragment) was previously enough to report a
+    // confirmed trojan on its own.
+
     @Override
     public boolean detectRansomware(File file) {
         try {
+            int score = 0;
             String extension = getFileExtension(file).toLowerCase();
             if (RANSOMWARE_EXTENSIONS.contains(extension)) {
-                return true;
+                score += SCORE_RANSOMWARE_EXTENSION;
             }
-
             if (containsRansomwarePatterns(file)) {
-                return true;
+                score += SCORE_RANSOMWARE_TEXT_PATTERN;
             }
-
-            if (containsEncryptedContent(file)) {
-                return true;
-            }
-
-            return hasRansomwareBehavior(file);
-
+            score += scoreRansomwareDirectoryBehavior(file);
+            return score >= THRESHOLD_MALICIOUS;
         } catch (Exception e) {
             logger.error("Ransomware detection failed for file: {}", file.getName(), e);
             return false;
         }
     }
 
-    private boolean containsEncryptedContent(File file) {
-        try {
-            byte[] header = new byte[8];
-            try (FileInputStream fis = new FileInputStream(file)) {
-                if (fis.read(header) != 8) {
-                    return false;
-                }
-            }
-
-            return (header[0] == 0x00 && header[1] == 0x00 && header[2] == 0x00) ||
-                    (header[0] == (byte) 0x89 && header[1] == 0x50) ||
-                    (new String(header).startsWith("Salted__"));
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    private boolean hasRansomwareBehavior(File file) {
+    // Classic ransomware behavior: many sibling files renamed to the SAME
+    // unrecognized extension, alongside a ransom-note-style filename. This
+    // replaces the old "extension longer than 4 chars" check, which matched
+    // ordinary extensions like .json, .yaml, and .properties and flagged
+    // almost any project directory containing a readme.txt.
+    @SuppressWarnings("null")
+    private int scoreRansomwareDirectoryBehavior(File file) {
         File parentDir = file.getParentFile();
         if (parentDir == null || !parentDir.exists()) {
-            return false;
+            return 0;
         }
 
         // Use cached listing — ONE listFiles() call per directory, not per file.
         File[] files = dirListingCache.get()
                 .computeIfAbsent(parentDir.getAbsolutePath(), k -> parentDir.listFiles());
-        if (files == null)
-            return false;
+        if (files == null) {
+            return 0;
+        }
 
-        int encryptedCount = 0;
         boolean hasRansomNote = false;
+        Map<String, Integer> unknownExtCounts = new HashMap<>();
         for (File f : files) {
             String name = f.getName().toLowerCase();
             if ((name.contains("readme") && name.contains("txt")) ||
                     name.contains("how_to_decrypt") ||
                     name.contains("recovery") ||
-                    name.contains("help_decrypt")) {
+                    name.contains("help_decrypt") ||
+                    name.contains("decrypt_instructions")) {
                 hasRansomNote = true;
             }
             String ext = getFileExtension(f).toLowerCase();
-            if (ext.length() > 4 && !ext.equals(".jpeg") && !ext.equals(".html")) {
-                encryptedCount++;
+            if (!ext.isEmpty() && !COMMON_EXTENSIONS.contains(ext) && !RANSOMWARE_EXTENSIONS.contains(ext)) {
+                unknownExtCounts.merge(ext, 1, Integer::sum);
             }
         }
-        return hasRansomNote && encryptedCount > 5;
+
+        if (!hasRansomNote) {
+            return 0;
+        }
+
+        int maxSameUnknownExt = unknownExtCounts.values().stream().mapToInt(Integer::intValue).max().orElse(0);
+        return maxSameUnknownExt >= 5 ? SCORE_RANSOMWARE_DIR_BEHAVIOR : 0;
     }
 
     @Override
     public boolean detectTrojan(File file) {
         try {
+            int score = 0;
             String fileName = file.getName().toLowerCase();
             for (String sig : TROJAN_NAME_SIGNATURES) {
-                if (fileName.contains(sig))
-                    return true;
+                if (fileName.contains(sig)) {
+                    score += SCORE_TROJAN_NAME;
+                    break;
+                }
             }
-            return containsSuspiciousPatterns(file);
+            score += scorePatterns(file).total();
+            return score >= THRESHOLD_MALICIOUS;
         } catch (Exception e) {
             logger.error("Trojan detection failed for file: {}", file.getName(), e);
             return false;
@@ -962,85 +1141,88 @@ public class SecurityServiceImpl implements SecurityService {
                 return true;
             }
 
+            int score = 0;
+            byte[] header = readFilePrefix(file, 8);
+            score += checkExtensionMasquerade(file, header);
+            score += scorePatterns(file).total();
+            score += scoreRootkit(file, header).total();
+
             String extension = getFileExtension(file).toLowerCase();
-            if (SUSPICIOUS_EXTENSIONS.contains(extension)) {
-                return containsSuspiciousPatterns(file);
+            if (RANSOMWARE_EXTENSIONS.contains(extension)) {
+                score += SCORE_RANSOMWARE_EXTENSION;
+            }
+            if (containsRansomwarePatterns(file)) {
+                score += SCORE_RANSOMWARE_TEXT_PATTERN;
+            }
+            score += scoreRansomwareDirectoryBehavior(file);
+
+            String fileName = file.getName().toLowerCase();
+            for (String sig : TROJAN_NAME_SIGNATURES) {
+                if (fileName.contains(sig)) {
+                    score += SCORE_TROJAN_NAME;
+                    break;
+                }
             }
 
-            if (detectTrojan(file)) {
-                return true;
-            }
-
-            if (detectRansomware(file)) {
-                return true;
-            }
-
-            if (detectRootkit(file)) {
-                return true;
-            }
-
-            return false;
+            return score >= THRESHOLD_MALICIOUS;
         } catch (Exception e) {
             logger.error("Error during malware detection for file: {}", file.getName(), e);
             return false;
         }
     }
 
-    // ── R-05: Narrowed rootkit detection to eliminate false positives ──
-    // Previous version flagged /proc, /sys (every Linux process), dotfiles
-    // (.bashrc, .gitignore, .ssh/), and zero-byte files as rootkits.
-    // Now only flags HIGH-signal driver/boot locations AND requires
-    // corroborating binary patterns in those locations.
+    // ── R-05 (carried forward): only flags HIGH-signal driver/boot locations,
+    // not /proc, /sys, dotfiles, or empty files, AND requires corroborating
+    // binary patterns in those locations before the binary signal fires. The
+    // weak text-pattern signal below is capped low enough that it alone can
+    // never reach MALICIOUS; it only nudges a file toward SUSPICIOUS or adds
+    // to a genuinely corroborated score.
     @Override
     public boolean detectRootkit(File file) {
         try {
+            byte[] header = readFilePrefix(file, 8);
+            return scoreRootkit(file, header).total() >= THRESHOLD_MALICIOUS;
+        } catch (IOException e) {
+            logger.error("Error during rootkit detection for file: {}", file.getName(), e);
+            return false;
+        }
+    }
+
+    private ScoreResult scoreRootkit(File file, byte[] header8) {
+        int score = 0;
+        List<String> signals = new ArrayList<>();
+        try {
             String absPath = file.getAbsolutePath().toLowerCase();
 
-            // 1. Only flag HIGH-signal driver/boot locations — not /proc or /sys
             boolean inRootkitLocation = absPath.contains("/lib/modules/") ||
                     absPath.contains("/boot/") ||
                     absPath.contains("\\system32\\drivers\\") ||
                     absPath.contains("\\syswow64\\drivers\\");
 
             if (inRootkitLocation) {
-                // Only report if binary rootkit patterns are found in that location
                 byte[] header = readFilePrefix(file, 4096);
                 if (detectRootkitBinaryPatterns(header)) {
                     logger.warn("Rootkit binary patterns in driver location: {}", file.getName());
-                    return true;
+                    score += SCORE_ROOTKIT_BINARY;
+                    signals.add("ROOTKIT_BINARY_IN_DRIVER_LOCATION");
                 }
             }
 
-            // 2. Check kernel manipulation text patterns (bounded read)
             int sampleSize = (int) Math.min(file.length(), MAX_PATTERN_SCAN_BYTES);
             byte[] content = readFilePrefix(file, sampleSize);
             String contentStr = new String(content, StandardCharsets.UTF_8);
 
-            Pattern[] kernelPatterns = {
-                    Pattern.compile("(?i).*kernel.*hook.*"),
-                    Pattern.compile("(?i).*syscall.*table.*"),
-                    Pattern.compile("(?i).*interrupt.*descriptor.*table.*"),
-                    Pattern.compile("(?i).*idt.*hook.*"),
-                    Pattern.compile("(?i).*process.*hiding.*"),
-                    Pattern.compile("(?i).*driver.*load.*")
-            };
-
-            for (Pattern pattern : kernelPatterns) {
+            for (Pattern pattern : KERNEL_PATTERNS) {
                 if (pattern.matcher(contentStr).find()) {
-                    logger.warn("Potential rootkit detected: Kernel manipulation pattern found in {}", file.getName());
-                    return true;
+                    score += SCORE_ROOTKIT_TEXT;
+                    signals.add("ROOTKIT_TEXT_PATTERN");
+                    break;
                 }
             }
-
-            // 3. REMOVED: Files.isHidden() check — dotfiles are not rootkits
-            // 4. REMOVED: zero-byte file check — empty files are entirely normal
-
-            return false;
-
         } catch (IOException e) {
-            logger.error("Error during rootkit detection for file: {}", file.getName(), e);
-            return false;
+            logger.error("Error during rootkit scoring for file: {}", file.getName(), e);
         }
+        return new ScoreResult(score, signals);
     }
 
     private boolean detectRootkitBinaryPatterns(byte[] content) {

@@ -27,6 +27,7 @@ import { antivirusApi } from '../api/client';
 import { styled } from '@mui/material/styles';
 import { log, logError } from '../utils/logger';
 import { toUserMessage } from '../utils/errors'; // Import the error normalizer
+import { getVerdictStatus, getVerdictLabel, getVerdictColorVar, isSuspicious } from '../utils/verdict';
 
 // Styled components
 const StyledPaper = styled(Paper)(({ theme }) => ({
@@ -152,11 +153,18 @@ function DirectoryScan() {
 
       // Update the scan result with the response data
       if (response.data) {
+        const results = response.data.results || [];
         setScanResult({
           totalFiles: response.data.totalFiles || 0,
           infectedFiles: response.data.infectedFiles || 0,
+          // Prefer the backend's count now that AntivirusController computes
+          // it directly; fall back to a client-side count for older backend
+          // responses that don't include suspiciousFiles yet.
+          suspiciousFiles: typeof response.data.suspiciousFiles === 'number'
+            ? response.data.suspiciousFiles
+            : results.filter(isSuspicious).length,
           skippedFiles: response.data.skippedFiles || 0,
-          results: response.data.results || []
+          results
         });
       } else {
         throw new Error('No scan result received');
@@ -322,7 +330,13 @@ function DirectoryScan() {
                       }
                       secondary={
                         <Typography component="div" sx={{ color: 'var(--text-secondary)' }}>
-                          {scanResult.totalFiles - (scanResult.infectedFiles + scanResult.skippedFiles) || 0}
+                          {Math.max(
+                            0,
+                            (scanResult.totalFiles || 0) -
+                            (scanResult.infectedFiles || 0) -
+                            (scanResult.suspiciousFiles || 0) -
+                            (scanResult.skippedFiles || 0)
+                          )}
                         </Typography>
                       }
                     />
@@ -334,12 +348,29 @@ function DirectoryScan() {
                     <ListItemText
                       primary={
                         <Typography component="div" sx={{ color: 'var(--text-primary)' }}>
-                          Infected Files
+                          Malicious Files
                         </Typography>
                       }
                       secondary={
                         <Typography component="div" sx={{ color: 'var(--text-secondary)' }}>
                           {scanResult.infectedFiles || 0}
+                        </Typography>
+                      }
+                    />
+                  </StyledListItem>
+                  <StyledListItem>
+                    <ListItemIcon>
+                      <WarningIcon sx={{ color: 'var(--warning-main)' }} />
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={
+                        <Typography component="div" sx={{ color: 'var(--text-primary)' }}>
+                          Suspicious Files
+                        </Typography>
+                      }
+                      secondary={
+                        <Typography component="div" sx={{ color: 'var(--text-secondary)' }}>
+                          {scanResult.suspiciousFiles || 0}
                         </Typography>
                       }
                     />
@@ -368,7 +399,9 @@ function DirectoryScan() {
                         sx={{
                           color: scanResult.infectedFiles > 0
                             ? 'var(--error-main)'
-                            : 'var(--success-main)'
+                            : scanResult.suspiciousFiles > 0
+                              ? 'var(--warning-main)'
+                              : 'var(--success-main)'
                         }}
                       />
                     </ListItemIcon>
@@ -381,8 +414,10 @@ function DirectoryScan() {
                       secondary={
                         <Typography component="div" sx={{ color: 'var(--text-secondary)' }}>
                           {scanResult.infectedFiles > 0
-                            ? `Threats Found (${scanResult.infectedFiles} infected files)`
-                            : "Clean"}
+                            ? `Threats Found (${scanResult.infectedFiles} malicious files)`
+                            : scanResult.suspiciousFiles > 0
+                              ? `Review Recommended (${scanResult.suspiciousFiles} suspicious files)`
+                              : "Clean"}
                         </Typography>
                       }
                     />
@@ -411,21 +446,21 @@ function DirectoryScan() {
                     color: 'var(--text-secondary)'
                   }}
                 >
-                  {scanResult.infectedFiles > 0
-                    ? "Showing only infected and error files"
+                  {scanResult.infectedFiles > 0 || scanResult.suspiciousFiles > 0
+                    ? "Showing only malicious, suspicious, and error files"
                     : "No threats found in this directory"}
                 </Typography>
                 <List sx={{ maxHeight: 400, overflow: 'auto' }}>
                   {scanResult.results && scanResult.results
-                    .filter(result => result.infected || result.threatType === "ERROR")
-                    .map((result, index) => (
+                    .filter(result => result.infected || isSuspicious(result) || result.threatType === "ERROR")
+                    .map((result, index, filteredResults) => (
                       <React.Fragment key={index}>
                         <StyledListItem>
                           <ListItemIcon>
                             {result.infected ? (
                               <ErrorIcon sx={{ color: 'var(--error-main)' }} />
                             ) : (
-                              <WarningIcon sx={{ color: 'var(--warning-main)' }} />
+                              <WarningIcon sx={{ color: getVerdictColorVar(result) }} />
                             )}
                           </ListItemIcon>
                           <ListItemText
@@ -447,7 +482,8 @@ function DirectoryScan() {
                                   variant="body2"
                                   sx={{ color: 'var(--text-primary)' }}
                                 >
-                                  Status: {result.infected ? 'Infected' : 'Error'}
+                                  Status: {getVerdictLabel(result)}
+                                  {typeof result.riskScore === 'number' ? ` (score ${result.riskScore}/100)` : ''}
                                 </Typography>
                                 {result.threatType && (
                                   <Typography
@@ -471,7 +507,7 @@ function DirectoryScan() {
                             }
                           />
                         </StyledListItem>
-                        {index < scanResult.results.filter(r => r.infected || r.threatType === "ERROR").length - 1 && (
+                        {index < filteredResults.length - 1 && (
                           <Divider sx={{ borderColor: 'var(--border-main)' }} />
                         )}
                       </React.Fragment>

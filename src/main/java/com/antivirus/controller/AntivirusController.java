@@ -258,6 +258,7 @@ public class AntivirusController {
      * @param files         List of files to scan from the directory
      * @return Scan results for all files
      */
+    @SuppressWarnings("deprecation")
     @PostMapping("/scan/directory")
     public ResponseEntity<?> scanDirectory(
             @RequestParam("directoryName") String directoryName,
@@ -285,7 +286,8 @@ public class AntivirusController {
             int processedFiles = 0;
             int cleanFiles = 0;
             int infectedFiles = 0;
-            int errorFiles = 0;
+            int suspiciousFiles = 0;
+            int skippedFiles = 0;
 
             // Create a temporary directory to store uploaded files
             Path tempDir = Files.createTempDirectory("scan_");
@@ -322,7 +324,9 @@ public class AntivirusController {
                             infectedFiles++;
                             logger.warn("Infected file found: {} (Type: {})", relativePath, result.getThreatType());
                         } else if ("ERROR".equals(result.getThreatType())) {
-                            errorFiles++;
+                            skippedFiles++;
+                        } else if ("SUSPICIOUS".equals(result.getVerdict())) {
+                            suspiciousFiles++;
                         } else {
                             cleanFiles++;
                         }
@@ -330,8 +334,9 @@ public class AntivirusController {
                         // Log progress every 100 files
                         if (processedFiles % 100 == 0) {
                             logger.info(
-                                    "Directory scan progress - Directory: {}, Processed: {}/{}, Clean: {}, Infected: {}, Errors: {}",
-                                    directoryName, processedFiles, files.size(), cleanFiles, infectedFiles, errorFiles);
+                                    "Directory scan progress - Directory: {}, Processed: {}/{}, Clean: {}, Infected: {}, Suspicious: {}, Errors: {}",
+                                    directoryName, processedFiles, files.size(), cleanFiles, infectedFiles,
+                                    suspiciousFiles, skippedFiles);
                         }
 
                     } catch (SecurityException e) {
@@ -344,7 +349,7 @@ public class AntivirusController {
                         errorResult.setThreatType("ERROR");
                         errorResult.setThreatDetails("Rejected unsafe file path");
                         results.add(errorResult);
-                        errorFiles++;
+                        skippedFiles++;
                     } catch (Exception e) {
                         logger.error("Error processing file {}: {}", file.getOriginalFilename(), e.getMessage());
                         ScanResult errorResult = new ScanResult();
@@ -355,7 +360,7 @@ public class AntivirusController {
                         errorResult.setThreatType("ERROR");
                         errorResult.setThreatDetails("Error processing file");
                         results.add(errorResult);
-                        errorFiles++;
+                        skippedFiles++;
                     }
                 }
 
@@ -364,13 +369,14 @@ public class AntivirusController {
                 response.put("totalFiles", results.size());
                 response.put("cleanFiles", cleanFiles);
                 response.put("infectedFiles", infectedFiles);
-                response.put("errorFiles", errorFiles);
+                response.put("suspiciousFiles", suspiciousFiles);
+                response.put("skippedFiles", skippedFiles);
                 response.put("results", results);
 
                 // Log final summary
                 logger.info(
-                        "Directory scan completed - Directory: {}, Total Files: {}, Clean: {}, Infected: {}, Errors: {}",
-                        directoryName, processedFiles, cleanFiles, infectedFiles, errorFiles);
+                        "Directory scan completed - Directory: {}, Total Files: {}, Clean: {}, Infected: {}, Suspicious: {}, Errors: {}",
+                        directoryName, processedFiles, cleanFiles, infectedFiles, suspiciousFiles, skippedFiles);
 
                 return ResponseEntity.ok(response);
 

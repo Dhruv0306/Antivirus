@@ -269,6 +269,7 @@ public class NetworkSecurityServiceImpl implements NetworkSecurityService {
         }
     }
 
+    @SuppressWarnings("null")
     private List<String> getOpenPorts() {
         List<CompletableFuture<Optional<String>>> futures = IntStream.of(COMMON_PORTS)
                 .mapToObj(port -> CompletableFuture.supplyAsync(
