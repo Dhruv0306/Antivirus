@@ -1,84 +1,164 @@
+<?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
-
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>4.1.0</version>
+    </parent>
 
     <groupId>com.antivirus</groupId>
     <artifactId>antivirus</artifactId>
     <version>1.0-SNAPSHOT</version>
-    <name>antivirus</name>
-    <description>Spring Boot Antivirus Project</description>
-
-    <!-- ✅ MUST be hardcoded (no ${}) -->
-    <parent>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.3.5</version>
-        <relativePath />
-    </parent>
 
     <properties>
-        <java.version>17</java.version>
+        <java.version>21</java.version>
     </properties>
 
+    <!--
+        Explicit overrides for two transitive dependency versions still
+        flagged by OWASP dependency-check after the Boot 4.1.0 bump (Tomcat,
+        Jackson). A third flagged CVE, angus-activation CVE-2025-7962, has no
+        real fix at this artifact, see owasp-suppressions.xml for why it is
+        suppressed instead of version-bumped. These overrides are pulled in
+        transitively by Boot's own BOM, not declared directly below, so
+        bumping Boot alone doesn't move them. Remove each override once a
+        future Spring Boot release pins a version at or above these on its
+        own (check with `mvn dependency:tree` or the dependency-check report).
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <!-- CVE-2026-55276, CVE-2026-53434, CVE-2026-53404 (fixed 11.0.23) -->
+            <dependency>
+                <groupId>org.apache.tomcat.embed</groupId>
+                <artifactId>tomcat-embed-core</artifactId>
+                <version>11.0.23</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.tomcat.embed</groupId>
+                <artifactId>tomcat-embed-el</artifactId>
+                <version>11.0.23</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.tomcat.embed</groupId>
+                <artifactId>tomcat-embed-websocket</artifactId>
+                <version>11.0.23</version>
+            </dependency>
+
+            <!-- CVE-2026-54512, CVE-2026-54513 (fixed 2.18.8 / 2.21.4 / 3.1.4) -->
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-databind</artifactId>
+                <version>2.21.4</version>
+            </dependency>
+            <!-- Kept at the same 2.21.x line as jackson-databind above for
+                 version consistency; declared as a direct dependency below
+                 since Boot 4.1's default Jackson 3 stack doesn't need this
+                 separate module (JSR-310 support is built into Jackson 3's
+                 databind), so nothing pulls it in transitively anymore. -->
+            <dependency>
+                <groupId>com.fasterxml.jackson.datatype</groupId>
+                <artifactId>jackson-datatype-jsr310</artifactId>
+                <version>2.21.4</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <dependencies>
-
-        <!-- ✅ Core Spring Boot -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter</artifactId>
-        </dependency>
-
-        <!-- ✅ Web (REST APIs) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
-
-        <!-- ✅ Security (includes core + web security) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security</artifactId>
         </dependency>
 
-        <!-- ✅ Dev tools (optional, hot reload) -->
+        <!--
+            Declared directly (not just relying on a transitive pull) because
+            JacksonConfig.java uses the classic Jackson 2 API
+            (com.fasterxml.jackson.databind.ObjectMapper, JavaTimeModule).
+            Boot 4.1 defaults to Jackson 3 (tools.jackson.*), where JSR-310
+            support is built into databind directly and this separate module
+            isn't needed, so it's no longer guaranteed to be pulled in
+            transitively. Versions are pinned above in dependencyManagement.
+            This is Spring's own documented "temporary Jackson 2 bridge"
+            approach for easing a Boot 4 migration, it is explicitly called
+            out as deprecated and not meant to be relied on long term; the
+            real fix is migrating JacksonConfig.java to Jackson 3's
+            JsonMapper.builder() API and dropping these two lines.
+        -->
         <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-devtools</artifactId>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
             <scope>runtime</scope>
+        </dependency>
+
+        <!-- F-03: Flyway for automated database schema migrations -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
             <optional>true</optional>
         </dependency>
 
-        <!-- ✅ Testing -->
+        <dependency>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+            <version>2.18.0</version>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
-
-        <!-- ✅ Data JPA -->
         <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-data-jpa</artifactId>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
         </dependency>
 
-        <!-- ✅ Validation -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-validation</artifactId>
-        </dependency>
-
-        <!-- ✅ PostgreSQL -->
         <dependency>
             <groupId>com.github.ben-manes.caffeine</groupId>
             <artifactId>caffeine</artifactId>
         </dependency>
 
-        <!-- ✅ H2 Database -->
         <dependency>
-            <groupId>com.h2database</groupId>
-            <artifactId>h2</artifactId>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!--
+            TEMPORARY, for migration only: prints diagnostics at startup for
+            any renamed/removed configuration properties and migrates them at
+            runtime so the app doesn't silently misbehave. Remove this
+            dependency once the migration is verified clean, it is a
+            diagnostic tool, not something to ship long-term.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-properties-migrator</artifactId>
             <scope>runtime</scope>
         </dependency>
 
@@ -86,24 +166,59 @@
 
     <build>
         <plugins>
-
-            <!-- ✅ Spring Boot plugin -->
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
-            </plugin>
-
-            <!-- ✅ Compiler -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
-                    <source>17</source>
-                    <target>17</target>
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
                 </configuration>
             </plugin>
 
+            <!-- F-02: OWASP Dependency Check — fails build on CVSS >= 7 -->
+            <plugin>
+                <groupId>org.owasp</groupId>
+                <artifactId>dependency-check-maven</artifactId>
+                <version>10.0.3</version>
+                <configuration>
+                    <failBuildOnCVSS>7</failBuildOnCVSS>
+                    <suppressionFile>owasp-suppressions.xml</suppressionFile>
+                    <!--
+                        No Sonatype OSS Index account is configured for this
+                        project, every run so far has hit "Invalid credentials"
+                        (401) on every single dependency. NVD/CPE analysis
+                        already covers actual CVE detection (that's what's
+                        caught every real finding so far: Tomcat, Jackson,
+                        Hibernate Validator, angus-activation), so this isn't
+                        losing coverage, just a data source we were never
+                        successfully using. Disabling outright instead of
+                        letting it keep failing is also more deterministic:
+                        on a 401 this analyzer disables itself AND throws a
+                        fatal exception unless told to warn-only, which is
+                        why this specific run failed the whole goal instead
+                        of just logging warnings like earlier runs did.
+                        To re-enable: remove this line and configure
+                        ossIndexUsername/ossIndexPassword (ideally via
+                        settings.xml server credentials, not inline here).
+                    -->
+                    <ossindexAnalyzerEnabled>false</ossindexAnalyzerEnabled>
+                    <formats>
+                        <format>HTML</format>
+                        <format>JSON</format>
+                    </formats>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
-
 </project>
