@@ -1,21 +1,22 @@
 name: Java CI with Maven
 on:
     push:
-        branches: [ "**" ]
+        branches: ["**"]
     pull_request:
-        branches: [ "main" ]
+        branches: ["main"]
 
 jobs:
     build:
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v3
+            - uses: actions/checkout@v4 # Updated to v4 for 2026 standards
+
             - name: Set up JDK 21
-              uses: actions/setup-java@v3
+              uses: actions/setup-java@v4 # Updated to v4
               with:
-                  distribution: 'temurin'
-                  java-version: '21'
-            - name: Build with Maven
-              run: mvn -B package --file pom.xml
-            - name: Run tests with Maven
-              run: mvn -B verify --file pom.xml
+                  distribution: "temurin"
+                  java-version: "21"
+                  cache: "maven" # Speed up builds by caching dependencies
+
+            - name: Build and Verify with Maven
+              run: mvn -B clean verify --file pom.xml -DnvdApiKey="${{ secrets.NVD_API_KEY }}"
