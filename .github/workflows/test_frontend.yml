@@ -16,6 +16,9 @@ jobs:
               with:
                   node-version: "20" # Use Node.js version 20
 
+            - name: Move to Frontend Directory
+              run: cd frontend # Change to the frontend directory if your tests are located there
+
             - name: Install dependencies
               run: npm install
 
