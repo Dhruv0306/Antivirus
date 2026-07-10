@@ -1,4 +1,4 @@
-name: Java CI with Maven
+name: Java CI test With Maven
 on:
     push:
         branches: ["**"]
@@ -6,7 +6,7 @@ on:
         branches: ["main"]
 
 jobs:
-    build:
+    test_java:
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v4 # Updated to v4 for 2026 standards
@@ -18,5 +18,5 @@ jobs:
                   java-version: "21"
                   cache: "maven" # Speed up builds by caching dependencies
 
-            - name: Build with Maven
-              run: mvn -B package --file pom.xml -DskipTests
+            - name: Run tests with Maven
+              run: mvn test

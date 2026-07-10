@@ -1381,7 +1381,6 @@ public class SecurityServiceImpl implements SecurityService {
             return pathStr.contains("\\windows\\") ||
                     pathStr.contains("\\program files\\") ||
                     pathStr.contains("\\program files (x86)\\") ||
-                    pathStr.contains("\\appdata\\") ||
                     pathStr.contains("/proc/") ||
                     pathStr.contains("/sys/");
 

@@ -70,7 +70,18 @@ public class AntivirusController {
     public ResponseEntity<?> scanFile(@RequestParam("file") MultipartFile file) {
         // Validate that filename exists before processing (L-03 fix: handle null/blank
         // filenames explicitly)
-        String originalFilename = sanitizeDisplayName(file.getOriginalFilename());
+        String rawFilename = file.getOriginalFilename();
+        if (rawFilename == null || rawFilename.isBlank()) {
+            logger.error("No valid filename for uploaded file");
+            ScanResult errorResult = new ScanResult();
+            errorResult.setFilePath("unknown-file");
+            errorResult.setFileName("unknown-file");
+            errorResult.setInfected(false);
+            errorResult.setThreatType("ERROR");
+            errorResult.setThreatDetails("No filename for uploaded file (null or blank)");
+            return ResponseEntity.badRequest().body(errorResult);
+        }
+        String originalFilename = sanitizeDisplayName(rawFilename);
         if (originalFilename == null || originalFilename.isBlank()) {
             logger.error("No valid filename for uploaded file");
             ScanResult errorResult = new ScanResult();
