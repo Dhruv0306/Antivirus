@@ -1,0 +1,23 @@
+name: Frontend Tests with Node.js
+on:
+    push:
+        branches: ["**"]
+    pull_request:
+        branches: [main]
+
+jobs:
+    test_frontend:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4 # Updated to v4 for 2026 standards
+
+            - name: Set up Node.js
+              uses: actions/setup-node@v4 # Updated to v4
+              with:
+                  node-version: "20" # Use Node.js version 20
+
+            - name: Install dependencies
+              run: npm install
+
+            - name: Run frontend tests
+              run: npm test
