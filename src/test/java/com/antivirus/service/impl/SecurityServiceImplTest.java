@@ -19,8 +19,12 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.util.Set;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -64,9 +68,12 @@ class SecurityServiceImplTest {
 
     @AfterEach
     void tearDown() {
+        removeInjectedSignature();
         SecurityContextHolder.clearContext();
         deleteRecursively(new File("quarantine"));
     }
+
+    private String injectedSignature;
 
     private void deleteRecursively(File file) {
         if (file == null || !file.exists()) {
@@ -103,11 +110,14 @@ class SecurityServiceImplTest {
 
     @Test
     void scanFile_ShouldReturnMaliciousForKnownHashMatch() throws IOException {
-        // SHA-256 of an empty file is a hardcoded entry in KNOWN_MALWARE_SIGNATURES
-        File emptyFile = tempDir.resolve("empty.bin").toFile();
-        Files.write(emptyFile.toPath(), new byte[0]);
+        File sampleFile = tempDir.resolve("known-hash.bin").toFile();
+        String content = "known-hash-match-fixture";
+        Files.writeString(sampleFile.toPath(), content);
 
-        ScanResult result = securityService.scanFile(emptyFile);
+        injectedSignature = sha256Hex(content);
+        addInjectedSignature(injectedSignature);
+
+        ScanResult result = securityService.scanFile(sampleFile);
 
         assertEquals("MALICIOUS", result.getVerdict());
         assertTrue(result.isInfected());
@@ -115,6 +125,50 @@ class SecurityServiceImplTest {
         assertEquals("VIRUS", result.getThreatType());
         assertTrue(result.getDetectionSignals().contains("KNOWN_HASH_MATCH"));
         assertEquals("REPORTED", result.getActionTaken());
+    }
+
+    private void addInjectedSignature(String hash) {
+        try {
+            Field field = SecurityServiceImpl.class.getDeclaredField("KNOWN_MALWARE_SIGNATURES");
+            field.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            Set<String> signatures = (Set<String>) field.get(null);
+            signatures.add(hash);
+        } catch (ReflectiveOperationException e) {
+            fail("Failed to inject known malware signature for test: " + e.getMessage());
+        }
+    }
+
+    private void removeInjectedSignature() {
+        if (injectedSignature == null) {
+            return;
+        }
+
+        try {
+            Field field = SecurityServiceImpl.class.getDeclaredField("KNOWN_MALWARE_SIGNATURES");
+            field.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            Set<String> signatures = (Set<String>) field.get(null);
+            signatures.remove(injectedSignature);
+        } catch (ReflectiveOperationException ignored) {
+            // Best effort cleanup.
+        } finally {
+            injectedSignature = null;
+        }
+    }
+
+    private static String sha256Hex(String content) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(content.getBytes(StandardCharsets.UTF_8));
+            StringBuilder builder = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                builder.append(String.format("%02x", b));
+            }
+            return builder.toString();
+        } catch (Exception e) {
+            throw new IllegalStateException("Unable to compute SHA-256 hash", e);
+        }
     }
 
     // ── scanFile: extension masquerade ──────────────────────────────
