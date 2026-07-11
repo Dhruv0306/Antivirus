@@ -105,17 +105,17 @@ describe('Register', () => {
         expect(authApi.post).not.toHaveBeenCalled();
     });
 
-    test('submits the trimmed email payload and navigates to login on success', async () => {
+    test('submits the trimmed username and email payload and navigates to login on success', async () => {
         authApi.get.mockResolvedValue({ data: { token: 'csrf-token' } });
         authApi.post.mockResolvedValue({ data: {} });
         const user = userEvent.setup();
 
         renderRegister();
 
-        // Note: username is not trimmed before client-side validation runs in
-        // Register.js, so a padded username would fail validate() before the
-        // request is ever sent. Only email padding is exercised here.
-        await user.type(screen.getByLabelText(/username/i), 'testuser');
+        // Username and email are both trimmed before validation and before
+        // being sent, so stray whitespace (autofill, accidental spaces)
+        // doesn't trip the "letters/digits/underscores only" check.
+        await user.type(screen.getByLabelText(/username/i), '  testuser  ');
         await user.type(screen.getByLabelText(/email/i), '  testuser@example.com  ');
         await user.type(screen.getByLabelText(/^password/i), 'password123');
         await user.type(screen.getByLabelText(/confirm password/i), 'password123');

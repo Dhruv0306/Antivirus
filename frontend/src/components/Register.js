@@ -30,8 +30,12 @@ function Register() {
         setError(null);
     };
 
-    const validate = () => {
-        if (!/^[a-zA-Z0-9_]+$/.test(form.username)) {
+    // Validates the same trimmed values that get sent to the server, so a
+    // username like " bob " (stray leading/trailing whitespace from autofill
+    // or a typo) is judged on "bob", not rejected for whitespace that never
+    // reaches the backend anyway.
+    const validate = (username) => {
+        if (!/^[a-zA-Z0-9_]+$/.test(username)) {
             return 'Username may only contain letters, digits, and underscores';
         }
         if (form.password.length < 8) {
@@ -47,7 +51,10 @@ function Register() {
         e.preventDefault();
         setError(null);
 
-        const validationError = validate();
+        const trimmedUsername = form.username.trim();
+        const trimmedEmail = form.email.trim();
+
+        const validationError = validate(trimmedUsername);
         if (validationError) {
             setError(validationError);
             return;
@@ -59,8 +66,8 @@ function Register() {
             setCsrfCredentials(csrf);
 
             await authApi.post('/register', {
-                username: form.username.trim(),
-                email: form.email.trim(),
+                username: trimmedUsername,
+                email: trimmedEmail,
                 password: form.password,
                 confirmPassword: form.confirmPassword,
             });
