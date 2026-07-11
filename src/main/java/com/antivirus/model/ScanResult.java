@@ -16,7 +16,8 @@ public class ScanResult {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false)
+    // V4: widened from the default 255 to cover deeply nested paths
+    @Column(nullable = false, length = 1024)
     private String filePath;
 
     @Transient
