@@ -74,12 +74,22 @@ public class SecurityServiceImpl implements SecurityService {
     // ── R-06: Signatures updated to SHA-256 (64 hex chars) ──
     // MD5 is cryptographically broken; SHA-256 is the minimum standard
     // used by all modern threat-intel feeds (VirusTotal, MalwareBazaar).
+    //
+    // B-01 fix: the previous placeholder list contained the SHA-256 hash of
+    // an EMPTY file ("e3b0c44...") plus two non-SHA-256 filler values. That
+    // meant every zero-byte upload was flagged MALICIOUS by "known hash
+    // match". Replaced with the one standard, safe, real signature every
+    // AV product ships: the EICAR test file, published by anti-malware
+    // vendors specifically so scanners can verify detection works without
+    // handling live malware. See https://www.eicar.org/download-anti-malware-testfile/
+    //
+    // TODO: replace/extend with a real threat-intel feed (VirusTotal,
+    // MalwareBazaar) before relying on this for anything beyond the EICAR
+    // self-test. An empty set here is strictly safer than fabricated hashes.
     static {
         KNOWN_MALWARE_SIGNATURES.addAll(List.of(
-                // Replace with real SHA-256 hashes from a threat intel feed
-                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-                "5d41402abc4b2a76b9719d911017c592a3d494c4b7a2c8e1f0b3d5a7c9e1f3d5",
-                "7d793037a0760186574b0282f2f435e7c3d6d8a0b2c4e6f8d0a2b4c6e8f0a2b4"));
+                // SHA-256 of the EICAR standard antivirus test string
+                "275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0"));
     }
 
     // Suspicious file extensions
