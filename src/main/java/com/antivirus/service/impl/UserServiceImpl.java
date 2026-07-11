@@ -129,7 +129,7 @@ public class UserServiceImpl implements UserDetailsService, UserService {
         if (password.startsWith("{bcrypt}")) {
             return password.substring("{bcrypt}".length());
         }
-        if (password.startsWith("$2a$") || password.startsWith("$2b$")) {
+        if (password.startsWith("$2a$") || password.startsWith("$2b$") || password.startsWith("$2y$")) {
             return password;
         }
         return passwordEncoder.encode(password);
