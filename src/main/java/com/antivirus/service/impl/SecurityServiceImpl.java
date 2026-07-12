@@ -18,20 +18,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.io.*;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.time.Duration;
 import java.security.MessageDigest;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
-import java.util.regex.Matcher;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import org.slf4j.Logger;
@@ -72,32 +65,21 @@ public class SecurityServiceImpl implements SecurityService {
             "IO_ERROR", "Could not read file",
             "SCAN_ERROR", "Scan could not be completed");
 
-    // ── R-04: Thread-safe signature set using ConcurrentHashMap.newKeySet() ──
-    // Allows concurrent .contains() reads from scan threads and .add() writes
-    // from updateVirusDefinitions() without ConcurrentModificationException.
-    private static final Set<String> KNOWN_MALWARE_SIGNATURES = ConcurrentHashMap.newKeySet();
-
     // ── R-06: Signatures updated to SHA-256 (64 hex chars) ──
     // MD5 is cryptographically broken; SHA-256 is the minimum standard
     // used by all modern threat-intel feeds (VirusTotal, MalwareBazaar).
-    private static final String EICAR_SHA256 = "275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0";
-    private static final Pattern THREAT_INTEL_SHA256_PATTERN = Pattern.compile("\\b[a-fA-F0-9]{64}\\b");
-    private static final HttpClient THREAT_INTEL_HTTP_CLIENT = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(5))
-            .followRedirects(HttpClient.Redirect.NORMAL)
-            .build();
-    private static final String DEFAULT_THREAT_INTEL_FEEDS = "https://bazaar.abuse.ch/export/txt/sha256/";
-    private static final String THREAT_INTEL_URLS_PROPERTY = "app.threat-intel.urls";
-    private static final String THREAT_INTEL_URLS_ENV = "ANTIVIRUS_THREAT_INTEL_URLS";
-    private static final String THREAT_INTEL_CACHE_PROPERTY = "app.threat-intel.cache-file";
-    private static final String THREAT_INTEL_CACHE_ENV = "ANTIVIRUS_THREAT_INTEL_CACHE_FILE";
-    private static final String THREAT_INTEL_REFRESH_PROPERTY = "app.threat-intel.refresh-on-startup";
-    private static final String THREAT_INTEL_REFRESH_ENV = "ANTIVIRUS_THREAT_INTEL_REFRESH_ON_STARTUP";
-
-    static {
-        KNOWN_MALWARE_SIGNATURES.add(EICAR_SHA256);
-        loadThreatIntelSignatures(shouldRefreshThreatIntelOnStartup());
-    }
+    //
+    // Known-hash lookups (EICAR plus a live threat-intel feed) are now
+    // owned by ThreatIntelSignatureService, a proper Spring bean with
+    // @PostConstruct + a background-thread refresh, instead of the static
+    // block that used to live here. That static block ran the moment this
+    // class was loaded by the JVM, which fired a real HTTP call on every
+    // plain unit test run (SecurityServiceImplTest instantiates this class
+    // directly, no Spring context needed to trigger a static initializer),
+    // and could add several seconds to every application/test startup.
+    // See ThreatIntelSignatureService for the loading/refresh logic.
+    @Autowired
+    private ThreatIntelSignatureService threatIntelSignatureService;
 
     // Suspicious file extensions
     private static final Set<String> SUSPICIOUS_EXTENSIONS = new HashSet<>(Arrays.asList(
@@ -262,135 +244,6 @@ public class SecurityServiceImpl implements SecurityService {
         }
     }
 
-    private static void loadThreatIntelSignatures(boolean refreshFromRemote) {
-        Set<String> cachedSignatures = loadThreatIntelCache();
-        if (!cachedSignatures.isEmpty()) {
-            KNOWN_MALWARE_SIGNATURES.addAll(cachedSignatures);
-            logger.info("Loaded {} cached threat-intel signatures", cachedSignatures.size());
-        }
-
-        if (refreshFromRemote || KNOWN_MALWARE_SIGNATURES.size() <= 1) {
-            Set<String> remoteSignatures = fetchThreatIntelSignatures();
-            if (!remoteSignatures.isEmpty()) {
-                KNOWN_MALWARE_SIGNATURES.addAll(remoteSignatures);
-                persistThreatIntelCache(remoteSignatures);
-                logger.info("Loaded {} threat-intel signatures from {} feed(s)",
-                        remoteSignatures.size(), getThreatIntelFeedUrls().size());
-            } else {
-                logger.warn("No threat-intel signatures were returned by the configured feeds");
-            }
-        }
-    }
-
-    private static Set<String> loadThreatIntelCache() {
-        Path cachePath = resolveThreatIntelCachePath();
-        if (!Files.isRegularFile(cachePath)) {
-            return Set.of();
-        }
-
-        try {
-            Set<String> signatures = new LinkedHashSet<>();
-            for (String line : Files.readAllLines(cachePath, StandardCharsets.UTF_8)) {
-                signatures.addAll(extractSha256Signatures(line));
-            }
-            return signatures;
-        } catch (IOException e) {
-            logger.warn("Failed to load cached threat-intel signatures from {}: {}",
-                    cachePath, e.getMessage());
-            return Set.of();
-        }
-    }
-
-    private static Set<String> fetchThreatIntelSignatures() {
-        Set<String> signatures = new LinkedHashSet<>();
-        for (String feedUrl : getThreatIntelFeedUrls()) {
-            try {
-                HttpRequest request = HttpRequest.newBuilder(URI.create(feedUrl))
-                        .timeout(Duration.ofSeconds(10))
-                        .header("User-Agent", "Antivirus/1.0")
-                        .GET()
-                        .build();
-                HttpResponse<String> response = THREAT_INTEL_HTTP_CLIENT.send(request,
-                        HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-                if (response.statusCode() / 100 != 2) {
-                    logger.warn("Threat-intel feed {} returned HTTP {}", feedUrl, response.statusCode());
-                    continue;
-                }
-
-                signatures.addAll(extractSha256Signatures(response.body()));
-            } catch (Exception e) {
-                logger.warn("Failed to load threat-intel feed {}: {}", feedUrl, e.getMessage());
-            }
-        }
-        return signatures;
-    }
-
-    private static Set<String> extractSha256Signatures(String content) {
-        Set<String> signatures = new LinkedHashSet<>();
-        if (content == null || content.isBlank()) {
-            return signatures;
-        }
-
-        Matcher matcher = THREAT_INTEL_SHA256_PATTERN.matcher(content);
-        while (matcher.find()) {
-            signatures.add(matcher.group().toLowerCase(Locale.ROOT));
-        }
-        return signatures;
-    }
-
-    private static void persistThreatIntelCache(Set<String> signatures) {
-        Path cachePath = resolveThreatIntelCachePath();
-        try {
-            Path parent = cachePath.getParent();
-            if (parent != null) {
-                Files.createDirectories(parent);
-            }
-            Files.write(cachePath, signatures.stream()
-                    .sorted()
-                    .toList(), StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            logger.warn("Failed to persist threat-intel cache to {}: {}",
-                    cachePath, e.getMessage());
-        }
-    }
-
-    private static Path resolveThreatIntelCachePath() {
-        String configuredPath = firstNonBlank(
-                System.getProperty(THREAT_INTEL_CACHE_PROPERTY),
-                System.getenv(THREAT_INTEL_CACHE_ENV),
-                "data/threat-intel-signatures.sha256");
-        return Paths.get(configuredPath);
-    }
-
-    @SuppressWarnings("null")
-    private static List<String> getThreatIntelFeedUrls() {
-        String configuredUrls = firstNonBlank(
-                System.getProperty(THREAT_INTEL_URLS_PROPERTY),
-                System.getenv(THREAT_INTEL_URLS_ENV),
-                DEFAULT_THREAT_INTEL_FEEDS);
-        return Arrays.stream(configuredUrls.split("[,;\\s]+"))
-                .map(String::trim)
-                .filter(value -> !value.isBlank())
-                .toList();
-    }
-
-    private static boolean shouldRefreshThreatIntelOnStartup() {
-        String configuredValue = firstNonBlank(
-                System.getProperty(THREAT_INTEL_REFRESH_PROPERTY),
-                System.getenv(THREAT_INTEL_REFRESH_ENV),
-                "false");
-        return Boolean.parseBoolean(configuredValue);
-    }
-
-    private static String firstNonBlank(String... values) {
-        for (String value : values) {
-            if (value != null && !value.isBlank()) {
-                return value;
-            }
-        }
-        return "";
-    }
-
     @Override
     public ScanResult scanFile(File file) {
         ScanResult result = new ScanResult();
@@ -432,7 +285,7 @@ public class SecurityServiceImpl implements SecurityService {
             // This is the only check allowed to short-circuit straight to
             // MALICIOUS on its own: an exact hash match against a curated
             // threat-intel feed is a confirmed identification, not a heuristic.
-            if (KNOWN_MALWARE_SIGNATURES.contains(fileHash)) {
+            if (threatIntelSignatureService.isKnownMalicious(fileHash)) {
                 applyVerdict(result, "MALICIOUS", "VIRUS", "Known malware signature detected",
                         SCORE_KNOWN_HASH, List.of("KNOWN_HASH_MATCH"));
                 saveScanResult(result);
@@ -1091,7 +944,8 @@ public class SecurityServiceImpl implements SecurityService {
 
     @Override
     public void updateVirusDefinitions() {
-        loadThreatIntelSignatures(true);
+        logger.info("Virus definition update requested; refreshing threat-intel feed in the background");
+        threatIntelSignatureService.refreshAsync();
     }
 
     @Override
@@ -1278,7 +1132,7 @@ public class SecurityServiceImpl implements SecurityService {
     public boolean detectMalware(File file) {
         try {
             String fileHash = calculateFileHash(file);
-            if (KNOWN_MALWARE_SIGNATURES.contains(fileHash)) {
+            if (threatIntelSignatureService.isKnownMalicious(fileHash)) {
                 return true;
             }
 
