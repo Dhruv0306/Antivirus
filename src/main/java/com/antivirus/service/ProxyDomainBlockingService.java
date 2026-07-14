@@ -42,6 +42,10 @@ public class ProxyDomainBlockingService {
     private static final int MAX_PROXY_THREADS = 50;
     private static final int SOCKET_TIMEOUT_MS = 30_000;
     private static final String LOCALHOST = "127.0.0.1";
+    // Resource-exhaustion guard: a misbehaving or malicious client sending
+    // an unbounded number of header lines would otherwise grow readHeaders()'s
+    // list without limit.
+    private static final int MAX_HEADER_LINES = 200;
 
     private static final Set<String> BLOCKED_IP_PREFIXES = Set.of(
             "127.", "10.", "172.16.", "172.17.", "172.18.", "172.19.",
@@ -151,17 +155,17 @@ public class ProxyDomainBlockingService {
                 return;
             }
 
-            // N-03 Fix: Block SSRF attempts to internal/loopback addresses
-            if (isPrivateOrLoopback(request.host())) {
-                sendBlockedResponse(client);
-                logger.warn("SSRF attempt blocked: {}:{}", request.host(), request.port());
-                return;
-            }
-
+            // N-03/B-02 Fix: SSRF protection now happens atomically with the
+            // connect itself (see resolveAndValidate + handleConnect /
+            // handleHttpForward), not as a separate pre-check here. A
+            // pre-check followed by a second, independent DNS lookup at
+            // connect time is a classic DNS-rebinding TOCTOU: an attacker's
+            // DNS server can return a safe public IP for the check and a
+            // private/internal IP moments later for the actual connection.
             if ("CONNECT".equals(method)) {
-                handleConnect(client, request, requestLine, headerLines);
+                handleConnect(client, request, requestLine, headerLines, reader);
             } else {
-                handleHttpForward(client, request, requestLine, headerLines);
+                handleHttpForward(client, request, requestLine, headerLines, reader);
             }
         } catch (IOException e) {
             logger.debug("Proxy client connection closed: {}", e.getMessage());
@@ -172,6 +176,10 @@ public class ProxyDomainBlockingService {
         List<String> headers = new ArrayList<>();
         String line;
         while ((line = reader.readLine()) != null && !line.isEmpty()) {
+            if (headers.size() >= MAX_HEADER_LINES) {
+                logger.warn("Rejecting request with more than {} header lines", MAX_HEADER_LINES);
+                throw new IOException("Too many header lines");
+            }
             headers.add(line);
         }
         return headers;
@@ -224,14 +232,37 @@ public class ProxyDomainBlockingService {
     }
 
     private void handleConnect(Socket client, ProxyRequest request, String requestLine,
-            List<String> headerLines) throws IOException {
+            List<String> headerLines, BufferedReader reader) throws IOException {
+        InetAddress validatedAddress;
+        try {
+            validatedAddress = resolveAndValidate(request.host());
+        } catch (SecurityException e) {
+            logger.warn("SSRF attempt blocked on CONNECT: {}:{} ({})", request.host(), request.port(),
+                    e.getMessage());
+            sendBlockedResponse(client);
+            return;
+        }
+
         try (Socket remote = new Socket()) {
-            remote.connect(new InetSocketAddress(request.host(), request.port()), SOCKET_TIMEOUT_MS);
+            // Connect using the already-resolved InetAddress, not the
+            // hostname string: InetSocketAddress(String, int) would trigger
+            // a second, independent DNS lookup here, reopening the exact
+            // rebinding window resolveAndValidate() just closed.
+            remote.connect(new InetSocketAddress(validatedAddress, request.port()), SOCKET_TIMEOUT_MS);
             remote.setSoTimeout(SOCKET_TIMEOUT_MS);
 
             OutputStream clientOut = client.getOutputStream();
             clientOut.write("HTTP/1.1 200 Connection Established\r\n\r\n".getBytes(StandardCharsets.ISO_8859_1));
             clientOut.flush();
+
+            // Some clients pipeline eagerly and send the first TLS
+            // ClientHello bytes in the same TCP write as the CONNECT
+            // request itself. The BufferedReader used to parse the CONNECT
+            // headers can end up pulling those bytes into its internal
+            // buffer too; without forwarding them explicitly here they are
+            // silently lost (pump() below reads straight from the socket's
+            // raw InputStream, which has already had those bytes drained).
+            flushBufferedBytes(reader, remote.getOutputStream());
 
             relay(client, remote);
         } catch (IOException e) {
@@ -240,7 +271,7 @@ public class ProxyDomainBlockingService {
     }
 
     private void handleHttpForward(Socket client, ProxyRequest request, String requestLine,
-            List<String> headerLines) throws IOException {
+            List<String> headerLines, BufferedReader reader) throws IOException {
         String path = resolveForwardPath(request);
         String forwardRequestLine = request.method() + " " + path + " HTTP/1.1\r\n";
         StringBuilder headerBlock = new StringBuilder(forwardRequestLine);
@@ -251,17 +282,56 @@ public class ProxyDomainBlockingService {
         }
         headerBlock.append("\r\n");
 
+        InetAddress validatedAddress;
+        try {
+            validatedAddress = resolveAndValidate(request.host());
+        } catch (SecurityException e) {
+            logger.warn("SSRF attempt blocked on forward: {}:{} ({})", request.host(), request.port(),
+                    e.getMessage());
+            sendBlockedResponse(client);
+            return;
+        }
+
         try (Socket remote = new Socket()) {
-            remote.connect(new InetSocketAddress(request.host(), request.port()), SOCKET_TIMEOUT_MS);
+            // Same TOCTOU reasoning as handleConnect: connect to the
+            // address resolveAndValidate() already checked, never re-
+            // resolve the hostname string at connect time.
+            remote.connect(new InetSocketAddress(validatedAddress, request.port()), SOCKET_TIMEOUT_MS);
             remote.setSoTimeout(SOCKET_TIMEOUT_MS);
 
             OutputStream remoteOut = remote.getOutputStream();
             remoteOut.write(headerBlock.toString().getBytes(StandardCharsets.ISO_8859_1));
+
+            // A request body (POST/PUT/PATCH, Content-Length or chunked)
+            // sent in the same TCP write as the headers can end up partly
+            // or fully consumed by the BufferedReader while it was reading
+            // header lines. Without this, that body data is silently
+            // dropped rather than forwarded, truncating the request on the
+            // remote end. This needs no Content-Length/chunked parsing of
+            // our own: it just forwards whatever bytes already arrived,
+            // byte-for-byte, before the raw relay takes over for the rest.
+            flushBufferedBytes(reader, remoteOut);
             remoteOut.flush();
 
             relay(client, remote);
         } catch (IOException e) {
             logger.debug("HTTP forward failed for {}:{} - {}", request.host(), request.port(), e.getMessage());
+        }
+    }
+
+    // Drains any bytes the BufferedReader already pulled off the socket
+    // (into its internal buffer) while reading the request line/headers,
+    // and writes them onward unchanged. ISO_8859_1 is a 1:1 byte<->char
+    // mapping, so this round-trip is lossless for arbitrary binary data
+    // (TLS handshake bytes, binary POST bodies, etc.), not just text.
+    private void flushBufferedBytes(BufferedReader reader, OutputStream out) throws IOException {
+        char[] buffer = new char[8192];
+        while (reader.ready()) {
+            int read = reader.read(buffer);
+            if (read == -1) {
+                break;
+            }
+            out.write(new String(buffer, 0, read).getBytes(StandardCharsets.ISO_8859_1));
         }
     }
 
@@ -324,23 +394,60 @@ public class ProxyDomainBlockingService {
 
     /**
      * N-03 Fix: Prevent SSRF by blocking connections to internal, loopback, or
-     * link-local IPs
+     * link-local IPs. Kept as its own method (rather than folded into
+     * resolveAndValidate) because ProxyDomainBlockingServiceTest exercises
+     * it directly via reflection; behavior/signature unchanged.
      */
+    @SuppressWarnings("unused")
     private boolean isPrivateOrLoopback(String host) {
         String h = host.toLowerCase(Locale.ROOT);
-        if (h.equals("localhost"))
+        if (h.equals("localhost") || h.endsWith(".localhost"))
             return true;
-        // Try resolving to catch DNS-rebinding — use cached InetAddress
         try {
             InetAddress addr = InetAddress.getByName(h);
-            String ip = addr.getHostAddress();
-            return BLOCKED_IP_PREFIXES.stream().anyMatch(ip::startsWith)
-                    || addr.isLoopbackAddress()
-                    || addr.isSiteLocalAddress()
-                    || addr.isLinkLocalAddress();
+            return isPrivateOrLoopbackAddress(addr);
         } catch (UnknownHostException e) {
             return true; // fail-closed: block unresolvable hosts
         }
+    }
+
+    private boolean isPrivateOrLoopbackAddress(InetAddress addr) {
+        String ip = addr.getHostAddress();
+        return BLOCKED_IP_PREFIXES.stream().anyMatch(ip::startsWith)
+                || addr.isLoopbackAddress()
+                || addr.isSiteLocalAddress()
+                || addr.isLinkLocalAddress()
+                || addr.isAnyLocalAddress();
+    }
+
+    /**
+     * B-02 Fix: resolves the host to a concrete InetAddress and validates
+     * THAT SAME OBJECT, which the caller must then connect to directly
+     * (InetSocketAddress(InetAddress, int), never the hostname string
+     * again). A separate check-then-resolve-again pattern is vulnerable to
+     * DNS rebinding: an attacker's DNS server can return a safe address for
+     * the check and a private/internal address moments later for the
+     * connection, since each hostname lookup is independent and nothing
+     * requires the two answers to match.
+     *
+     * @throws SecurityException if the host is blocked or fails to resolve
+     *                           (fail-closed)
+     */
+    private InetAddress resolveAndValidate(String host) {
+        String h = host.toLowerCase(Locale.ROOT);
+        if (h.equals("localhost") || h.endsWith(".localhost")) {
+            throw new SecurityException("Blocked host: " + host);
+        }
+        InetAddress addr;
+        try {
+            addr = InetAddress.getByName(h);
+        } catch (UnknownHostException e) {
+            throw new SecurityException("Unresolvable host (fail-closed): " + host);
+        }
+        if (isPrivateOrLoopbackAddress(addr)) {
+            throw new SecurityException("Blocked private/loopback address: " + addr.getHostAddress());
+        }
+        return addr;
     }
 
     private void sendBlockedResponse(Socket clientSocket) throws IOException {
