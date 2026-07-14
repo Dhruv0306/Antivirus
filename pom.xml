@@ -182,7 +182,7 @@
             <plugin>
                 <groupId>org.owasp</groupId>
                 <artifactId>dependency-check-maven</artifactId>
-                <version>10.0.3</version>
+                <version>12.2.2</version>
                 <configuration>
                     <failBuildOnCVSS>7</failBuildOnCVSS>
                     <suppressionFile>owasp-suppressions.xml</suppressionFile>
@@ -204,7 +204,7 @@
                         ossIndexUsername/ossIndexPassword (ideally via
                         settings.xml server credentials, not inline here).
                     -->
-                    <ossindexAnalyzerEnabled>false</ossindexAnalyzerEnabled>
+                    <ossIndexAnalyzerEnabled>false</ossIndexAnalyzerEnabled>
                     <formats>
                         <format>HTML</format>
                         <format>JSON</format>
@@ -214,6 +214,51 @@
                     <execution>
                         <goals>
                             <goal>check</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!--
+                SAST gap closure: SpotBugs + Find Security Bugs, restricted
+                to the SECURITY bug category via spotbugs-security-include.xml
+                (general SpotBugs correctness/style/performance categories
+                are noisy and out of scope for this pass).
+
+                Deliberately report-only for now (bound to the analysis-only
+                `spotbugs` goal, not the build-failing `check` goal): this
+                tool has never run against this codebase before, so the
+                current finding count/quality is unknown. Forcing an
+                unreviewed set of findings to hard-fail CI on the next push
+                would be a bad first experience, the same reasoning already
+                applied to owasp-suppressions.xml for the dependency-check
+                plugin above.
+
+                To enforce once findings have been triaged: review the
+                report from the spotbugs.yml workflow (or `mvn spotbugs:spotbugs`
+                locally, output at target/spotbugsXml.xml), add any accepted
+                false positives to a spotbugs-security-exclude.xml filter
+                (see <excludeFilterFile> below, not yet created), then switch
+                this execution's goal from `spotbugs` to `check`.
+            -->
+            <plugin>
+                <groupId>com.github.spotbugs</groupId>
+                <artifactId>spotbugs-maven-plugin</artifactId>
+                <version>4.9.8.4</version>
+                <configuration>
+                    <includeFilterFile>spotbugs-security-include.xml</includeFilterFile>
+                    <plugins>
+                        <plugin>
+                            <groupId>com.h3xstream.findsecbugs</groupId>
+                            <artifactId>findsecbugs-plugin</artifactId>
+                            <version>1.12.0</version>
+                        </plugin>
+                    </plugins>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>spotbugs</goal>
                         </goals>
                     </execution>
                 </executions>
