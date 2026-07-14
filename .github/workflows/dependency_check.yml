@@ -27,7 +27,7 @@ jobs:
             - name: Run OWASP dependency-check
               env:
                   NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
-              run: mvn -B org.owasp:dependency-check-maven:check --file pom.xml
+              run: mvn -B org.owasp:dependency-check-maven:check -DnvdApiKey="$NVD_API_KEY" --file pom.xml
 
             - name: Upload dependency-check report
               if: always()
