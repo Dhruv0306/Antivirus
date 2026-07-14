@@ -3,6 +3,7 @@ package com.antivirus.service.impl;
 import com.antivirus.dto.PagedResponse;
 import com.antivirus.model.ScanResult;
 import com.antivirus.service.SecurityService;
+import jakarta.annotation.PreDestroy;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -11,6 +12,7 @@ import com.antivirus.repository.ScanResultRepository;
 import com.antivirus.service.LogService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.http.HttpStatus;
@@ -23,13 +25,18 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.MessageDigest;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.stream.Stream;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.nio.file.AccessDeniedException;
@@ -55,6 +62,67 @@ public class SecurityServiceImpl implements SecurityService {
 
     private final AtomicBoolean systemScanRunning = new AtomicBoolean(false);
     private final AtomicBoolean stopSystemScan = new AtomicBoolean(false);
+
+    // ── Async system scan (perf follow-up) ──────────────────────────────
+    // performSystemScan() used to run entirely on the calling (HTTP request)
+    // thread, so POST /scan/system blocked for up to
+    // MAX_SYSTEM_SCAN_DURATION_MS (5 minutes) even though a
+    // /scan/system/status polling endpoint already existed and the frontend
+    // was already polling it. The scan itself now runs on this dedicated
+    // background thread; the CAS guard on systemScanRunning still happens
+    // synchronously so a second request gets an immediate 409 rather than
+    // silently queuing behind the running scan.
+    private final ExecutorService systemScanExecutor = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "system-scan-worker");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private final AtomicInteger systemScanFilesScanned = new AtomicInteger(0);
+
+    // ── Async directory scan (perf follow-up) ───────────────────────────
+    // /scan/directory used to receive the upload AND scan every file
+    // synchronously in the same request, holding the HTTP thread for
+    // however long the whole batch took. Uploading still has to happen
+    // synchronously (the browser is sending file bytes), but scanning the
+    // already-uploaded files now runs as a background job the client polls
+    // for, the same shape as the system-scan fix above.
+    private enum DirectoryScanStatus {
+        RUNNING, COMPLETED, FAILED
+    }
+
+    private static final class DirectoryScanJob {
+        final String id;
+        final String ownerUsername;
+        final String directoryName;
+        final int totalFiles;
+        final Path tempDir;
+        final Instant createdAt = Instant.now();
+        final AtomicInteger processedFiles = new AtomicInteger(0);
+        final AtomicInteger cleanFiles = new AtomicInteger(0);
+        final AtomicInteger infectedFiles = new AtomicInteger(0);
+        final AtomicInteger suspiciousFiles = new AtomicInteger(0);
+        final AtomicInteger skippedFiles = new AtomicInteger(0);
+        final List<ScanResult> results = Collections.synchronizedList(new ArrayList<>());
+        volatile DirectoryScanStatus status = DirectoryScanStatus.RUNNING;
+        volatile String errorMessage;
+
+        DirectoryScanJob(String id, String ownerUsername, String directoryName, int totalFiles, Path tempDir) {
+            this.id = id;
+            this.ownerUsername = ownerUsername;
+            this.directoryName = directoryName;
+            this.totalFiles = totalFiles;
+            this.tempDir = tempDir;
+        }
+    }
+
+    private final Map<String, DirectoryScanJob> directoryScanJobs = new ConcurrentHashMap<>();
+    private static final Duration DIRECTORY_SCAN_JOB_RETENTION = Duration.ofMinutes(15);
+
+    private final ExecutorService directoryScanExecutor = Executors.newFixedThreadPool(2, runnable -> {
+        Thread thread = new Thread(runnable, "directory-scan-worker");
+        thread.setDaemon(true);
+        return thread;
+    });
 
     @SuppressWarnings("unused")
     private boolean isElevated = false;
@@ -689,13 +757,32 @@ public class SecurityServiceImpl implements SecurityService {
     }
 
     @Override
-    public List<ScanResult> performSystemScan() {
+    public void performSystemScan() {
         if (!systemScanRunning.compareAndSet(false, true)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "System scan is already in progress");
         }
         stopSystemScan.set(false);
+        systemScanFilesScanned.set(0);
+        // SecurityContextHolder is thread-local by default, so without this
+        // explicit capture/propagation, scanFile() running on
+        // systemScanExecutor's thread would see an empty context and
+        // attribute every result to "system" instead of the admin who
+        // triggered the scan.
+        SecurityContext callerContext = SecurityContextHolder.getContext();
+        systemScanExecutor.submit(() -> runSystemScan(callerContext));
+    }
+
+    private void runSystemScan(SecurityContext callerContext) {
+        SecurityContextHolder.setContext(callerContext);
+        try {
+            runSystemScanInternal();
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
+    }
+
+    private void runSystemScanInternal() {
         List<ScanResult> results = new ArrayList<>(Math.min(MAX_SYSTEM_SCAN_RESULTS, 256));
-        AtomicInteger scannedFiles = new AtomicInteger(0);
         AtomicInteger skippedFiles = new AtomicInteger(0);
         long scanDeadline = System.currentTimeMillis() + MAX_SYSTEM_SCAN_DURATION_MS;
 
@@ -728,7 +815,8 @@ public class SecurityServiceImpl implements SecurityService {
                 logger.info("Scanning root directory: {}", root.getAbsolutePath());
 
                 try {
-                    scanDirectory(root.toPath(), skipDirectories, results, scannedFiles, skippedFiles, scanDeadline);
+                    scanDirectory(root.toPath(), skipDirectories, results, systemScanFilesScanned, skippedFiles,
+                            scanDeadline);
                 } catch (AccessDeniedException e) {
                     logger.debug("Access denied to root directory: {}", root, e);
                     ScanResult errorResult = new ScanResult();
@@ -772,15 +860,24 @@ public class SecurityServiceImpl implements SecurityService {
             }
 
             logger.info("System scan completed. Scanned: {}, Skipped: {}, Total Results: {}",
-                    scannedFiles.get(), skippedFiles.get(), results.size());
-            return results;
+                    systemScanFilesScanned.get(), skippedFiles.get(), results.size());
         } catch (Exception e) {
             logger.error("Critical error during system scan: {}", e.getMessage(), e);
-            throw new RuntimeException("System scan failed: " + e.getMessage(), e);
         } finally {
             systemScanRunning.set(false);
             stopSystemScan.set(false);
         }
+    }
+
+    @Override
+    public int getSystemScanFilesScanned() {
+        return systemScanFilesScanned.get();
+    }
+
+    @PreDestroy
+    void shutdownScanExecutors() {
+        systemScanExecutor.shutdownNow();
+        directoryScanExecutor.shutdownNow();
     }
 
     private void scanDirectory(Path directory, Set<String> skipDirectories,
@@ -1436,5 +1533,141 @@ public class SecurityServiceImpl implements SecurityService {
             scanResultRepository.saveAll(batch);
             logger.debug("Saved batch of {} results to database", batch.size());
         }
+    }
+
+    // ── Async directory scan job management ──────────────────────────
+
+    @Override
+    public String startDirectoryScanJob(Path tempDir, String directoryName, int totalFiles) {
+        String ownerUsername = resolveCurrentUsername();
+        String jobId = UUID.randomUUID().toString();
+        DirectoryScanJob job = new DirectoryScanJob(jobId, ownerUsername, directoryName, totalFiles, tempDir);
+        directoryScanJobs.put(jobId, job);
+        pruneOldDirectoryScanJobs();
+        // Same SecurityContext propagation reasoning as performSystemScan():
+        // without this, scanFile() on directoryScanExecutor's thread would
+        // attribute every result to "system" instead of the uploading user,
+        // and that user would never see their own results under "my history".
+        SecurityContext callerContext = SecurityContextHolder.getContext();
+        directoryScanExecutor.submit(() -> runDirectoryScanJob(job, callerContext));
+        return jobId;
+    }
+
+    // Bounds the job map's memory growth: on each new job, drop any
+    // finished (COMPLETED/FAILED) job older than the retention window.
+    // RUNNING jobs are never pruned regardless of age.
+    private void pruneOldDirectoryScanJobs() {
+        Instant cutoff = Instant.now().minus(DIRECTORY_SCAN_JOB_RETENTION);
+        directoryScanJobs.values().removeIf(job -> job.status != DirectoryScanStatus.RUNNING
+                && job.createdAt.isBefore(cutoff));
+    }
+
+    private void runDirectoryScanJob(DirectoryScanJob job, SecurityContext callerContext) {
+        SecurityContextHolder.setContext(callerContext);
+        try {
+            runDirectoryScanJobInternal(job);
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
+    }
+
+    private void runDirectoryScanJobInternal(DirectoryScanJob job) {
+        dirListingCache.get().clear();
+        try (Stream<Path> paths = Files.walk(job.tempDir)) {
+            paths.filter(Files::isRegularFile)
+                    .filter(p -> !isFileExcluded(p))
+                    .forEach(path -> scanOneJobFile(job, path));
+
+            job.status = DirectoryScanStatus.COMPLETED;
+            logger.info("Directory scan job {} completed: {}/{} files, {} infected",
+                    job.id, job.processedFiles.get(), job.totalFiles, job.infectedFiles.get());
+        } catch (Exception e) {
+            logger.error("Directory scan job {} failed: {}", job.id, e.getMessage(), e);
+            job.status = DirectoryScanStatus.FAILED;
+            job.errorMessage = SAFE_ERROR_MESSAGES.get("SCAN_ERROR");
+        } finally {
+            dirListingCache.remove();
+            deleteTempDirQuietly(job.tempDir);
+        }
+    }
+
+    private void scanOneJobFile(DirectoryScanJob job, Path path) {
+        try {
+            if (Files.size(path) > 100 * 1024 * 1024) {
+                job.skippedFiles.incrementAndGet();
+                return;
+            }
+
+            ScanResult result = scanFile(path.toFile());
+            result.setScanType("DIRECTORY");
+            // Report a path relative to the job's own temp root, not the
+            // server's absolute temp-directory path.
+            result.setFileName(job.tempDir.relativize(path).toString());
+            job.results.add(result);
+
+            if (result.isInfected()) {
+                job.infectedFiles.incrementAndGet();
+            } else if ("ERROR".equals(result.getThreatType())) {
+                job.skippedFiles.incrementAndGet();
+            } else if ("SUSPICIOUS".equals(result.getVerdict())) {
+                job.suspiciousFiles.incrementAndGet();
+            } else {
+                job.cleanFiles.incrementAndGet();
+            }
+        } catch (IOException e) {
+            logger.error("IO error scanning file in job {}: {}", job.id, path, e);
+            job.skippedFiles.incrementAndGet();
+        } catch (Exception e) {
+            logger.error("Unexpected error scanning file in job {}: {}", job.id, path, e);
+            job.skippedFiles.incrementAndGet();
+        } finally {
+            job.processedFiles.incrementAndGet();
+        }
+    }
+
+    private void deleteTempDirQuietly(Path dir) {
+        try (Stream<Path> paths = Files.walk(dir)) {
+            paths.sorted(Comparator.reverseOrder()).forEach(p -> {
+                try {
+                    Files.deleteIfExists(p);
+                } catch (IOException e) {
+                    logger.warn("Failed to delete temp scan file: {}", p, e);
+                }
+            });
+        } catch (IOException e) {
+            logger.warn("Failed to clean up temp scan directory: {}", dir, e);
+        }
+    }
+
+    @Override
+    public Map<String, Object> getDirectoryScanJobStatus(String jobId) {
+        DirectoryScanJob job = directoryScanJobs.get(jobId);
+        if (job == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Scan job not found");
+        }
+
+        String requestingUser = resolveCurrentUsername();
+        if (!job.ownerUsername.equalsIgnoreCase(requestingUser)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not allowed to view this scan job");
+        }
+
+        Map<String, Object> status = new HashMap<>();
+        status.put("jobId", job.id);
+        status.put("directoryName", job.directoryName);
+        status.put("isRunning", job.status == DirectoryScanStatus.RUNNING);
+        status.put("failed", job.status == DirectoryScanStatus.FAILED);
+        status.put("totalFiles", job.totalFiles);
+        status.put("processedFiles", job.processedFiles.get());
+        status.put("cleanFiles", job.cleanFiles.get());
+        status.put("infectedFiles", job.infectedFiles.get());
+        status.put("suspiciousFiles", job.suspiciousFiles.get());
+        status.put("skippedFiles", job.skippedFiles.get());
+        if (job.status != DirectoryScanStatus.RUNNING) {
+            status.put("results", new ArrayList<>(job.results));
+        }
+        if (job.errorMessage != null) {
+            status.put("error", job.errorMessage);
+        }
+        return status;
     }
 }
