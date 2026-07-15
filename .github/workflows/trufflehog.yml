@@ -1,0 +1,28 @@
+name: TruffleHog Secret Scan
+on:
+    push:
+        branches: ["**"]
+    pull_request:
+        branches: ["main"]
+
+jobs:
+    trufflehog:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  # Full history required: TruffleHog needs to walk commits
+                  # to find secrets that were added and later removed but
+                  # still live on in git history.
+                  fetch-depth: 0
+
+            # Unlike SpotBugs/Semgrep above, this is NOT staged as
+            # report-only. Secret detection with --results=verified,unknown
+            # has a much lower false-positive rate than general SAST, and a
+            # genuine finding here (a live, working credential committed to
+            # the repo) is urgent regardless of whether findings have been
+            # triaged yet.
+            - name: Secret scanning
+              uses: trufflesecurity/trufflehog@main
+              with:
+                  extra_args: --results=verified,unknown

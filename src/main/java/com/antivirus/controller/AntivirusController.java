@@ -21,7 +21,6 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -146,8 +145,11 @@ public class AntivirusController {
     }
 
     @PostMapping("/scan/system")
-    public ResponseEntity<List<ScanResult>> performSystemScan() {
-        return ResponseEntity.ok(securityService.performSystemScan());
+    public ResponseEntity<Map<String, Object>> performSystemScan() {
+        securityService.performSystemScan();
+        Map<String, Object> response = new HashMap<>();
+        response.put("started", true);
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(response);
     }
 
     @PostMapping("/scan/system/stop")
@@ -160,6 +162,7 @@ public class AntivirusController {
     public ResponseEntity<Map<String, Object>> getSystemScanStatus() {
         Map<String, Object> status = new HashMap<>();
         status.put("isRunning", securityService.isSystemScanRunning());
+        status.put("filesScanned", securityService.getSystemScanFilesScanned());
         return ResponseEntity.ok(status);
     }
 
@@ -262,12 +265,19 @@ public class AntivirusController {
     }
 
     /**
-     * Endpoint for scanning a directory
-     * 
+     * Endpoint for uploading a directory's files and starting a background
+     * scan job. The upload itself is still synchronous (the browser is
+     * sending file bytes over this request), but scanning the uploaded
+     * files no longer happens on this request thread: it now runs as a
+     * background job that GET /scan/directory/status/{jobId} polls for.
+     *
      * @param directoryName Name of the directory being scanned
-     * @param recursive     Whether to scan subdirectories
+     * @param recursive     Accepted for API compatibility; not currently
+     *                      used to filter the upload (matches prior
+     *                      behavior — the browser already flattens the
+     *                      directory picker's file list before upload)
      * @param files         List of files to scan from the directory
-     * @return Scan results for all files
+     * @return 202 Accepted with a jobId to poll, or a 4xx/5xx error
      */
     @SuppressWarnings("deprecation")
     @PostMapping("/scan/directory")
@@ -291,119 +301,72 @@ public class AntivirusController {
             return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(errorResponse);
         }
 
+        Path tempDir = null;
         try {
-            logger.info("Starting directory scan for directory: {} (Total files: {})", directoryName, files.size());
-            List<ScanResult> results = new ArrayList<>();
-            int processedFiles = 0;
-            int cleanFiles = 0;
-            int infectedFiles = 0;
-            int suspiciousFiles = 0;
-            int skippedFiles = 0;
+            tempDir = Files.createTempDirectory("scan_");
+            int uploadedFiles = 0;
+            int rejectedFiles = 0;
 
-            // Create a temporary directory to store uploaded files
-            Path tempDir = Files.createTempDirectory("scan_");
-
-            try {
-                // Process each file while maintaining directory structure
-                for (MultipartFile file : files) {
-                    try {
-                        // Get the relative path from the original filename
-                        String relativePath = sanitizeDisplayName(file.getOriginalFilename());
-                        if (relativePath == null) {
-                            continue;
-                        }
-
-                        Path targetPath = PathSecurityUtil.resolveSafely(tempDir, relativePath);
-
-                        if (targetPath.getParent() != null) {
-                            Files.createDirectories(targetPath.getParent());
-                        }
-
-                        // O-02 Fix: Use Objects.requireNonNull to satisfy @NonNull contract and remove
-                        // suppression
-                        file.transferTo(Objects.requireNonNull(targetPath.toFile(),
-                                "Target path could not be converted to File"));
-
-                        // Scan the file
-                        ScanResult result = securityService.scanFile(targetPath.toFile());
-                        result.setFileName(relativePath);
-                        results.add(result);
-
-                        // Update statistics
-                        processedFiles++;
-                        if (result.isInfected()) {
-                            infectedFiles++;
-                            logger.warn("Infected file found: {} (Type: {})", relativePath, result.getThreatType());
-                        } else if ("ERROR".equals(result.getThreatType())) {
-                            skippedFiles++;
-                        } else if ("SUSPICIOUS".equals(result.getVerdict())) {
-                            suspiciousFiles++;
-                        } else {
-                            cleanFiles++;
-                        }
-
-                        // Log progress every 100 files
-                        if (processedFiles % 100 == 0) {
-                            logger.info(
-                                    "Directory scan progress - Directory: {}, Processed: {}/{}, Clean: {}, Infected: {}, Suspicious: {}, Errors: {}",
-                                    directoryName, processedFiles, files.size(), cleanFiles, infectedFiles,
-                                    suspiciousFiles, skippedFiles);
-                        }
-
-                    } catch (SecurityException e) {
-                        logger.warn("Rejected unsafe path in directory upload: {}", file.getOriginalFilename());
-                        ScanResult errorResult = new ScanResult();
-                        String displayName = sanitizeDisplayName(file.getOriginalFilename());
-                        errorResult.setFilePath(displayName);
-                        errorResult.setFileName(displayName);
-                        errorResult.setInfected(false);
-                        errorResult.setThreatType("ERROR");
-                        errorResult.setThreatDetails("Rejected unsafe file path");
-                        results.add(errorResult);
-                        skippedFiles++;
-                    } catch (Exception e) {
-                        logger.error("Error processing file {}: {}", file.getOriginalFilename(), e.getMessage());
-                        ScanResult errorResult = new ScanResult();
-                        String displayName = sanitizeDisplayName(file.getOriginalFilename());
-                        errorResult.setFilePath(displayName);
-                        errorResult.setFileName(displayName);
-                        errorResult.setInfected(false);
-                        errorResult.setThreatType("ERROR");
-                        errorResult.setThreatDetails("Error processing file");
-                        results.add(errorResult);
-                        skippedFiles++;
+            for (MultipartFile file : files) {
+                try {
+                    String relativePath = sanitizeDisplayName(file.getOriginalFilename());
+                    if (relativePath == null) {
+                        continue;
                     }
+
+                    Path targetPath = PathSecurityUtil.resolveSafely(tempDir, relativePath);
+                    if (targetPath.getParent() != null) {
+                        Files.createDirectories(targetPath.getParent());
+                    }
+
+                    // O-02 Fix: Use Objects.requireNonNull to satisfy @NonNull contract and remove
+                    // suppression
+                    file.transferTo(Objects.requireNonNull(targetPath.toFile(),
+                            "Target path could not be converted to File"));
+                    uploadedFiles++;
+                } catch (SecurityException e) {
+                    logger.warn("Rejected unsafe path in directory upload: {}", file.getOriginalFilename());
+                    rejectedFiles++;
+                } catch (Exception e) {
+                    logger.error("Error saving uploaded file {}: {}", file.getOriginalFilename(), e.getMessage());
+                    rejectedFiles++;
                 }
-
-                // Create response with summary and details
-                Map<String, Object> response = new HashMap<>();
-                response.put("totalFiles", results.size());
-                response.put("cleanFiles", cleanFiles);
-                response.put("infectedFiles", infectedFiles);
-                response.put("suspiciousFiles", suspiciousFiles);
-                response.put("skippedFiles", skippedFiles);
-                response.put("results", results);
-
-                // Log final summary
-                logger.info(
-                        "Directory scan completed - Directory: {}, Total Files: {}, Clean: {}, Infected: {}, Suspicious: {}, Errors: {}",
-                        directoryName, processedFiles, cleanFiles, infectedFiles, suspiciousFiles, skippedFiles);
-
-                return ResponseEntity.ok(response);
-
-            } finally {
-                // Clean up temporary directory
-                deleteDirectory(tempDir.toFile());
             }
+
+            if (uploadedFiles == 0) {
+                deleteDirectory(tempDir.toFile());
+                Map<String, String> errorResponse = new HashMap<>();
+                errorResponse.put("error", "No files could be uploaded for scanning");
+                return ResponseEntity.badRequest().body(errorResponse);
+            }
+
+            String jobId = securityService.startDirectoryScanJob(tempDir, directoryName, uploadedFiles);
+            logger.info("Directory scan job {} started for directory: {} ({} uploaded, {} rejected)",
+                    jobId, directoryName, uploadedFiles, rejectedFiles);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("jobId", jobId);
+            response.put("started", true);
+            response.put("uploadedFiles", uploadedFiles);
+            response.put("rejectedFiles", rejectedFiles);
+            return ResponseEntity.status(HttpStatus.ACCEPTED).body(response);
 
         } catch (Exception e) {
             String reference = UUID.randomUUID().toString();
-            logger.error("Error during directory scan [ref={}]", reference, e);
+            logger.error("Error starting directory scan [ref={}]", reference, e);
+            if (tempDir != null) {
+                deleteDirectory(tempDir.toFile());
+            }
             Map<String, String> errorResponse = new HashMap<>();
             errorResponse.put("error", "Error scanning directory");
             errorResponse.put("reference", reference);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
+    }
+
+    @GetMapping("/scan/directory/status/{jobId}")
+    public ResponseEntity<Map<String, Object>> getDirectoryScanStatus(@PathVariable String jobId) {
+        return ResponseEntity.ok(securityService.getDirectoryScanJobStatus(jobId));
     }
 
     /**

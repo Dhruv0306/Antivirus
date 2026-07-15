@@ -54,7 +54,7 @@ import java.util.stream.Collectors;
  * - @EnableMethodSecurity added for @PreAuthorize on admin-only endpoints.
  * - /api/auth/register added to permitAll and to the rate-limit filter.
  * - Role-based rules: USER may only reach scan/file, scan/directory,
- * history/me.
+ * scan/directory/status/{jobId}, history/me.
  * - Dev profile skips CORS origin validation so localhost origins work locally.
  * - H2 console is permitAll in dev (no auth dependency for local debugging).
  */
@@ -116,6 +116,17 @@ public class SecurityConfig {
                         // ── USER + ADMIN ─────────────────────────────────────────────────────
                         .requestMatchers(HttpMethod.POST, "/api/antivirus/scan/file").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/antivirus/scan/directory").hasAnyRole("USER", "ADMIN")
+                        // GET .../scan/directory/status/{jobId}: directory scan is a regular-
+                        // user feature (no AdminRoute wrapper on the frontend route, and the
+                        // POST above is USER-allowed), but this path would otherwise fall
+                        // through to the ADMIN-only "/api/antivirus/**" catch-all below,
+                        // meaning a non-admin user could start a scan but never see its
+                        // results. Ownership is still separately enforced in
+                        // SecurityServiceImpl.getDirectoryScanJobStatus() (403 for a jobId
+                        // belonging to a different user), this rule only controls which
+                        // roles may reach the endpoint at all.
+                        .requestMatchers(HttpMethod.GET, "/api/antivirus/scan/directory/status/**")
+                        .hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/antivirus/history/me").hasAnyRole("USER", "ADMIN")
 
                         // ── ADMIN only ───────────────────────────────────────────────────────

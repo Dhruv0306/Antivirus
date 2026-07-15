@@ -1,0 +1,38 @@
+name: OWASP Dependency Check
+on:
+    push:
+        branches: ["main"]
+    pull_request:
+        branches: ["main"]
+
+jobs:
+    dependency_check:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Set up JDK 21
+              uses: actions/setup-java@v4
+              with:
+                  distribution: "temurin"
+                  java-version: "21"
+                  cache: "maven"
+
+            # F-02's <failBuildOnCVSS>7</failBuildOnCVSS> gate is bound to the
+            # `check` goal, which Maven only reaches on the `verify` phase.
+            # build.yml runs `package` (skips tests) and test_java.yml runs
+            # `test`, both stop before `verify`, so the CVE gate never fired
+            # in CI. This workflow calls the goal directly so it always runs,
+            # independent of whether the other workflows change phase.
+            - name: Run OWASP dependency-check
+              env:
+                  NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+              run: mvn -B org.owasp:dependency-check-maven:check -DnvdApiKey="$NVD_API_KEY" --file pom.xml
+
+            - name: Upload dependency-check report
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: dependency-check-report
+                  path: target/dependency-check-report.html
+                  retention-days: 14

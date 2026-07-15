@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Restricts SpotBugs to Find Security Bugs' own SECURITY-category
+    detectors, rather than SpotBugs' full general-purpose catalog of
+    correctness/style/performance bug patterns, which is a much larger and
+    noisier first pass unrelated to this security-hardening initiative.
+    See https://spotbugs.readthedocs.io/en/stable/maven.html
+-->
+<FindBugsFilter>
+    <Match>
+        <Bug category="SECURITY" />
+    </Match>
+</FindBugsFilter>

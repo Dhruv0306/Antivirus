@@ -21,10 +21,13 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -41,6 +44,9 @@ class SecurityServiceImplTest {
 
     @Mock
     private LogService logService;
+
+    @Mock
+    private ThreatIntelSignatureService threatIntelSignatureService;
 
     @Mock
     private SecurityContext securityContext;
@@ -64,6 +70,7 @@ class SecurityServiceImplTest {
 
     @AfterEach
     void tearDown() {
+        securityService.shutdownScanExecutors();
         SecurityContextHolder.clearContext();
         deleteRecursively(new File("quarantine"));
     }
@@ -103,11 +110,15 @@ class SecurityServiceImplTest {
 
     @Test
     void scanFile_ShouldReturnMaliciousForKnownHashMatch() throws IOException {
-        // SHA-256 of an empty file is a hardcoded entry in KNOWN_MALWARE_SIGNATURES
-        File emptyFile = tempDir.resolve("empty.bin").toFile();
-        Files.write(emptyFile.toPath(), new byte[0]);
+        File sampleFile = tempDir.resolve("known-hash.bin").toFile();
+        Files.writeString(sampleFile.toPath(), "known-hash-match-fixture");
 
-        ScanResult result = securityService.scanFile(emptyFile);
+        // Real hash lookup logic lives in ThreatIntelSignatureService and is
+        // covered by its own test class; here we only need scanFile() to
+        // honor whatever that service reports.
+        when(threatIntelSignatureService.isKnownMalicious(anyString())).thenReturn(true);
+
+        ScanResult result = securityService.scanFile(sampleFile);
 
         assertEquals("MALICIOUS", result.getVerdict());
         assertTrue(result.isInfected());
@@ -255,5 +266,71 @@ class SecurityServiceImplTest {
 
         assertThrows(org.springframework.web.server.ResponseStatusException.class,
                 () -> securityService.deleteScanResult(99L));
+    }
+
+    // ── async directory scan job ──────────────────────────────────────
+
+    @Test
+    void directoryScanJob_ShouldCompleteAsynchronouslyAndReportResults() throws Exception {
+        Path jobDir = Files.createDirectory(tempDir.resolve("job-input"));
+        Files.writeString(jobDir.resolve("clean.txt"), "Nothing suspicious here.");
+        Files.writeString(jobDir.resolve("payload.locked"),
+                "Your files have been encrypted. Send payment to our BTC wallet to recover them.");
+
+        String jobId = securityService.startDirectoryScanJob(jobDir, "job-input", 2);
+        assertNotNull(jobId);
+
+        Map<String, Object> status = pollDirectoryScanJobUntilComplete(jobId);
+
+        assertFalse((boolean) status.get("isRunning"));
+        assertFalse((boolean) status.get("failed"));
+        assertEquals(2, (int) status.get("totalFiles"));
+        assertEquals(2, (int) status.get("processedFiles"));
+        assertEquals(1, (int) status.get("infectedFiles"));
+        assertEquals(1, (int) status.get("cleanFiles"));
+        assertEquals(0, (int) status.get("skippedFiles"));
+
+        @SuppressWarnings("unchecked")
+        List<ScanResult> results = (List<ScanResult>) status.get("results");
+        assertEquals(2, results.size());
+
+        // The job's temp directory is cleaned up once scanning finishes
+        assertFalse(Files.exists(jobDir));
+    }
+
+    @Test
+    void getDirectoryScanJobStatus_ShouldThrowNotFoundForUnknownJobId() {
+        assertThrows(org.springframework.web.server.ResponseStatusException.class,
+                () -> securityService.getDirectoryScanJobStatus("does-not-exist"));
+    }
+
+    @Test
+    void getDirectoryScanJobStatus_ShouldThrowForbiddenForDifferentOwner() throws Exception {
+        Path jobDir = Files.createDirectory(tempDir.resolve("job-owner-check"));
+        Files.writeString(jobDir.resolve("clean.txt"), "Nothing suspicious here.");
+
+        String jobId = securityService.startDirectoryScanJob(jobDir, "job-owner-check", 1);
+        // Let the job fully finish (as "testuser") before switching the
+        // mocked identity, so there's no race between the background
+        // thread's last authentication.getName() read and this test
+        // reassigning that same mock's stub.
+        pollDirectoryScanJobUntilComplete(jobId);
+
+        when(authentication.getName()).thenReturn("someoneelse");
+
+        assertThrows(org.springframework.web.server.ResponseStatusException.class,
+                () -> securityService.getDirectoryScanJobStatus(jobId));
+    }
+
+    private Map<String, Object> pollDirectoryScanJobUntilComplete(String jobId) throws InterruptedException {
+        long deadline = System.currentTimeMillis() + 5000;
+        do {
+            Map<String, Object> status = securityService.getDirectoryScanJobStatus(jobId);
+            if (Boolean.FALSE.equals(status.get("isRunning"))) {
+                return status;
+            }
+            Thread.sleep(50);
+        } while (System.currentTimeMillis() < deadline);
+        throw new AssertionError("Directory scan job " + jobId + " did not complete within timeout");
     }
 }

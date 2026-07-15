@@ -116,7 +116,6 @@ function getDisplayName(result) {
 
 function SystemScan() {
   const [scanning, setScanning] = useState(false);
-  const [progress, setProgress] = useState(0);
   const [currentActivity, setCurrentActivity] = useState('');
   const [scanResults, setScanResults] = useState(null);
   const [error, setError] = useState(null);
@@ -138,6 +137,9 @@ function SystemScan() {
   const checkScanStatus = async () => {
     try {
       const response = await antivirusApi.get('/scan/system/status');
+      setCurrentActivity(
+        response.data.filesScanned ? `Scanned ${response.data.filesScanned} files...` : 'Scanning system...'
+      );
       if (!response.data.isRunning) {
         setScanning(false);
         // Refresh results when scan completes
@@ -164,31 +166,22 @@ function SystemScan() {
       setScanning(true);
       setNeedsElevation(false);
       setScanResults(null);
-      setProgress(0);
+      setCurrentActivity('Starting scan...');
 
-      const response = await antivirusApi.post('/scan/system');
-
-      if (response.data && response.data.length === 1) {
-        const result = response.data[0];
-        if (result.threatType === 'WARNING' &&
-          result.threatDetails.includes('Administrator privileges required')) {
-          setNeedsElevation(true);
-          // N-07 Fix: Use a hardcoded safe message — there is no Error object here
-          setError('Administrator privileges are required to perform a full system scan.');
-          return;
-        }
-      }
-
-      if (response.data) {
-        setScanResults(response.data);
-      }
+      // POST /scan/system now starts the scan on a background thread and
+      // returns immediately (202 Accepted) rather than blocking for the
+      // full scan duration. checkScanStatus() polling (below) picks up
+      // progress and, once isRunning flips false, the completed results
+      // via fetchLatestResults().
+      await antivirusApi.post('/scan/system');
+      // Deliberately no setScanning(false) here: the POST now returns as
+      // soon as the scan starts, not when it finishes. scanning stays true
+      // until checkScanStatus() (polling below) sees isRunning: false.
     } catch (err) {
       logError('Scan error:', err);
       // N-07 Fix: ALWAYS use toUserMessage — never touch err.response.data.message
       setError(toUserMessage(err));
-    } finally {
       setScanning(false);
-      setProgress(100);
     }
   };
 
@@ -260,7 +253,7 @@ function SystemScan() {
                 <Typography variant="body2" color="textSecondary" gutterBottom>
                   {currentActivity || 'Scanning system...'}
                 </Typography>
-                <StyledProgress variant="determinate" value={progress} />
+                <StyledProgress variant="indeterminate" />
               </Box>
             )}
 

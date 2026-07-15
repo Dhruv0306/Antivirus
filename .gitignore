@@ -163,3 +163,6 @@ Thumbs.db
 
 # Claude files
 .claude/
+
+# Ignore Patch files
+*.patch

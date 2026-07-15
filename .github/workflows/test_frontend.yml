@@ -27,3 +27,13 @@ jobs:
 
             - name: Run frontend tests
               run: npm test
+
+            # Report-only for now (--audit-level=high keeps this to
+            # meaningful findings rather than every low-severity transitive
+            # advisory, and continue-on-error keeps this from blocking the
+            # actual test run above). Once reviewed, drop continue-on-error
+            # to make this blocking, the same staged-adoption approach used
+            # for the new SpotBugs/Semgrep workflows.
+            - name: npm audit
+              continue-on-error: true
+              run: npm audit --audit-level=high

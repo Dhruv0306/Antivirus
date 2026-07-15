@@ -60,6 +60,24 @@ class UserServiceImplTest {
     }
 
     @Test
+    void seedAdminUser_ShouldStorePreHashedPasswordAsIsForAllBcryptPrefixes() {
+        // $2a$ / $2b$ / $2y$ are all valid bcrypt identifiers ($2y$ is what
+        // PHP's password_hash() and some older bcrypt tooling emit). A
+        // pre-hashed ADMIN_PASSWORD using any of them must be stored
+        // verbatim, not re-encoded by passwordEncoder.
+        String preHashed = "$2y$10$abcdefghijklmnopqrstuv.abcdefghijklmnopqrstuvwxyz012345";
+        ReflectionTestUtils.setField(userService, "adminPassword", preHashed);
+        when(userRepository.findByUsername("admin")).thenReturn(Optional.empty());
+
+        userService.seedAdminUser();
+
+        ArgumentCaptor<AppUser> captor = ArgumentCaptor.forClass(AppUser.class);
+        verify(userRepository, times(1)).save(captor.capture());
+        assertEquals(preHashed, captor.getValue().getPassword());
+        verify(passwordEncoder, never()).encode(anyString());
+    }
+
+    @Test
     void seedAdminUser_ShouldNotSaveWhenExistingAdminAlreadyHasCorrectRole() {
         AppUser existing = new AppUser();
         existing.setUsername("admin");
