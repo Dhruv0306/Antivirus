@@ -18,6 +18,15 @@ jobs:
                   java-version: "21"
                   cache: "maven"
 
+            # Cache the Dependency-Check data directory to speed up the NVD update process
+            - name: Cache OWASP Dependency Check Data
+              uses: actions/cache@v4
+              with:
+                  path: ~/.m2/repository/org/owasp/dependency-check-data
+                  key: ${{ runner.os }}-odc-${{ github.run_number }}
+                  restore-keys: |
+                      ${{ runner.os }}-odc-
+
             # F-02's <failBuildOnCVSS>7</failBuildOnCVSS> gate is bound to the
             # `check` goal, which Maven only reaches on the `verify` phase.
             # build.yml runs `package` (skips tests) and test_java.yml runs
