@@ -2,6 +2,7 @@ package com.antivirus.service;
 
 import com.antivirus.model.BlockedDomain;
 import com.antivirus.repository.BlockedDomainRepository;
+import com.antivirus.util.DomainValidator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,21 +22,21 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Service
 public class CompositeDomainBlockingService {
     private static final Logger logger = LoggerFactory.getLogger(CompositeDomainBlockingService.class);
-    
+
     @Autowired
     private DomainBlockingService hostsBlockingService;
-    
+
     @Autowired
     private ProxyDomainBlockingService proxyBlockingService;
-    
+
     @Autowired
     private DnsDomainBlockingService dnsBlockingService;
-    
+
     @Autowired
     private BlockedDomainRepository blockedDomainRepository;
-    
+
     private final AtomicBoolean isInitialized = new AtomicBoolean(false);
-    
+
     /**
      * Initialize all available blocking methods
      */
@@ -43,65 +44,75 @@ public class CompositeDomainBlockingService {
         if (isInitialized.get()) {
             return;
         }
-        
+
         try {
             // Try to initialize hosts file blocking
             if (hostsBlockingService.isHostsFileAccessible()) {
                 logger.info("Hosts file blocking initialized");
             }
-            
+
             // Initialize proxy server
             if (!proxyBlockingService.isProxyRunning()) {
                 proxyBlockingService.startProxyServer();
                 logger.info("Proxy server initialized");
             }
-            
+
             // Try to initialize DNS blocking
             if (dnsBlockingService.isDnsConfigAccessible()) {
                 dnsBlockingService.updateDnsConfig();
                 logger.info("DNS blocking initialized");
             }
-            
+
             isInitialized.set(true);
             logger.info("All available blocking methods initialized");
         } catch (Exception e) {
             logger.error("Error initializing blocking methods: {}", e.getMessage());
         }
     }
-    
+
     /**
      * Block a domain using all available methods
      */
     public void blockDomain(String domain, String reason) {
+        // Defense in depth: this class isn't currently wired to a live
+        // endpoint (NetworkSecurityController uses hostsFileDomainBlockingService
+        // directly instead), but validating here too means it stays safe
+        // regardless of which caller eventually gets pointed at it, rather
+        // than relying on every future caller to remember to validate
+        // first. Unvalidated input reaching here would otherwise flow
+        // straight into DnsDomainBlockingService.updateDnsConfig(), which
+        // writes it verbatim into a dnsmasq config file.
+        String normalizedDomain = DomainValidator.validateAndNormalize(domain);
+
         // First, save to database
-        BlockedDomain blockedDomain = new BlockedDomain(domain);
+        BlockedDomain blockedDomain = new BlockedDomain(normalizedDomain);
         blockedDomain.setReason(reason);
         blockedDomainRepository.save(blockedDomain);
-        
+
         // Try hosts file blocking if available
         if (hostsBlockingService.isHostsFileAccessible()) {
             try {
-                hostsBlockingService.blockDomain(domain, reason);
-                logger.info("Domain {} blocked via hosts file", domain);
+                hostsBlockingService.blockDomain(normalizedDomain, reason);
+                logger.info("Domain {} blocked via hosts file", normalizedDomain);
             } catch (Exception e) {
-                logger.warn("Failed to block domain {} via hosts file: {}", domain, e.getMessage());
+                logger.warn("Failed to block domain {} via hosts file: {}", normalizedDomain, e.getMessage());
             }
         }
-        
+
         // Update DNS config if available
         if (dnsBlockingService.isDnsConfigAccessible()) {
             try {
                 dnsBlockingService.updateDnsConfig();
-                logger.info("DNS config updated for domain {}", domain);
+                logger.info("DNS config updated for domain {}", normalizedDomain);
             } catch (Exception e) {
-                logger.warn("Failed to update DNS config for domain {}: {}", domain, e.getMessage());
+                logger.warn("Failed to update DNS config for domain {}: {}", normalizedDomain, e.getMessage());
             }
         }
-        
+
         // Proxy server is already running and will block the domain automatically
-        logger.info("Domain {} blocked via proxy server", domain);
+        logger.info("Domain {} blocked via proxy server", normalizedDomain);
     }
-    
+
     /**
      * Unblock a domain from all methods
      */
@@ -111,7 +122,7 @@ public class CompositeDomainBlockingService {
             blockedDomain.setActive(false);
             blockedDomainRepository.save(blockedDomain);
         });
-        
+
         // Try hosts file unblocking if available
         if (hostsBlockingService.isHostsFileAccessible()) {
             try {
@@ -121,7 +132,7 @@ public class CompositeDomainBlockingService {
                 logger.warn("Failed to unblock domain {} via hosts file: {}", domain, e.getMessage());
             }
         }
-        
+
         // Update DNS config if available
         if (dnsBlockingService.isDnsConfigAccessible()) {
             try {
@@ -131,28 +142,28 @@ public class CompositeDomainBlockingService {
                 logger.warn("Failed to update DNS config to unblock domain {}: {}", domain, e.getMessage());
             }
         }
-        
+
         // Proxy server will automatically allow the domain
         logger.info("Domain {} unblocked via proxy server", domain);
     }
-    
+
     /**
      * Get status of all blocking methods
      */
     public Map<String, Object> getStatus() {
         Map<String, Object> status = new HashMap<>();
-        
+
         // Hosts file status
         status.put("hostsFileAccessible", hostsBlockingService.isHostsFileAccessible());
         status.put("isAdmin", hostsBlockingService.isAdmin());
-        
+
         // Proxy server status
         status.put("proxyRunning", proxyBlockingService.isProxyRunning());
         status.put("proxyPort", proxyBlockingService.getProxyPort());
-        
+
         // DNS status
         status.put("dnsConfigAccessible", dnsBlockingService.isDnsConfigAccessible());
-        
+
         // Get active blocking methods
         List<String> activeMethods = new ArrayList<>();
         if (hostsBlockingService.isHostsFileAccessible()) {
@@ -165,7 +176,7 @@ public class CompositeDomainBlockingService {
             activeMethods.add("dns");
         }
         status.put("activeMethods", activeMethods);
-        
+
         // Get security recommendations
         List<String> recommendations = new ArrayList<>();
         if (!hostsBlockingService.isHostsFileAccessible()) {
@@ -178,21 +189,21 @@ public class CompositeDomainBlockingService {
             recommendations.add("Configure DNS settings for system-wide blocking");
         }
         status.put("recommendations", recommendations);
-        
+
         return status;
     }
-    
+
     /**
      * Synchronize all blocking methods every 5 minutes
      */
     @Scheduled(fixedRate = 300000) // 5 minutes
     public void synchronizeBlockingMethods() {
         logger.info("Synchronizing blocking methods...");
-        
+
         // Get all active blocked domains
         @SuppressWarnings("unused")
         List<BlockedDomain> activeDomains = blockedDomainRepository.findByActiveTrue();
-        
+
         // Update hosts file if accessible
         if (hostsBlockingService.isHostsFileAccessible()) {
             try {
@@ -202,7 +213,7 @@ public class CompositeDomainBlockingService {
                 logger.warn("Failed to synchronize hosts file: {}", e.getMessage());
             }
         }
-        
+
         // Update DNS config if accessible
         if (dnsBlockingService.isDnsConfigAccessible()) {
             try {
@@ -212,7 +223,7 @@ public class CompositeDomainBlockingService {
                 logger.warn("Failed to synchronize DNS config: {}", e.getMessage());
             }
         }
-        
+
         // Proxy server automatically handles domain blocking
         logger.info("Blocking methods synchronized");
     }
@@ -223,4 +234,4 @@ public class CompositeDomainBlockingService {
     public List<BlockedDomain> getBlockedDomains() {
         return blockedDomainRepository.findByActiveTrue();
     }
-} 
+}

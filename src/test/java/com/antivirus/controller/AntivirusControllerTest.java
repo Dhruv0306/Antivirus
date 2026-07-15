@@ -18,14 +18,19 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -138,5 +143,115 @@ class AntivirusControllerTest {
 
                 mockMvc.perform(get("/api/antivirus/history/me").with(user("testuser").roles("USER")))
                                 .andExpect(status().isOk());
+        }
+
+        // ── /scan/system (ADMIN only) ────────────────────────────────────
+
+        @Test
+        void performSystemScan_ShouldReturnAcceptedForAdminRole() throws Exception {
+                mockMvc.perform(post("/api/antivirus/scan/system")
+                                .with(csrf())
+                                .with(user("admin").roles("ADMIN")))
+                                .andExpect(status().isAccepted())
+                                .andExpect(jsonPath("$.started").value(true));
+
+                verify(securityService, times(1)).performSystemScan();
+        }
+
+        @Test
+        void performSystemScan_ShouldReturnForbiddenForUserRole() throws Exception {
+                // System scan has no USER-facing route on the frontend (wrapped in
+                // AdminRoute), and this stays ADMIN-only via the /api/antivirus/**
+                // catch-all in SecurityConfig.
+                mockMvc.perform(post("/api/antivirus/scan/system")
+                                .with(csrf())
+                                .with(user("testuser").roles("USER")))
+                                .andExpect(status().isForbidden());
+        }
+
+        @Test
+        void getSystemScanStatus_ShouldReturnRunningStateAndFilesScanned() throws Exception {
+                when(securityService.isSystemScanRunning()).thenReturn(true);
+                when(securityService.getSystemScanFilesScanned()).thenReturn(42);
+
+                mockMvc.perform(get("/api/antivirus/scan/system/status").with(user("admin").roles("ADMIN")))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.isRunning").value(true))
+                                .andExpect(jsonPath("$.filesScanned").value(42));
+        }
+
+        // ── /scan/directory (USER + ADMIN) ───────────────────────────────
+
+        @Test
+        void scanDirectory_ShouldReturnAcceptedWithJobIdForUserRole() throws Exception {
+                MockMultipartFile file = new MockMultipartFile(
+                                "files", "notes.txt", "text/plain", "hello".getBytes());
+                when(securityService.startDirectoryScanJob(any(), org.mockito.ArgumentMatchers.eq("my-folder"),
+                                org.mockito.ArgumentMatchers.eq(1)))
+                                .thenReturn("job-123");
+
+                mockMvc.perform(multipart("/api/antivirus/scan/directory")
+                                .file(file)
+                                .param("directoryName", "my-folder")
+                                .param("recursive", "true")
+                                .with(csrf())
+                                .with(user("testuser").roles("USER")))
+                                .andExpect(status().isAccepted())
+                                .andExpect(jsonPath("$.jobId").value("job-123"))
+                                .andExpect(jsonPath("$.uploadedFiles").value(1));
+        }
+
+        @Test
+        void scanDirectory_ShouldReturnBadRequestWhenNoFilesProvided() throws Exception {
+                mockMvc.perform(multipart("/api/antivirus/scan/directory")
+                                .param("directoryName", "empty-folder")
+                                .with(csrf())
+                                .with(user("testuser").roles("USER")))
+                                .andExpect(status().isBadRequest());
+        }
+
+        // ── /scan/directory/status/{jobId} (USER + ADMIN) ────────────────
+        //
+        // Regression coverage for a real bug: this endpoint was added
+        // alongside the async directory-scan job feature but the
+        // SecurityConfig rule for it was initially missing, so it fell
+        // through to the ADMIN-only "/api/antivirus/**" catch-all. Since
+        // directory scan itself is a regular-user feature (no AdminRoute
+        // wrapper on the frontend, POST .../scan/directory is USER-allowed),
+        // that meant a non-admin user could start a scan but would get 403
+        // the moment the frontend tried to poll for its result.
+
+        @Test
+        void getDirectoryScanStatus_ShouldReturnOkForUserRole() throws Exception {
+                Map<String, Object> jobStatus = new HashMap<>();
+                jobStatus.put("jobId", "job-123");
+                jobStatus.put("isRunning", false);
+                jobStatus.put("totalFiles", 2);
+                jobStatus.put("processedFiles", 2);
+                when(securityService.getDirectoryScanJobStatus("job-123")).thenReturn(jobStatus);
+
+                mockMvc.perform(get("/api/antivirus/scan/directory/status/job-123")
+                                .with(user("testuser").roles("USER")))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.jobId").value("job-123"))
+                                .andExpect(jsonPath("$.isRunning").value(false));
+        }
+
+        @Test
+        void getDirectoryScanStatus_ShouldReturnOkForAdminRole() throws Exception {
+                Map<String, Object> jobStatus = new HashMap<>();
+                jobStatus.put("jobId", "job-456");
+                jobStatus.put("isRunning", true);
+                when(securityService.getDirectoryScanJobStatus("job-456")).thenReturn(jobStatus);
+
+                mockMvc.perform(get("/api/antivirus/scan/directory/status/job-456")
+                                .with(user("admin").roles("ADMIN")))
+                                .andExpect(status().isOk());
+        }
+
+        @Test
+        void getDirectoryScanStatus_ShouldReturnForbiddenWithoutAuthentication() throws Exception {
+                mockMvc.perform(get("/api/antivirus/scan/directory/status/job-123"))
+                                .andExpect(status().is3xxRedirection());
         }
 }
