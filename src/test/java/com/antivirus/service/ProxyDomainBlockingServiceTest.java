@@ -173,6 +173,34 @@ class ProxyDomainBlockingServiceTest {
         assertTrue(isPrivateOrLoopback("anything.localhost"));
     }
 
+    // ── C1 fix: IPv4-mapped IPv6 addresses must not bypass the SSRF guard ──
+    //
+    // Inet6Address.isLinkLocalAddress()/isSiteLocalAddress() check the
+    // fe80::/10 and fec0::/10 prefixes against the raw 16 address bytes,
+    // which an IPv4-mapped address (::ffff:a.b.c.d) never matches even when
+    // the IPv4 value it carries is itself loopback, link-local, or private.
+    // Before the fix, a DNS response (or literal) resolving to one of these
+    // let an attacker reach loopback/private/metadata addresses through the
+    // proxy despite this check passing.
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "::ffff:127.0.0.1", // loopback
+            "::ffff:169.254.169.254", // link-local / cloud metadata endpoint
+            "::ffff:10.0.0.5", // RFC1918 private
+            "::ffff:192.168.1.1" // RFC1918 private
+    })
+    void isPrivateOrLoopback_ShouldBlockIpv4MappedPrivateAddresses(String host) throws Exception {
+        assertTrue(isPrivateOrLoopback(host),
+                host + " is an IPv4-mapped private/loopback address and must be blocked");
+    }
+
+    @Test
+    void isPrivateOrLoopback_ShouldAllowIpv4MappedPublicAddress() throws Exception {
+        // Sanity check the unwrap doesn't over-block: a mapped *public*
+        // address must still be allowed through.
+        assertFalse(isPrivateOrLoopback("::ffff:8.8.8.8"));
+    }
+
     // ── resolveAndValidate (B-02: DNS-rebinding TOCTOU fix) ──────────
     //
     // The bug this guards against: a prior version validated a hostname via

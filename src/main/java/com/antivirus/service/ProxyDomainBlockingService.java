@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
@@ -19,6 +20,7 @@ import java.net.Socket;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -411,13 +413,53 @@ public class ProxyDomainBlockingService {
         }
     }
 
-    private boolean isPrivateOrLoopbackAddress(InetAddress addr) {
+    private boolean isPrivateOrLoopbackAddress(InetAddress rawAddr) {
+        // C1 Fix: unwrap IPv4-mapped IPv6 addresses (e.g. ::ffff:169.254.169.254)
+        // before checking. Inet6Address.isLinkLocalAddress()/isSiteLocalAddress()
+        // check the fe80::/10 and fec0::/10 prefixes against the raw 16 bytes,
+        // which an IPv4-mapped address never matches even when the IPv4 value it
+        // carries is itself link-local, loopback, or private (e.g. a cloud
+        // metadata IP). getHostAddress() on the mapped form also doesn't start
+        // with the plain "169.254." etc. prefixes in BLOCKED_IP_PREFIXES. Without
+        // this unwrap, an attacker who controls DNS for the target host can
+        // return an IPv4-mapped address and reach internal/metadata endpoints
+        // through the proxy despite this check.
+        InetAddress addr = unwrapIpv4Mapped(rawAddr);
         String ip = addr.getHostAddress();
         return BLOCKED_IP_PREFIXES.stream().anyMatch(ip::startsWith)
                 || addr.isLoopbackAddress()
                 || addr.isSiteLocalAddress()
                 || addr.isLinkLocalAddress()
                 || addr.isAnyLocalAddress();
+    }
+
+    /**
+     * Returns the underlying Inet4Address if {@code addr} is an IPv4-mapped
+     * IPv6 address (the ::ffff:0:0/96 range), otherwise returns {@code addr}
+     * unchanged. See the caller in isPrivateOrLoopbackAddress() for why this
+     * matters for SSRF protection.
+     */
+    private InetAddress unwrapIpv4Mapped(InetAddress addr) {
+        if (!(addr instanceof Inet6Address)) {
+            return addr;
+        }
+        byte[] bytes = addr.getAddress();
+        for (int i = 0; i < 10; i++) {
+            if (bytes[i] != 0) {
+                return addr;
+            }
+        }
+        if ((bytes[10] & 0xFF) != 0xFF || (bytes[11] & 0xFF) != 0xFF) {
+            return addr;
+        }
+        try {
+            return InetAddress.getByAddress(Arrays.copyOfRange(bytes, 12, 16));
+        } catch (UnknownHostException e) {
+            // A 4-byte array is always a well-formed IPv4 address; this
+            // branch is unreachable in practice. Fail closed just in case.
+            logger.warn("Failed to unwrap IPv4-mapped address {}: {}", addr, e.getMessage());
+            return addr;
+        }
     }
 
     /**
