@@ -153,9 +153,12 @@ public class AntivirusController {
     }
 
     @PostMapping("/scan/system/stop")
-    public ResponseEntity<Void> stopSystemScan() {
+    public ResponseEntity<Map<String, Object>> stopSystemScan() {
         securityService.stopSystemScan();
-        return ResponseEntity.ok().build();
+        Map<String, Object> response = new HashMap<>();
+        response.put("stopRequested", true);
+        response.put("isRunning", securityService.isSystemScanRunning());
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/scan/system/status")

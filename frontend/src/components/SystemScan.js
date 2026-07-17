@@ -116,6 +116,7 @@ function getDisplayName(result) {
 
 function SystemScan() {
   const [scanning, setScanning] = useState(false);
+  const [stopping, setStopping] = useState(false);
   const [currentActivity, setCurrentActivity] = useState('');
   const [scanResults, setScanResults] = useState(null);
   const [error, setError] = useState(null);
@@ -137,13 +138,24 @@ function SystemScan() {
   const checkScanStatus = async () => {
     try {
       const response = await antivirusApi.get('/scan/system/status');
-      setCurrentActivity(
-        response.data.filesScanned ? `Scanned ${response.data.filesScanned} files...` : 'Scanning system...'
-      );
-      if (!response.data.isRunning) {
-        setScanning(false);
-        // Refresh results when scan completes
-        fetchLatestResults();
+      const isRunning = Boolean(response.data?.isRunning);
+      const filesScanned = response.data?.filesScanned || 0;
+
+      if (isRunning) {
+        setCurrentActivity(
+          stopping ? 'Stopping scan...' : (filesScanned ? `Scanned ${filesScanned} files...` : 'Scanning system...')
+        );
+        return;
+      }
+
+      const wasStopping = stopping;
+      setCurrentActivity(wasStopping ? 'Scan stopped. Loading results...' : 'Scan completed. Loading results...');
+      setScanning(false);
+      setStopping(false);
+      // Refresh results when the backend reports the scan is done.
+      await fetchLatestResults();
+      if (wasStopping) {
+        setError('Scan stopped by user');
       }
     } catch (error) {
       logError('Error checking scan status:', error);
@@ -164,6 +176,7 @@ function SystemScan() {
     try {
       setError(null);
       setScanning(true);
+      setStopping(false);
       setNeedsElevation(false);
       setScanResults(null);
       setCurrentActivity('Starting scan...');
@@ -187,12 +200,19 @@ function SystemScan() {
 
   const handleStop = async () => {
     try {
-      await antivirusApi.post('/scan/system/stop');
-      setScanning(false);
-      setError('Scan stopped by user');
+      setStopping(true);
+      setCurrentActivity('Stopping scan...');
+      const response = await antivirusApi.post('/scan/system/stop');
+      if (response.status !== 200 || response.data?.stopRequested !== true) {
+        throw new Error('Stop request was not accepted');
+      }
+      // Keep polling active until the backend actually reports that the scan
+      // is no longer running, then we can safely load the final results.
+      await checkScanStatus(); // Immediately check status to update UI
       // Don't clear scan results if they exist
     } catch (err) {
       logError('Error stopping scan:', err);
+      setStopping(false);
       setError('Failed to stop the scan. Please try again.');
     }
   };
@@ -239,11 +259,12 @@ function SystemScan() {
               {scanning && (
                 <StyledButton
                   variant="outlined"
-                  startIcon={<StopIcon />}
+                  startIcon={stopping ? <CircularProgress size={20} color="inherit" /> : <StopIcon />}
                   onClick={handleStop}
                   color="error"
+                  disabled={stopping}
                 >
-                  Stop Scan
+                  {stopping ? 'Stopping...' : 'Stop Scan'}
                 </StyledButton>
               )}
             </Box>
