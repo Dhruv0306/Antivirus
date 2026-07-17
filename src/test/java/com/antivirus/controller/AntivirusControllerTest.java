@@ -2,6 +2,7 @@ package com.antivirus.controller;
 
 import com.antivirus.config.SecurityConfig;
 import com.antivirus.dto.PagedResponse;
+import com.antivirus.exception.MultipartUploadExceptionHandler;
 import com.antivirus.model.ScanResult;
 import com.antivirus.repository.ScanResultRepository;
 import com.antivirus.service.LogService;
@@ -35,7 +36,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(controllers = AntivirusController.class)
-@Import(SecurityConfig.class)
+@Import({SecurityConfig.class, MultipartUploadExceptionHandler.class})
 @TestPropertySource(properties = "app.cors.allowed-origins=https://test.example.com")
 class AntivirusControllerTest {
 
