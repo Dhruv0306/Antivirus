@@ -299,6 +299,36 @@ class SecurityServiceImplTest {
     }
 
     @Test
+    void getCurrentSystemScanResults_ShouldReturnDefensiveCopyOfSessionResults() throws Exception {
+        ScanResult sessionResult = new ScanResult();
+        sessionResult.setFilePath("C:\\scan\\session-file.exe");
+        sessionResult.setFileName("session-file.exe");
+        sessionResult.setScanType("SYSTEM");
+        sessionResult.setThreatType("CLEAN");
+        sessionResult.setInfected(false);
+
+        java.util.List<ScanResult> liveResults = currentSystemScanResults();
+        liveResults.add(sessionResult);
+
+        java.util.List<ScanResult> snapshot = securityService.getCurrentSystemScanResults();
+
+        assertEquals(1, snapshot.size());
+        assertEquals("session-file.exe", snapshot.get(0).getFileName());
+
+        snapshot.clear();
+
+        assertEquals(1, currentSystemScanResults().size());
+        assertEquals(1, securityService.getCurrentSystemScanResults().size());
+    }
+
+    @SuppressWarnings("unchecked")
+    private java.util.List<ScanResult> currentSystemScanResults() throws Exception {
+        java.lang.reflect.Field field = SecurityServiceImpl.class.getDeclaredField("currentSystemScanResults");
+        field.setAccessible(true);
+        return (java.util.List<ScanResult>) field.get(securityService);
+    }
+
+    @Test
     void quarantineScanResult_NonAdminCannotQuarantineAnotherUsersInfectedFile() {
         ScanResult infectedResult = new ScanResult();
         infectedResult.setId(5L);
@@ -378,5 +408,37 @@ class SecurityServiceImplTest {
             Thread.sleep(50);
         } while (System.currentTimeMillis() < deadline);
         throw new AssertionError("Directory scan job " + jobId + " did not complete within timeout");
+    }
+
+    @Test
+    void getCurrentSystemScanResultsReturnsDefensiveCopy() throws Exception {
+        SecurityServiceImpl service = new SecurityServiceImpl();
+
+        com.antivirus.model.ScanResult result = new com.antivirus.model.ScanResult();
+        result.setFilePath("C:\\scan\\sample.exe");
+        result.setFileName("sample.exe");
+        result.setScanType("SYSTEM");
+        result.setThreatType("CLEAN");
+        result.setInfected(false);
+
+        currentSystemScanResults(service).add(result);
+
+        java.util.List<com.antivirus.model.ScanResult> snapshot = service.getCurrentSystemScanResults();
+
+        org.junit.jupiter.api.Assertions.assertEquals(1, snapshot.size());
+        org.junit.jupiter.api.Assertions.assertEquals("sample.exe", snapshot.get(0).getFileName());
+
+        snapshot.clear();
+
+        org.junit.jupiter.api.Assertions.assertEquals(1, currentSystemScanResults(service).size());
+        org.junit.jupiter.api.Assertions.assertEquals(1, service.getCurrentSystemScanResults().size());
+    }
+
+    @SuppressWarnings("unchecked")
+    private static java.util.List<com.antivirus.model.ScanResult> currentSystemScanResults(SecurityServiceImpl service)
+            throws Exception {
+        java.lang.reflect.Field field = SecurityServiceImpl.class.getDeclaredField("currentSystemScanResults");
+        field.setAccessible(true);
+        return (java.util.List<com.antivirus.model.ScanResult>) field.get(service);
     }
 }

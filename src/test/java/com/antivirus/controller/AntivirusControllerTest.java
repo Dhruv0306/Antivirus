@@ -254,4 +254,88 @@ class AntivirusControllerTest {
                 mockMvc.perform(get("/api/antivirus/scan/directory/status/job-123"))
                                 .andExpect(status().is3xxRedirection());
         }
+
+        @Test
+        void getSystemScanResultsReturnsOnlyCurrentSessionResults() throws Exception {
+                com.antivirus.controller.AntivirusController controller = new com.antivirus.controller.AntivirusController();
+                com.antivirus.service.SecurityService securityService = org.mockito.Mockito
+                                .mock(com.antivirus.service.SecurityService.class);
+                com.antivirus.service.SystemMonitorService systemMonitorService = org.mockito.Mockito
+                                .mock(com.antivirus.service.SystemMonitorService.class);
+                com.antivirus.repository.ScanResultRepository scanResultRepository = org.mockito.Mockito
+                                .mock(com.antivirus.repository.ScanResultRepository.class);
+                com.antivirus.service.LogService logService = org.mockito.Mockito
+                                .mock(com.antivirus.service.LogService.class);
+
+                inject(controller, "securityService", securityService);
+                inject(controller, "systemMonitorService", systemMonitorService);
+                inject(controller, "scanResultRepository", scanResultRepository);
+                inject(controller, "logService", logService);
+
+                com.antivirus.model.ScanResult result = new com.antivirus.model.ScanResult();
+                result.setFilePath("C:\\scan\\sample.exe");
+                result.setFileName("sample.exe");
+                result.setScanType("SYSTEM");
+                result.setThreatType("CLEAN");
+                result.setInfected(false);
+
+                org.mockito.Mockito.when(securityService.getCurrentSystemScanResults())
+                                .thenReturn(java.util.List.of(result));
+
+                org.springframework.test.web.servlet.MockMvc mockMvc = org.springframework.test.web.servlet.setup.MockMvcBuilders
+                                .standaloneSetup(controller).build();
+
+                mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                                .get("/api/antivirus/scan/system/results"))
+                                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status()
+                                                .isOk())
+                                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                                                .jsonPath("$[0].fileName")
+                                                .value("sample.exe"))
+                                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                                                .jsonPath("$[0].scanType")
+                                                .value("SYSTEM"));
+        }
+
+        @Test
+        void stopSystemScanReturnsAcknowledgementAndRunningState() throws Exception {
+                com.antivirus.controller.AntivirusController controller = new com.antivirus.controller.AntivirusController();
+                com.antivirus.service.SecurityService securityService = org.mockito.Mockito
+                                .mock(com.antivirus.service.SecurityService.class);
+                com.antivirus.service.SystemMonitorService systemMonitorService = org.mockito.Mockito
+                                .mock(com.antivirus.service.SystemMonitorService.class);
+                com.antivirus.repository.ScanResultRepository scanResultRepository = org.mockito.Mockito
+                                .mock(com.antivirus.repository.ScanResultRepository.class);
+                com.antivirus.service.LogService logService = org.mockito.Mockito
+                                .mock(com.antivirus.service.LogService.class);
+
+                inject(controller, "securityService", securityService);
+                inject(controller, "systemMonitorService", systemMonitorService);
+                inject(controller, "scanResultRepository", scanResultRepository);
+                inject(controller, "logService", logService);
+
+                org.mockito.Mockito.when(securityService.isSystemScanRunning()).thenReturn(false);
+
+                org.springframework.test.web.servlet.MockMvc mockMvc = org.springframework.test.web.servlet.setup.MockMvcBuilders
+                                .standaloneSetup(controller).build();
+
+                mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                                .post("/api/antivirus/scan/system/stop"))
+                                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status()
+                                                .isOk())
+                                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                                                .jsonPath("$.stopRequested")
+                                                .value(true))
+                                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                                                .jsonPath("$.isRunning")
+                                                .value(false));
+
+                org.mockito.Mockito.verify(securityService).stopSystemScan();
+        }
+
+        private static void inject(Object target, String fieldName, Object value) throws Exception {
+                java.lang.reflect.Field field = target.getClass().getDeclaredField(fieldName);
+                field.setAccessible(true);
+                field.set(target, value);
+        }
 }
