@@ -299,36 +299,6 @@ class SecurityServiceImplTest {
     }
 
     @Test
-    void getCurrentSystemScanResults_ShouldReturnDefensiveCopyOfSessionResults() throws Exception {
-        ScanResult sessionResult = new ScanResult();
-        sessionResult.setFilePath("C:\\scan\\session-file.exe");
-        sessionResult.setFileName("session-file.exe");
-        sessionResult.setScanType("SYSTEM");
-        sessionResult.setThreatType("CLEAN");
-        sessionResult.setInfected(false);
-
-        java.util.List<ScanResult> liveResults = currentSystemScanResults();
-        liveResults.add(sessionResult);
-
-        java.util.List<ScanResult> snapshot = securityService.getCurrentSystemScanResults();
-
-        assertEquals(1, snapshot.size());
-        assertEquals("session-file.exe", snapshot.get(0).getFileName());
-
-        snapshot.clear();
-
-        assertEquals(1, currentSystemScanResults().size());
-        assertEquals(1, securityService.getCurrentSystemScanResults().size());
-    }
-
-    @SuppressWarnings("unchecked")
-    private java.util.List<ScanResult> currentSystemScanResults() throws Exception {
-        java.lang.reflect.Field field = SecurityServiceImpl.class.getDeclaredField("currentSystemScanResults");
-        field.setAccessible(true);
-        return (java.util.List<ScanResult>) field.get(securityService);
-    }
-
-    @Test
     void quarantineScanResult_NonAdminCannotQuarantineAnotherUsersInfectedFile() {
         ScanResult infectedResult = new ScanResult();
         infectedResult.setId(5L);
@@ -411,34 +381,72 @@ class SecurityServiceImplTest {
     }
 
     @Test
-    void getCurrentSystemScanResultsReturnsDefensiveCopy() throws Exception {
-        SecurityServiceImpl service = new SecurityServiceImpl();
+    void getCurrentSystemScanResults_ShouldReadPersistedChunkFiles() throws Exception {
+        Path sessionDir = Files.createTempDirectory(tempDir, "system-scan-session-");
+        setSystemScanSession(sessionDir);
 
-        com.antivirus.model.ScanResult result = new com.antivirus.model.ScanResult();
-        result.setFilePath("C:\\scan\\sample.exe");
-        result.setFileName("sample.exe");
+        ScanResult first = new ScanResult();
+        first.setFilePath("C:\\scan\\first.exe");
+        first.setFileName("first.exe");
+        first.setScanType("SYSTEM");
+        first.setThreatType("CLEAN");
+        first.setInfected(false);
+
+        ScanResult second = new ScanResult();
+        second.setFilePath("C:\\scan\\second.exe");
+        second.setFileName("second.exe");
+        second.setScanType("SYSTEM");
+        second.setThreatType("CLEAN");
+        second.setInfected(false);
+
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        mapper.writeValue(sessionDir.resolve("chunk-0001.json").toFile(), List.of(first));
+        mapper.writeValue(sessionDir.resolve("chunk-0002.json").toFile(), List.of(second));
+
+        List<ScanResult> snapshot = securityService.getCurrentSystemScanResults();
+
+        assertEquals(2, snapshot.size());
+        assertEquals("first.exe", snapshot.get(0).getFileName());
+        assertEquals("second.exe", snapshot.get(1).getFileName());
+    }
+
+    @Test
+    void recordSystemScanResult_ShouldFlushChunkWhenThresholdReached() throws Exception {
+        Path sessionDir = Files.createTempDirectory(tempDir, "system-scan-session-");
+        setSystemScanSession(sessionDir);
+        setField(securityService, "systemScanResultChunkSize", 1);
+
+        ScanResult result = new ScanResult();
+        result.setFilePath("C:\\scan\\chunked.exe");
+        result.setFileName("chunked.exe");
         result.setScanType("SYSTEM");
         result.setThreatType("CLEAN");
         result.setInfected(false);
 
-        currentSystemScanResults(service).add(result);
+        invokeRecordSystemScanResult(result);
 
-        java.util.List<com.antivirus.model.ScanResult> snapshot = service.getCurrentSystemScanResults();
-
-        org.junit.jupiter.api.Assertions.assertEquals(1, snapshot.size());
-        org.junit.jupiter.api.Assertions.assertEquals("sample.exe", snapshot.get(0).getFileName());
-
-        snapshot.clear();
-
-        org.junit.jupiter.api.Assertions.assertEquals(1, currentSystemScanResults(service).size());
-        org.junit.jupiter.api.Assertions.assertEquals(1, service.getCurrentSystemScanResults().size());
+        assertTrue(Files.exists(sessionDir.resolve("chunk-0001.json")));
+        assertEquals(1, securityService.getCurrentSystemScanResults().size());
     }
 
-    @SuppressWarnings("unchecked")
-    private static java.util.List<com.antivirus.model.ScanResult> currentSystemScanResults(SecurityServiceImpl service)
-            throws Exception {
-        java.lang.reflect.Field field = SecurityServiceImpl.class.getDeclaredField("currentSystemScanResults");
+    private void invokeRecordSystemScanResult(ScanResult result) throws Exception {
+        java.lang.reflect.Method method = SecurityServiceImpl.class.getDeclaredMethod("recordSystemScanResult",
+                ScanResult.class);
+        method.setAccessible(true);
+        method.invoke(securityService, result);
+    }
+
+    private void setSystemScanSession(Path sessionDir) throws Exception {
+        Class<?> sessionClass = Class.forName(SecurityServiceImpl.class.getName() + "$SystemScanSession");
+        java.lang.reflect.Constructor<?> constructor = sessionClass.getDeclaredConstructor(Path.class);
+        constructor.setAccessible(true);
+        Object session = constructor.newInstance(sessionDir);
+        setField(securityService, "currentSystemScanSession", session);
+    }
+
+    private static void setField(Object target, String fieldName, Object value) throws Exception {
+        java.lang.reflect.Field field = target.getClass().getDeclaredField(fieldName);
         field.setAccessible(true);
-        return (java.util.List<com.antivirus.model.ScanResult>) field.get(service);
+        field.set(target, value);
     }
 }

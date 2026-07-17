@@ -4,6 +4,9 @@ import com.antivirus.dto.PagedResponse;
 import com.antivirus.model.ScanResult;
 import com.antivirus.service.SecurityService;
 import jakarta.annotation.PreDestroy;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -63,6 +66,11 @@ public class SecurityServiceImpl implements SecurityService {
     @Autowired
     private LogService logService;
 
+    @Autowired
+    private ObjectMapper objectMapper = new ObjectMapper()
+            .registerModule(new JavaTimeModule())
+            .configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
+
     // H3 Fix: the quarantine directory used to be hardcoded as
     // new File("quarantine") — relative to whatever the JVM's working
     // directory happens to be, which differs between `mvn spring-boot:run`,
@@ -74,11 +82,17 @@ public class SecurityServiceImpl implements SecurityService {
     @Value("${app.quarantine.dir:${user.dir}/quarantine}")
     private String quarantineDirPath = System.getProperty("user.dir") + File.separator + "quarantine";
 
+    // System scan results are written in small chunks to temp files instead of
+    // holding the entire scan in memory. That keeps long scans from consuming
+    // a large amount of RAM, and the chunk size is configurable via
+    // app.scan.system.result-chunk-size / SYSTEM_SCAN_RESULT_CHUNK_SIZE.
+    @Value("${app.scan.system.result-chunk-size:100}")
+    private int systemScanResultChunkSize = 100;
+
     private final AtomicBoolean systemScanRunning = new AtomicBoolean(false);
     private final AtomicBoolean stopSystemScan = new AtomicBoolean(false);
-    // Keeps only the active system scan's results so a stopped/completed scan
-    // can be reloaded without mixing in entries from previous runs.
-    private final List<ScanResult> currentSystemScanResults = Collections.synchronizedList(new ArrayList<>());
+    private final Object systemScanSessionLock = new Object();
+    private volatile SystemScanSession currentSystemScanSession;
 
     // ── Async system scan (perf follow-up) ──────────────────────────────
     // performSystemScan() used to run entirely on the calling (HTTP request)
@@ -95,6 +109,20 @@ public class SecurityServiceImpl implements SecurityService {
         return thread;
     });
     private final AtomicInteger systemScanFilesScanned = new AtomicInteger(0);
+
+    // Each active system scan gets its own temp directory, and the results
+    // are split into ordered JSON chunk files so they can be reloaded later
+    // without rebuilding the whole scan in memory.
+    private static final class SystemScanSession {
+        final Path sessionDir;
+        final List<ScanResult> pendingResults = new ArrayList<>();
+        final AtomicInteger chunkIndex = new AtomicInteger(0);
+        final AtomicInteger totalResults = new AtomicInteger(0);
+
+        SystemScanSession(Path sessionDir) {
+            this.sessionDir = sessionDir;
+        }
+    }
 
     // ── Async directory scan (perf follow-up) ───────────────────────────
     // /scan/directory used to receive the upload AND scan every file
@@ -797,20 +825,23 @@ public class SecurityServiceImpl implements SecurityService {
         if (!systemScanRunning.compareAndSet(false, true)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "System scan is already in progress");
         }
-        stopSystemScan.set(false);
-        systemScanFilesScanned.set(0);
-        // Start each scan with a clean session result list so the frontend
-        // only sees results produced by this specific run.
-        synchronized (currentSystemScanResults) {
-            currentSystemScanResults.clear();
+        try {
+            initializeSystemScanSession();
+            stopSystemScan.set(false);
+            systemScanFilesScanned.set(0);
+            // SecurityContextHolder is thread-local by default, so without this
+            // explicit capture/propagation, scanFile() running on
+            // systemScanExecutor's thread would see an empty context and
+            // attribute every result to "system" instead of the admin who
+            // triggered the scan.
+            SecurityContext callerContext = SecurityContextHolder.getContext();
+            systemScanExecutor.submit(() -> runSystemScan(callerContext));
+        } catch (IOException e) {
+            systemScanRunning.set(false);
+            stopSystemScan.set(false);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Unable to initialize system scan session", e);
         }
-        // SecurityContextHolder is thread-local by default, so without this
-        // explicit capture/propagation, scanFile() running on
-        // systemScanExecutor's thread would see an empty context and
-        // attribute every result to "system" instead of the admin who
-        // triggered the scan.
-        SecurityContext callerContext = SecurityContextHolder.getContext();
-        systemScanExecutor.submit(() -> runSystemScan(callerContext));
     }
 
     private void runSystemScan(SecurityContext callerContext) {
@@ -822,8 +853,105 @@ public class SecurityServiceImpl implements SecurityService {
         }
     }
 
+    private void initializeSystemScanSession() throws IOException {
+        synchronized (systemScanSessionLock) {
+            clearCurrentSystemScanSessionLocked();
+            Path sessionDir = Files.createTempDirectory("antivirus-system-scan-");
+            currentSystemScanSession = new SystemScanSession(sessionDir);
+        }
+    }
+
+    private void clearCurrentSystemScanSessionLocked() {
+        if (currentSystemScanSession != null && currentSystemScanSession.sessionDir != null) {
+            // Clean up the previous scan session so a new run starts with a
+            // fresh on-disk workspace and does not mix results across scans.
+            deleteRecursively(currentSystemScanSession.sessionDir);
+        }
+        currentSystemScanSession = null;
+    }
+
+    private void deleteRecursively(Path path) {
+        if (path == null || !Files.exists(path)) {
+            return;
+        }
+
+        try (Stream<Path> walk = Files.walk(path)) {
+            walk.sorted(Comparator.reverseOrder()).forEach(currentPath -> {
+                try {
+                    Files.deleteIfExists(currentPath);
+                } catch (IOException e) {
+                    logger.warn("Could not delete system scan temp file {}: {}", currentPath, e.getMessage());
+                }
+            });
+        } catch (IOException e) {
+            logger.warn("Could not clean up system scan session directory {}: {}", path, e.getMessage());
+        }
+    }
+
+    private int getCurrentSystemScanResultCount() {
+        SystemScanSession session = currentSystemScanSession;
+        return session != null ? session.totalResults.get() : 0;
+    }
+
+    private void recordSystemScanResult(ScanResult result) {
+        if (result == null) {
+            return;
+        }
+
+        synchronized (systemScanSessionLock) {
+            SystemScanSession session = currentSystemScanSession;
+            if (session == null) {
+                logger.warn("Attempted to record a system scan result without an active session");
+                return;
+            }
+
+            session.pendingResults.add(result);
+            int totalResults = session.totalResults.incrementAndGet();
+            if (session.pendingResults.size() >= systemScanResultChunkSize
+                    || totalResults >= MAX_SYSTEM_SCAN_RESULTS) {
+                // Flush the buffered results to disk once we hit the chunk
+                // limit, so the worker thread only keeps a small batch in RAM.
+                flushCurrentSystemScanChunkLocked(session);
+            }
+
+            if (totalResults >= MAX_SYSTEM_SCAN_RESULTS) {
+                stopSystemScan.set(true);
+            }
+        }
+    }
+
+    private void flushCurrentSystemScanChunkLocked(SystemScanSession session) {
+        if (session == null || session.pendingResults.isEmpty()) {
+            return;
+        }
+
+        try {
+            Files.createDirectories(session.sessionDir);
+            int chunkNumber = session.chunkIndex.incrementAndGet();
+            Path chunkFile = session.sessionDir.resolve(String.format("chunk-%04d.json", chunkNumber));
+            // Chunk files are numbered so getCurrentSystemScanResults() can
+            // reassemble them in the same order they were written.
+            objectMapper.writeValue(chunkFile.toFile(), new ArrayList<>(session.pendingResults));
+            session.pendingResults.clear();
+        } catch (IOException e) {
+            if (session != null) {
+                session.chunkIndex.updateAndGet(current -> Math.max(0, current - 1));
+            }
+            logger.error("Error writing system scan chunk: {}", e.getMessage(), e);
+        }
+    }
+
+    private List<ScanResult> readSystemScanChunk(Path chunkFile) {
+        try {
+            ScanResult[] chunkResults = objectMapper.readValue(chunkFile.toFile(), ScanResult[].class);
+            return new ArrayList<>(Arrays.asList(chunkResults));
+        } catch (Exception e) {
+            logger.error("Error reading system scan chunk {}: {}", chunkFile, e.getMessage(), e);
+            return new ArrayList<>();
+        }
+    }
+
     private void runSystemScanInternal() {
-        List<ScanResult> results = currentSystemScanResults;
         AtomicInteger skippedFiles = new AtomicInteger(0);
         long scanDeadline = System.currentTimeMillis() + MAX_SYSTEM_SCAN_DURATION_MS;
 
@@ -856,8 +984,7 @@ public class SecurityServiceImpl implements SecurityService {
                 logger.info("Scanning root directory: {}", root.getAbsolutePath());
 
                 try {
-                    scanDirectory(root.toPath(), skipDirectories, results, systemScanFilesScanned, skippedFiles,
-                            scanDeadline);
+                    scanDirectory(root.toPath(), skipDirectories, systemScanFilesScanned, skippedFiles, scanDeadline);
                 } catch (AccessDeniedException e) {
                     logger.debug("Access denied to root directory: {}", root, e);
                     ScanResult errorResult = new ScanResult();
@@ -868,9 +995,7 @@ public class SecurityServiceImpl implements SecurityService {
                     errorResult.setScanType("SYSTEM");
                     errorResult.setActionTaken("NONE");
                     saveScanResult(errorResult);
-                    if (results.size() < MAX_SYSTEM_SCAN_RESULTS) {
-                        results.add(errorResult);
-                    }
+                    recordSystemScanResult(errorResult);
                 } catch (IOException e) {
                     logger.error("IO error scanning root directory: {}", root, e);
                     ScanResult errorResult = new ScanResult();
@@ -881,9 +1006,7 @@ public class SecurityServiceImpl implements SecurityService {
                     errorResult.setScanType("SYSTEM");
                     errorResult.setActionTaken("NONE");
                     saveScanResult(errorResult);
-                    if (results.size() < MAX_SYSTEM_SCAN_RESULTS) {
-                        results.add(errorResult);
-                    }
+                    recordSystemScanResult(errorResult);
                 } catch (Exception e) {
                     logger.error("Unexpected error scanning root directory: {}", root, e);
                     ScanResult errorResult = new ScanResult();
@@ -894,17 +1017,21 @@ public class SecurityServiceImpl implements SecurityService {
                     errorResult.setScanType("SYSTEM");
                     errorResult.setActionTaken("NONE");
                     saveScanResult(errorResult);
-                    if (results.size() < MAX_SYSTEM_SCAN_RESULTS) {
-                        results.add(errorResult);
-                    }
+                    recordSystemScanResult(errorResult);
                 }
             }
 
             logger.info("System scan completed. Scanned: {}, Skipped: {}, Total Results: {}",
-                    systemScanFilesScanned.get(), skippedFiles.get(), results.size());
+                    systemScanFilesScanned.get(), skippedFiles.get(), getCurrentSystemScanResultCount());
         } catch (Exception e) {
             logger.error("Critical error during system scan: {}", e.getMessage(), e);
         } finally {
+            synchronized (systemScanSessionLock) {
+                SystemScanSession session = currentSystemScanSession;
+                if (session != null) {
+                    flushCurrentSystemScanChunkLocked(session);
+                }
+            }
             systemScanRunning.set(false);
             stopSystemScan.set(false);
         }
@@ -917,11 +1044,39 @@ public class SecurityServiceImpl implements SecurityService {
 
     @Override
     public List<ScanResult> getCurrentSystemScanResults() {
-        // Return a copy so callers can read the active scan session without
-        // mutating the live list that the background worker is still writing.
-        synchronized (currentSystemScanResults) {
-            return new ArrayList<>(currentSystemScanResults);
+        SystemScanSession session;
+        synchronized (systemScanSessionLock) {
+            session = currentSystemScanSession;
+            if (session == null) {
+                return new ArrayList<>();
+            }
         }
+
+        List<ScanResult> results = new ArrayList<>();
+        try (Stream<Path> stream = Files.list(session.sessionDir)) {
+            // Read the persisted chunk files in filename order so the UI sees
+            // the scan results in the same sequence the worker produced them.
+            List<Path> chunkFiles = stream
+                    .filter(Files::isRegularFile)
+                    .filter(path -> path.getFileName().toString().startsWith("chunk-")
+                            && path.getFileName().toString().endsWith(".json"))
+                    .sorted(Comparator.comparing(path -> path.getFileName().toString()))
+                    .toList();
+
+            for (Path chunkFile : chunkFiles) {
+                results.addAll(readSystemScanChunk(chunkFile));
+            }
+        } catch (IOException e) {
+            logger.error("Error reading system scan results from {}: {}", session.sessionDir, e.getMessage(), e);
+        }
+
+        synchronized (systemScanSessionLock) {
+            if (currentSystemScanSession == session && !session.pendingResults.isEmpty()) {
+                results.addAll(new ArrayList<>(session.pendingResults));
+            }
+        }
+
+        return results;
     }
 
     @PreDestroy
@@ -931,14 +1086,13 @@ public class SecurityServiceImpl implements SecurityService {
     }
 
     private void scanDirectory(Path directory, Set<String> skipDirectories,
-            List<ScanResult> results,
             AtomicInteger scannedFiles,
             AtomicInteger skippedFiles,
             long scanDeadline) throws IOException {
         try {
             if (stopSystemScan.get() || System.currentTimeMillis() >= scanDeadline
-                    || results.size() >= MAX_SYSTEM_SCAN_RESULTS) {
-                if (results.size() >= MAX_SYSTEM_SCAN_RESULTS) {
+                    || getCurrentSystemScanResultCount() >= MAX_SYSTEM_SCAN_RESULTS) {
+                if (getCurrentSystemScanResultCount() >= MAX_SYSTEM_SCAN_RESULTS) {
                     logger.warn("System scan capped at {} results to avoid resource exhaustion",
                             MAX_SYSTEM_SCAN_RESULTS);
                 }
@@ -969,16 +1123,15 @@ public class SecurityServiceImpl implements SecurityService {
                         boolean isRegularFile = Files.isRegularFile(path);
 
                         if (isDirectory) {
-                            scanDirectory(path, skipDirectories, results, scannedFiles, skippedFiles, scanDeadline);
+                            scanDirectory(path, skipDirectories, scannedFiles, skippedFiles, scanDeadline);
                         } else if (isRegularFile && isReadable) {
                             logger.debug("Scanning file: {}", path);
                             ScanResult result = scanFile(path.toFile());
-                            if (results.size() < MAX_SYSTEM_SCAN_RESULTS) {
-                                results.add(result);
-                            } else {
+                            if (getCurrentSystemScanResultCount() >= MAX_SYSTEM_SCAN_RESULTS) {
                                 stopSystemScan.set(true);
                                 return;
                             }
+                            recordSystemScanResult(result);
                             scannedFiles.incrementAndGet();
 
                             if (result.isInfected()) {
@@ -987,7 +1140,7 @@ public class SecurityServiceImpl implements SecurityService {
                             }
 
                             if (System.currentTimeMillis() >= scanDeadline
-                                    || results.size() >= MAX_SYSTEM_SCAN_RESULTS) {
+                                    || getCurrentSystemScanResultCount() >= MAX_SYSTEM_SCAN_RESULTS) {
                                 stopSystemScan.set(true);
                                 return;
                             }
@@ -1005,9 +1158,7 @@ public class SecurityServiceImpl implements SecurityService {
                         errorResult.setScanType("SYSTEM");
                         errorResult.setActionTaken("NONE");
                         saveScanResult(errorResult);
-                        if (results.size() < MAX_SYSTEM_SCAN_RESULTS) {
-                            results.add(errorResult);
-                        }
+                        recordSystemScanResult(errorResult);
                     } catch (Exception e) {
                         logger.error("Unexpected error processing path: {}", path, e);
                         ScanResult errorResult = new ScanResult();
@@ -1018,9 +1169,7 @@ public class SecurityServiceImpl implements SecurityService {
                         errorResult.setScanType("SYSTEM");
                         errorResult.setActionTaken("NONE");
                         saveScanResult(errorResult);
-                        if (results.size() < MAX_SYSTEM_SCAN_RESULTS) {
-                            results.add(errorResult);
-                        }
+                        recordSystemScanResult(errorResult);
                     }
                 }
             } catch (AccessDeniedException e) {
