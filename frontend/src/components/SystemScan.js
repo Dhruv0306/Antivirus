@@ -116,6 +116,9 @@ function getDisplayName(result) {
 
 function SystemScan() {
   const [scanning, setScanning] = useState(false);
+  // Keeps the UI in a "stopping..." state while we wait for the backend to
+  // actually flip isRunning to false. That prevents us from dropping polling
+  // too early and missing the final scan results.
   const [stopping, setStopping] = useState(false);
   const [currentActivity, setCurrentActivity] = useState('');
   const [scanResults, setScanResults] = useState(null);
@@ -142,6 +145,9 @@ function SystemScan() {
       const filesScanned = response.data?.filesScanned || 0;
 
       if (isRunning) {
+        // While the scan is still active, keep the progress text updated.
+        // If the user pressed Stop, show a stopping message instead of the
+        // normal scanning message.
         setCurrentActivity(
           stopping ? 'Stopping scan...' : (filesScanned ? `Scanned ${filesScanned} files...` : 'Scanning system...')
         );
@@ -152,7 +158,8 @@ function SystemScan() {
       setCurrentActivity(wasStopping ? 'Scan stopped. Loading results...' : 'Scan completed. Loading results...');
       setScanning(false);
       setStopping(false);
-      // Refresh results when the backend reports the scan is done.
+      // This endpoint returns only the current scan session, so old scans do
+      // not bleed into the results view after a stop or completion.
       await fetchLatestResults();
       if (wasStopping) {
         setError('Scan stopped by user');
@@ -164,8 +171,10 @@ function SystemScan() {
 
   const fetchLatestResults = async () => {
     try {
-      const response = await antivirusApi.get('/history', { params: { page: 0, size: 50 } });
-      setScanResults(response.data.content || []);
+      // Pull only the live system-scan session results instead of global
+      // history, which could include older scans and confuse the UI.
+      const response = await antivirusApi.get('/scan/system/results');
+      setScanResults(response.data || []);
     } catch (error) {
       logError('Error fetching scan results:', error);
       setError(toUserMessage(error));
@@ -202,6 +211,9 @@ function SystemScan() {
     try {
       setStopping(true);
       setCurrentActivity('Stopping scan...');
+      // The stop response only confirms that the request was accepted; the
+      // scan itself shuts down asynchronously, so we still poll /status until
+      // it reports isRunning=false before reading the results.
       const response = await antivirusApi.post('/scan/system/stop');
       if (response.status !== 200 || response.data?.stopRequested !== true) {
         throw new Error('Stop request was not accepted');

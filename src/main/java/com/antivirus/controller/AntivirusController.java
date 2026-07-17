@@ -156,6 +156,8 @@ public class AntivirusController {
     public ResponseEntity<Map<String, Object>> stopSystemScan() {
         securityService.stopSystemScan();
         Map<String, Object> response = new HashMap<>();
+        // stopRequested tells the UI the request was accepted; isRunning lets
+        // it decide whether to keep polling until the scan actually exits.
         response.put("stopRequested", true);
         response.put("isRunning", securityService.isSystemScanRunning());
         return ResponseEntity.ok(response);
@@ -167,6 +169,13 @@ public class AntivirusController {
         status.put("isRunning", securityService.isSystemScanRunning());
         status.put("filesScanned", securityService.getSystemScanFilesScanned());
         return ResponseEntity.ok(status);
+    }
+
+    @GetMapping("/scan/system/results")
+    public ResponseEntity<List<ScanResult>> getSystemScanResults() {
+        // Expose only the active system scan session, not the global history
+        // feed, so a stopped scan shows just its own results.
+        return ResponseEntity.ok(securityService.getCurrentSystemScanResults());
     }
 
     @GetMapping("/network/check")

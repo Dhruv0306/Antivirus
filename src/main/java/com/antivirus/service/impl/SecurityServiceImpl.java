@@ -76,6 +76,9 @@ public class SecurityServiceImpl implements SecurityService {
 
     private final AtomicBoolean systemScanRunning = new AtomicBoolean(false);
     private final AtomicBoolean stopSystemScan = new AtomicBoolean(false);
+    // Keeps only the active system scan's results so a stopped/completed scan
+    // can be reloaded without mixing in entries from previous runs.
+    private final List<ScanResult> currentSystemScanResults = Collections.synchronizedList(new ArrayList<>());
 
     // ── Async system scan (perf follow-up) ──────────────────────────────
     // performSystemScan() used to run entirely on the calling (HTTP request)
@@ -796,6 +799,11 @@ public class SecurityServiceImpl implements SecurityService {
         }
         stopSystemScan.set(false);
         systemScanFilesScanned.set(0);
+        // Start each scan with a clean session result list so the frontend
+        // only sees results produced by this specific run.
+        synchronized (currentSystemScanResults) {
+            currentSystemScanResults.clear();
+        }
         // SecurityContextHolder is thread-local by default, so without this
         // explicit capture/propagation, scanFile() running on
         // systemScanExecutor's thread would see an empty context and
@@ -815,7 +823,7 @@ public class SecurityServiceImpl implements SecurityService {
     }
 
     private void runSystemScanInternal() {
-        List<ScanResult> results = new ArrayList<>(Math.min(MAX_SYSTEM_SCAN_RESULTS, 256));
+        List<ScanResult> results = currentSystemScanResults;
         AtomicInteger skippedFiles = new AtomicInteger(0);
         long scanDeadline = System.currentTimeMillis() + MAX_SYSTEM_SCAN_DURATION_MS;
 
@@ -905,6 +913,15 @@ public class SecurityServiceImpl implements SecurityService {
     @Override
     public int getSystemScanFilesScanned() {
         return systemScanFilesScanned.get();
+    }
+
+    @Override
+    public List<ScanResult> getCurrentSystemScanResults() {
+        // Return a copy so callers can read the active scan session without
+        // mutating the live list that the background worker is still writing.
+        synchronized (currentSystemScanResults) {
+            return new ArrayList<>(currentSystemScanResults);
+        }
     }
 
     @PreDestroy

@@ -25,6 +25,11 @@ public interface SecurityService {
 
     int getSystemScanFilesScanned();
 
+    // Returns only the results produced by the current in-flight system scan
+    // session so the UI can refresh a stopped/completed scan without pulling
+    // in older history entries.
+    List<ScanResult> getCurrentSystemScanResults();
+
     // Uploaded-directory scan, run as a background job. tempDir must
     // already contain the uploaded files (the controller writes them
     // there); this call returns a jobId immediately. Poll
