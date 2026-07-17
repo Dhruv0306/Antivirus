@@ -34,6 +34,19 @@ public class UserServiceImpl implements UserDetailsService, UserService {
     @Value("${app.admin.password}")
     private String adminPassword;
 
+    // H4 Fix: all three "someone else already has this" cases used to
+    // return distinct messages ("Username is not available" for the
+    // reserved admin name, "Username is already taken", "An account with
+    // this email already exists"). Combined with the 10 req/min rate limit
+    // being keyed on IP+username (so it's bypassable by rotating the
+    // username parameter), that let an attacker enumerate valid usernames
+    // and email addresses at meaningful volume. One generic message for
+    // all three conflict cases closes that oracle without changing the
+    // legitimate user's experience (they still know registration failed
+    // and can try a different username/email).
+    private static final String REGISTRATION_CONFLICT_MESSAGE =
+            "That username or email is not available. Please choose a different one.";
+
     public UserServiceImpl(AppUserRepository userRepository, PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
@@ -94,13 +107,13 @@ public class UserServiceImpl implements UserDetailsService, UserService {
         String normalizedEmail = request.getEmail().trim().toLowerCase(Locale.ROOT);
 
         if (adminUsername.trim().equalsIgnoreCase(normalizedUsername)) {
-            throw new RegistrationException("Username is not available");
+            throw new RegistrationException(REGISTRATION_CONFLICT_MESSAGE);
         }
         if (userRepository.existsByUsername(normalizedUsername)) {
-            throw new RegistrationException("Username is already taken");
+            throw new RegistrationException(REGISTRATION_CONFLICT_MESSAGE);
         }
         if (userRepository.existsByEmail(normalizedEmail)) {
-            throw new RegistrationException("An account with this email already exists");
+            throw new RegistrationException(REGISTRATION_CONFLICT_MESSAGE);
         }
         if (!request.getPassword().equals(request.getConfirmPassword())) {
             throw new RegistrationException("Passwords do not match");

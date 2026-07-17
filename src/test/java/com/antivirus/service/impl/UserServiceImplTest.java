@@ -196,7 +196,7 @@ class UserServiceImplTest {
 
         RegistrationException ex = assertThrows(RegistrationException.class,
                 () -> userService.register(request));
-        assertEquals("Username is already taken", ex.getMessage());
+        assertEquals("That username or email is not available. Please choose a different one.", ex.getMessage());
         verify(userRepository, never()).save(any(AppUser.class));
     }
 
@@ -213,8 +213,38 @@ class UserServiceImplTest {
 
         RegistrationException ex = assertThrows(RegistrationException.class,
                 () -> userService.register(request));
-        assertEquals("An account with this email already exists", ex.getMessage());
+        assertEquals("That username or email is not available. Please choose a different one.", ex.getMessage());
         verify(userRepository, never()).save(any(AppUser.class));
+    }
+
+    // H4 fix: the whole point of this test is that a duplicate-username
+    // conflict and a duplicate-email conflict must be indistinguishable to
+    // the caller. Before the fix these returned different strings, letting
+    // an attacker enumerate which usernames/emails are already registered.
+    @Test
+    void register_DuplicateUsernameAndDuplicateEmail_ShouldReturnIdenticalMessage() {
+        RegisterRequest usernameConflict = new RegisterRequest();
+        usernameConflict.setUsername("existinguser");
+        usernameConflict.setEmail("unique@example.com");
+        usernameConflict.setPassword("password123");
+        usernameConflict.setConfirmPassword("password123");
+        when(userRepository.existsByUsername("existinguser")).thenReturn(true);
+
+        RegisterRequest emailConflict = new RegisterRequest();
+        emailConflict.setUsername("uniqueuser");
+        emailConflict.setEmail("taken@example.com");
+        emailConflict.setPassword("password123");
+        emailConflict.setConfirmPassword("password123");
+        when(userRepository.existsByUsername("uniqueuser")).thenReturn(false);
+        when(userRepository.existsByEmail("taken@example.com")).thenReturn(true);
+
+        RegistrationException usernameEx = assertThrows(RegistrationException.class,
+                () -> userService.register(usernameConflict));
+        RegistrationException emailEx = assertThrows(RegistrationException.class,
+                () -> userService.register(emailConflict));
+
+        assertEquals(usernameEx.getMessage(), emailEx.getMessage(),
+                "username-taken and email-taken must be indistinguishable to the caller");
     }
 
     @Test
@@ -244,7 +274,7 @@ class UserServiceImplTest {
 
         RegistrationException ex = assertThrows(RegistrationException.class,
                 () -> userService.register(request));
-        assertEquals("Username is not available", ex.getMessage());
+        assertEquals("That username or email is not available. Please choose a different one.", ex.getMessage());
         verify(userRepository, never()).save(any(AppUser.class));
         verify(userRepository, never()).existsByUsername(anyString());
     }
