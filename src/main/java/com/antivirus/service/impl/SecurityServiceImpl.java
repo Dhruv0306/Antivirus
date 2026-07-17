@@ -517,6 +517,25 @@ public class SecurityServiceImpl implements SecurityService {
         return username.trim().toLowerCase(Locale.ROOT);
     }
 
+    // C2 Fix: /api/antivirus/quarantine and /delete are ADMIN-only routes
+    // (see SecurityConfig — everything under /api/antivirus/** other than
+    // scan/file, scan/directory, scan/directory/status, and history/me
+    // requires ROLE_ADMIN). loadInfectedScanResult()'s ownership check below
+    // was written for a self-service model and, left unconditional, blocked
+    // an admin from quarantining or deleting any infected result owned by a
+    // different user, which defeats the reason those endpoints are
+    // admin-gated in the first place. This lets that check be skipped for
+    // admins while still enforcing it for anyone else who reaches this code
+    // path in the future.
+    private boolean isCurrentUserAdmin() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return false;
+        }
+        return authentication.getAuthorities().stream()
+                .anyMatch(authority -> "ROLE_ADMIN".equals(authority.getAuthority()));
+    }
+
     private void assignOwnerIfMissing(ScanResult result) {
         if (result == null) {
             return;
@@ -1098,7 +1117,7 @@ public class SecurityServiceImpl implements SecurityService {
             scanResultRepository.save(result);
             return result;
         }
-        if (!owner.equalsIgnoreCase(requestingUser)) {
+        if (!isCurrentUserAdmin() && !owner.equalsIgnoreCase(requestingUser)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not allowed to modify this scan result");
         }
         return result;

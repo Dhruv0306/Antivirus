@@ -268,6 +268,53 @@ class SecurityServiceImplTest {
                 () -> securityService.deleteScanResult(99L));
     }
 
+    // ── C2 fix: admin can act on infected results owned by other users ──
+    //
+    // /api/antivirus/quarantine and /delete are ADMIN-only routes (see
+    // SecurityConfig). Before this fix, loadInfectedScanResult()'s ownership
+    // check applied unconditionally, so an admin could only quarantine or
+    // delete infected results they had personally scanned, and got a 403 on
+    // everyone else's, defeating the reason the endpoint is admin-gated.
+
+    @Test
+    void quarantineScanResult_AdminCanQuarantineAnotherUsersInfectedFile() throws IOException {
+        File infectedFile = tempDir.resolve("infected-other-user.exe").toFile();
+        Files.writeString(infectedFile.toPath(), "malicious content");
+
+        ScanResult infectedResult = new ScanResult();
+        infectedResult.setId(4L);
+        infectedResult.setFilePath(infectedFile.getAbsolutePath());
+        infectedResult.setInfected(true);
+        infectedResult.setOwnerUsername("alice"); // owned by a different user
+        when(scanResultRepository.findById(4L)).thenReturn(Optional.of(infectedResult));
+
+        // Current caller is "testuser" (see setUp), acting with ROLE_ADMIN
+        doReturn(List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_ADMIN")))
+                .when(authentication).getAuthorities();
+
+        securityService.quarantineScanResult(4L);
+
+        assertEquals("QUARANTINED", infectedResult.getActionTaken());
+        assertFalse(infectedFile.exists());
+        verify(scanResultRepository, atLeastOnce()).save(infectedResult);
+    }
+
+    @Test
+    void quarantineScanResult_NonAdminCannotQuarantineAnotherUsersInfectedFile() {
+        ScanResult infectedResult = new ScanResult();
+        infectedResult.setId(5L);
+        infectedResult.setFilePath("/tmp/other-user-file.exe");
+        infectedResult.setInfected(true);
+        infectedResult.setOwnerUsername("alice"); // owned by a different user
+        when(scanResultRepository.findById(5L)).thenReturn(Optional.of(infectedResult));
+
+        // Current caller is "testuser" (see setUp) with no admin authority
+        doReturn(List.of()).when(authentication).getAuthorities();
+
+        assertThrows(org.springframework.web.server.ResponseStatusException.class,
+                () -> securityService.quarantineScanResult(5L));
+    }
+
     // ── async directory scan job ──────────────────────────────────────
 
     @Test
