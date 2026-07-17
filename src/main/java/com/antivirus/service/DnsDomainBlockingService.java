@@ -5,6 +5,7 @@ import com.antivirus.repository.BlockedDomainRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -28,6 +29,24 @@ public class DnsDomainBlockingService {
 
     @Autowired
     private BlockedDomainRepository blockedDomainRepository;
+
+    // H2 Fix: this class's write path (updateDnsConfig/restoreDnsConfig)
+    // rewrites a system dnsmasq config file and shells out to
+    // `systemctl reload dnsmasq`. It was reachable two ways: never through
+    // a live REST endpoint (NetworkSecurityController only reads
+    // isDnsConfigAccessible() for status display), but unconditionally
+    // every 5 minutes through CompositeDomainBlockingService's
+    // @Scheduled(fixedRate = 300000) synchronizeBlockingMethods(), which
+    // Spring runs regardless of whether that bean's blockDomain()/
+    // unblockDomain() methods are ever called from a controller. On any
+    // host where /etc/dnsmasq.d/ happens to be writable (i.e. the process
+    // is running with real privileges), this meant a privileged config
+    // rewrite + systemctl call fired on a timer with zero user action.
+    // Defaulting this to disabled makes the privileged path explicit
+    // opt-in (app.domain-blocking.dns.enabled=true) instead of "on by
+    // accident whenever the OS permissions happen to allow it".
+    @Value("${app.domain-blocking.dns.enabled:false}")
+    private boolean dnsBlockingEnabled;
 
     private static final String DNSMASQ_CONF = "/etc/dnsmasq.d/antivirus-blocked.conf";
 
@@ -53,6 +72,11 @@ public class DnsDomainBlockingService {
      * Update dnsmasq config with blocked domains
      */
     public void updateDnsConfig() {
+        if (!dnsBlockingEnabled) {
+            logger.debug("DNS blocking is disabled (app.domain-blocking.dns.enabled=false); skipping dnsmasq update");
+            return;
+        }
+
         List<BlockedDomain> domains = blockedDomainRepository.findByActiveTrue();
 
         // Build dnsmasq address= directives — one per domain
@@ -78,6 +102,11 @@ public class DnsDomainBlockingService {
      * Restore DNS config (clear the blocklist)
      */
     public void restoreDnsConfig() {
+        if (!dnsBlockingEnabled) {
+            logger.debug("DNS blocking is disabled (app.domain-blocking.dns.enabled=false); skipping dnsmasq restore");
+            return;
+        }
+
         try {
             Path dnsmasqConfPath = Paths.get(DNSMASQ_CONF);
             if (!Files.exists(dnsmasqConfPath)) {
