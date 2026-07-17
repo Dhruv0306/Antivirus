@@ -11,6 +11,7 @@ import com.antivirus.service.SystemMonitorService;
 import com.antivirus.repository.ScanResultRepository;
 import com.antivirus.service.LogService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -24,6 +25,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.attribute.PosixFileAttributeView;
+import java.nio.file.attribute.PosixFilePermission;
 import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.Instant;
@@ -59,6 +62,17 @@ public class SecurityServiceImpl implements SecurityService {
 
     @Autowired
     private LogService logService;
+
+    // H3 Fix: the quarantine directory used to be hardcoded as
+    // new File("quarantine") — relative to whatever the JVM's working
+    // directory happens to be, which differs between `mvn spring-boot:run`,
+    // an IDE run config, a systemd unit, and a container. Now externalized
+    // and resolved to an absolute path so it lands somewhere predictable in
+    // every deployment (see app.quarantine.dir in application.properties).
+    // The field initializer keeps the exact prior default (CWD/quarantine)
+    // for plain-Mockito unit tests, where @Value injection never runs.
+    @Value("${app.quarantine.dir:${user.dir}/quarantine}")
+    private String quarantineDirPath = System.getProperty("user.dir") + File.separator + "quarantine";
 
     private final AtomicBoolean systemScanRunning = new AtomicBoolean(false);
     private final AtomicBoolean stopSystemScan = new AtomicBoolean(false);
@@ -1067,17 +1081,39 @@ public class SecurityServiceImpl implements SecurityService {
     @Override
     public void quarantineFile(File file) {
         try {
-            File quarantineDir = new File("quarantine");
-            if (!quarantineDir.exists() && !quarantineDir.mkdir()) {
-                throw new IOException("Failed to create quarantine directory");
-            }
+            Path quarantineRoot = Paths.get(quarantineDirPath).toAbsolutePath().normalize();
+            Files.createDirectories(quarantineRoot);
 
             String safeName = UUID.randomUUID() + "_" + file.getName() + ".quarantine";
-            File quarantinedFile = new File(quarantineDir, safeName);
-            Files.move(file.toPath(), quarantinedFile.toPath());
+            Path quarantinedFile = quarantineRoot.resolve(safeName);
+            Files.move(file.toPath(), quarantinedFile);
+            stripExecutablePermissions(quarantinedFile);
         } catch (IOException e) {
             logger.error("Failed to quarantine file: {}", file.getAbsolutePath(), e);
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to quarantine file");
+        }
+    }
+
+    // H3 Fix: best-effort removal of the executable bit from a quarantined
+    // file so nothing else on the system (another AV product, a backup or
+    // sync tool, a shell glob) can run it directly off disk while it sits
+    // in quarantine. Only meaningful on POSIX filesystems — Windows has no
+    // equivalent permission bit, so getFileAttributeView() returns null
+    // there and this silently no-ops; isolation on Windows still comes
+    // from the file living outside any executable/startup location.
+    private void stripExecutablePermissions(Path quarantinedFile) {
+        try {
+            PosixFileAttributeView view = Files.getFileAttributeView(quarantinedFile, PosixFileAttributeView.class);
+            if (view == null) {
+                return;
+            }
+            Set<PosixFilePermission> ownerReadWriteOnly = EnumSet.of(
+                    PosixFilePermission.OWNER_READ,
+                    PosixFilePermission.OWNER_WRITE);
+            Files.setPosixFilePermissions(quarantinedFile, ownerReadWriteOnly);
+        } catch (IOException e) {
+            logger.warn("Could not strip executable permissions from quarantined file {}: {}",
+                    quarantinedFile, e.getMessage());
         }
     }
 
