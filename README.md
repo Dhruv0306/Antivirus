@@ -119,6 +119,32 @@ antivirus/
 - Environment variables: `frontend/.env`
 - Theme configuration: `frontend/src/theme.js`
 
+## 🗄️ Database Schema & Migrations
+
+Schema changes are managed with [Flyway](https://flywaydb.org/); migration scripts live in `src/main/resources/db/migration/` and run automatically on application startup against whatever `DB_URL` points to, **except under the `dev` profile**, which sets `spring.flyway.enabled=false` and relies on Hibernate's `ddl-auto=update` instead (see the `F-03` comment in `application-dev.properties`) for faster local iteration. To actually see a new migration run, use the `local` or `prod` profile, e.g. `mvn spring-boot:run "-Dspring-boot.run.profiles=local"`, then inspect the result via the H2 console at `/h2-console` (JDBC URL `jdbc:h2:file:./data/antivirus_local;MODE=PostgreSQL`, configured in `application-local.properties`).
+
+### `agent_status` table (H1)
+
+As part of splitting privileged system-config writes (hosts file / dnsmasq) out of the web-facing process, see [`docs/plans/h1-privilege-split-plan.md`](./docs/plans/h1-privilege-split-plan.md) section 3 for the full design, migration `V5__add_agent_status.sql` adds a singleton `agent_status` table.
+
+- **Written by**: a separate, privileged system-agent process (not covered by this README yet; its deployment is documented once that piece lands).
+- **Read by**: the web app only, to answer "can hosts-file/DNS blocking actually be enforced right now" for the network security dashboard.
+- The web app never writes to this table. The single row is entirely owned by the agent.
+
+### Production deployment: provisioning the agent's database role
+
+The system-agent authenticates to the database as its own, narrowly-scoped role (`antivirus_agent`), never as the web app's own DB user. Before deploying the agent to a new environment, an operator with database admin privileges must run the provisioning script once:
+
+```bash
+psql -h <host> -U <admin-user> -d antivirus -f docs/deployment/provision-agent-db-role.sql
+```
+
+This is a **one-time, manual step**, deliberately not a Flyway migration. The reasoning is in the script's own header comment: the app's own migration identity should never be able to grant itself, or anything else, additional database privileges, that would itself be a privilege-escalation path.
+
+The grant is intentionally minimal: `SELECT` on `blocked_domains`, `SELECT` + `UPDATE` on `agent_status`, nothing else. If the agent's credentials are ever compromised, that grant is the entire blast radius on the database side, no access to `app_users` (password hashes) or `scan_results`.
+
+> This step only applies to a production PostgreSQL deployment. Local/dev profiles (`application-dev.properties`, `application-local.properties`) use file-based H2 and don't need a separate agent database role.
+
 ## 📝 Development Guidelines
 
 ### Code Style
