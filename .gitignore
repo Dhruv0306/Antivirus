@@ -20,6 +20,7 @@ target/
 *.log
 *.sql
 !src/main/resources/db/migration/*.sql
+!docs/deployment/*.sql
 *.sqlite
 *.db
 logs/
