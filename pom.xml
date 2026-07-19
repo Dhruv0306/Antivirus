@@ -129,10 +129,22 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!-- F-03: Flyway for automated database schema migrations -->
+        <!--
+            F-03 / Spring Boot 4 modularization fix: Spring Boot 4 split the
+            old monolithic spring-boot-autoconfigure jar into per-technology
+            modules. FlywayAutoConfiguration now lives in a separate
+            spring-boot-flyway module, only pulled in via this starter.
+            Plain flyway-core (what this dependency used to be) gives you
+            the Flyway engine and CLI but never actually wires Flyway into
+            Spring Boot's own startup, spring.flyway.enabled had no effect
+            under any profile because FlywayAutoConfiguration was never on
+            the classpath to read it, not because of anything wrong with
+            the property or its value. This starter pulls in flyway-core
+            transitively, so nothing else needs to change.
+        -->
         <dependency>
-            <groupId>org.flywaydb</groupId>
-            <artifactId>flyway-core</artifactId>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-flyway</artifactId>
         </dependency>
 
         <dependency>
@@ -195,6 +207,56 @@
                         </exclude>
                     </excludes>
                 </configuration>
+            </plugin>
+
+            <!--
+                Standalone Flyway CLI access for verifying migrations, deliberately
+                independent of Spring Boot's runtime profile/property-import chain
+                (application-{profile}.properties, .env.dev, spring.config.import,
+                etc). That chain has its own precedence rules for good reasons
+                elsewhere in this app, but it makes "just run this one migration
+                and check it" surprisingly hard to reason about from the command
+                line. This plugin talks straight to a database, nothing else.
+
+                Defaults below point at the same persistent local H2 file used by
+                application-local.properties, so `mvn flyway:migrate` and
+                `mvn flyway:info` work out of the box with no extra flags for the
+                common case. Override with -Dflyway.url=/-Dflyway.user=/
+                -Dflyway.password= to point at a different database (e.g. a real
+                staging Postgres instance) without touching this file.
+
+                ${flyway.version} and ${h2.version} are not declared in this
+                project's own <properties>; they come from spring-boot-starter-
+                parent's BOM (the same mechanism you'd use to override either
+                version project-wide), so this plugin always matches whatever
+                Flyway/H2 versions the app itself is actually built against.
+            -->
+            <plugin>
+                <groupId>org.flywaydb</groupId>
+                <artifactId>flyway-maven-plugin</artifactId>
+                <version>${flyway.version}</version>
+                <configuration>
+                    <url>jdbc:h2:file:./data/antivirus_local;MODE=PostgreSQL</url>
+                    <user>sa</user>
+                    <password>localh2password</password>
+                    <locations>
+                        <location>classpath:db/migration</location>
+                    </locations>
+                </configuration>
+                <dependencies>
+                    <!--
+                        Plugin executions run in their own classloader, separate
+                        from the project's own <dependencies>, so the H2 driver
+                        has to be declared here explicitly or flyway:migrate
+                        fails with a driver-not-found error even though H2 is
+                        already a normal project dependency above.
+                    -->
+                    <dependency>
+                        <groupId>com.h2database</groupId>
+                        <artifactId>h2</artifactId>
+                        <version>${h2.version}</version>
+                    </dependency>
+                </dependencies>
             </plugin>
 
             <!-- F-02: OWASP Dependency Check — fails build on CVSS >= 7 -->
