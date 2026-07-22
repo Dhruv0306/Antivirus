@@ -45,13 +45,13 @@ jobs:
               run: sudo apt-get update && sudo apt-get install -y acl
 
             - name: Provision dedicated agent user
-              run: sudo system-agent/deploy/linux/provision-agent-user.sh antivirus-agent
+              run: sudo ./system-agent/deploy/linux/provision-agent-user.sh antivirus-agent
 
             - name: Create throwaway hosts file and grant ACL
               run: |
                   sudo mkdir -p /opt/agent-sim
                   echo "127.0.0.1 localhost" | sudo tee /opt/agent-sim/hosts >/dev/null
-                  sudo system-agent/deploy/linux/provision-hosts-acl.sh /opt/agent-sim/hosts antivirus-agent
+                  sudo ./system-agent/deploy/linux/provision-hosts-acl.sh /opt/agent-sim/hosts antivirus-agent
 
             - name: Assert agent user can write, an unrelated user cannot
               run: |
@@ -67,7 +67,7 @@ jobs:
             - name: Create throwaway dnsmasq conf and provision it
               run: |
                   sudo mkdir -p /opt/agent-sim/dnsmasq.d
-                  sudo system-agent/deploy/linux/provision-dnsmasq-dir.sh /opt/agent-sim/dnsmasq.d/antivirus-blocked.conf antivirus-agent
+                  sudo ./system-agent/deploy/linux/provision-dnsmasq-dir.sh /opt/agent-sim/dnsmasq.d/antivirus-blocked.conf antivirus-agent
 
             - name: Assert dnsmasq conf ownership and group-writability
               run: |
@@ -78,11 +78,11 @@ jobs:
                   echo "OK: dnsmasq conf owned by root:antivirus-agent and group-writable by the agent"
 
             - name: Validate sudoers file syntax
-              run: sudo visudo -c -f system-agent/deploy/linux/antivirus-agent-sudoers
+              run: sudo visudo -c -f ./system-agent/deploy/linux/antivirus-agent-sudoers
 
             - name: Install sudoers grant for real and verify scope
               run: |
-                  sudo cp system-agent/deploy/linux/antivirus-agent-sudoers /etc/sudoers.d/antivirus-agent
+                  sudo cp ./system-agent/deploy/linux/antivirus-agent-sudoers /etc/sudoers.d/antivirus-agent
                   sudo chmod 440 /etc/sudoers.d/antivirus-agent
                   sudo visudo -c
                   sudo -u antivirus-agent sudo -n -l | grep -q "systemctl reload dnsmasq"
