@@ -1,0 +1,59 @@
+# antivirus-agent.service
+#
+# systemd unit for the privileged system-agent (see
+# docs/plans/h1-privilege-split-plan.md section 5). Runs as the dedicated
+# antivirus-agent user created by provision-agent-user.sh, with exactly
+# the two filesystem paths it needs opened up via ReadWritePaths, on top
+# of the ACL/group grants provisioned separately (this unit's job is
+# process sandboxing, not the DAC grants themselves).
+#
+# INSTALL:
+#   1. Run provision-agent-user.sh, provision-hosts-acl.sh, and
+#      provision-dnsmasq-dir.sh first (see deploy/README.md for order).
+#   2. Replace ExecStart's jar path below with the real deployed location.
+#   3. sudo cp antivirus-agent.service /etc/systemd/system/
+#   4. sudo systemctl daemon-reload
+#   5. sudo systemctl enable --now antivirus-agent
+
+[Unit]
+Description=Antivirus system agent (privileged domain-blocking sync)
+After=network.target
+
+[Service]
+Type=simple
+User=antivirus-agent
+Group=antivirus-agent
+
+# Replace with the real deployed jar path.
+ExecStart=/usr/bin/java -jar /opt/antivirus-agent/system-agent.jar
+
+Restart=on-failure
+RestartSec=5
+
+# This project currently runs entirely against file-based H2 (see
+# application.properties / application-local.properties / application-prod.properties,
+# all jdbc:h2:{mem,file}:...), never a network database. That means the
+# agent needs zero network access to do its job today, so it can be fully
+# isolated in its own empty network namespace with no caveats.
+#
+# IMPORTANT: if this project ever moves to a network database (e.g. a
+# real Postgres instance, per DatasourceSafetyConfig's own prod
+# recommendation), PrivateNetwork=yes below MUST be removed or the agent
+# will be unable to reach it. At that point, prefer connecting over a
+# Unix domain socket (Postgres supports this natively) so the agent still
+# never needs a network interface at all; only fall back to removing this
+# line entirely if the database is genuinely remote.
+PrivateNetwork=yes
+
+# Extra defense in depth on top of the ACL/group grants provisioned
+# separately. Even if this unit's User=/Group= were ever misconfigured
+# back to root by mistake, these settings constrain what the process can
+# touch on disk.
+ProtectSystem=strict
+ReadWritePaths=/etc/hosts /etc/dnsmasq.d
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+
+[Install]
+WantedBy=multi-user.target
