@@ -51,6 +51,20 @@ jobs:
               run: |
                   sudo mkdir -p /opt/agent-sim
                   echo "127.0.0.1 localhost" | sudo tee /opt/agent-sim/hosts >/dev/null
+                  # The real /etc/hosts is always root-owned, mode 644,
+                  # never world-writable, that's an OS-level guarantee we
+                  # get for free in production. Our throwaway stand-in
+                  # doesn't: `tee` creates files honoring the calling
+                  # shell's umask, and this runner's default left "other"
+                  # writable, producing a 666 file (reproduced locally:
+                  # umask 0000 + tee => rw-rw-rw-, vs umask 0022 => the
+                  # expected rw-r--r--). setfacl only ever adds a
+                  # named-user grant on top of whatever's already there, it
+                  # never restricts an already-permissive base mode, so
+                  # without this line the "unrelated user cannot write"
+                  # assertion below fails for a reason that has nothing to
+                  # do with the ACL script actually being tested.
+                  sudo chmod 644 /opt/agent-sim/hosts
                   sudo bash ./system-agent/deploy/linux/provision-hosts-acl.sh /opt/agent-sim/hosts antivirus-agent
 
             - name: Assert agent user can write, an unrelated user cannot
