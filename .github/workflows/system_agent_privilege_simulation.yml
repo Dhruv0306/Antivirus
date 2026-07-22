@@ -45,13 +45,13 @@ jobs:
               run: sudo apt-get update && sudo apt-get install -y acl
 
             - name: Provision dedicated agent user
-              run: sudo ./system-agent/deploy/linux/provision-agent-user.sh antivirus-agent
+              run: sudo bash ./system-agent/deploy/linux/provision-agent-user.sh antivirus-agent
 
             - name: Create throwaway hosts file and grant ACL
               run: |
                   sudo mkdir -p /opt/agent-sim
                   echo "127.0.0.1 localhost" | sudo tee /opt/agent-sim/hosts >/dev/null
-                  sudo ./system-agent/deploy/linux/provision-hosts-acl.sh /opt/agent-sim/hosts antivirus-agent
+                  sudo bash ./system-agent/deploy/linux/provision-hosts-acl.sh /opt/agent-sim/hosts antivirus-agent
 
             - name: Assert agent user can write, an unrelated user cannot
               run: |
@@ -67,7 +67,7 @@ jobs:
             - name: Create throwaway dnsmasq conf and provision it
               run: |
                   sudo mkdir -p /opt/agent-sim/dnsmasq.d
-                  sudo ./system-agent/deploy/linux/provision-dnsmasq-dir.sh /opt/agent-sim/dnsmasq.d/antivirus-blocked.conf antivirus-agent
+                  sudo bash ./system-agent/deploy/linux/provision-dnsmasq-dir.sh /opt/agent-sim/dnsmasq.d/antivirus-blocked.conf antivirus-agent
 
             - name: Assert dnsmasq conf ownership and group-writability
               run: |
