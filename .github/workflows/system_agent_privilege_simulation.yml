@@ -1,0 +1,204 @@
+name: system-agent privilege model simulation
+on:
+    push:
+        branches: ["**"]
+        paths:
+            - "system-agent/**"
+            - ".github/workflows/system_agent_privilege_simulation.yml"
+    pull_request:
+        branches: ["main"]
+        paths:
+            - "system-agent/**"
+            - ".github/workflows/system_agent_privilege_simulation.yml"
+
+jobs:
+    # Runs the actual Linux provisioning scripts (provision-agent-user.sh,
+    # provision-hosts-acl.sh, provision-dnsmasq-dir.sh), the sudoers file,
+    # and the systemd unit for real, against throwaway paths and a
+    # throwaway user, on a disposable VM. GitHub-hosted ubuntu-latest
+    # runners are full VMs with genuine systemd as PID 1 (not a
+    # container), so this is real validation, not a syntax-only check.
+    #
+    # Throwaway paths live under /opt/agent-sim rather than /tmp
+    # specifically because the systemd unit sets PrivateTmp=yes (the
+    # service gets its own isolated /tmp, host /tmp is invisible to it)
+    # and ProtectHome=yes (anything under /home, including this runner's
+    # checkout path, is invisible to the service). /opt avoids both.
+    linux-simulation:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Set up JDK 21
+              uses: actions/setup-java@v4
+              with:
+                  distribution: "temurin"
+                  java-version: "21"
+                  cache: "maven"
+                  cache-dependency-path: system-agent/pom.xml
+
+            - name: Build agent jar
+              working-directory: system-agent
+              run: mvn package -DskipTests
+
+            - name: Install acl package (setfacl/getfacl)
+              run: sudo apt-get update && sudo apt-get install -y acl
+
+            - name: Provision dedicated agent user
+              run: sudo system-agent/deploy/linux/provision-agent-user.sh antivirus-agent
+
+            - name: Create throwaway hosts file and grant ACL
+              run: |
+                  sudo mkdir -p /opt/agent-sim
+                  echo "127.0.0.1 localhost" | sudo tee /opt/agent-sim/hosts >/dev/null
+                  sudo system-agent/deploy/linux/provision-hosts-acl.sh /opt/agent-sim/hosts antivirus-agent
+
+            - name: Assert agent user can write, an unrelated user cannot
+              run: |
+                  set -e
+                  sudo -u antivirus-agent test -w /opt/agent-sim/hosts
+                  echo "OK: antivirus-agent can write the throwaway hosts file"
+                  if sudo -u nobody test -w /opt/agent-sim/hosts; then
+                      echo "FAIL: unrelated user 'nobody' should NOT be able to write this file"
+                      exit 1
+                  fi
+                  echo "OK: unrelated user cannot write, ACL grant is correctly scoped"
+
+            - name: Create throwaway dnsmasq conf and provision it
+              run: |
+                  sudo mkdir -p /opt/agent-sim/dnsmasq.d
+                  sudo system-agent/deploy/linux/provision-dnsmasq-dir.sh /opt/agent-sim/dnsmasq.d/antivirus-blocked.conf antivirus-agent
+
+            - name: Assert dnsmasq conf ownership and group-writability
+              run: |
+                  set -e
+                  owner_group=$(stat -c "%U:%G" /opt/agent-sim/dnsmasq.d/antivirus-blocked.conf)
+                  test "$owner_group" = "root:antivirus-agent"
+                  sudo -u antivirus-agent test -w /opt/agent-sim/dnsmasq.d/antivirus-blocked.conf
+                  echo "OK: dnsmasq conf owned by root:antivirus-agent and group-writable by the agent"
+
+            - name: Validate sudoers file syntax
+              run: sudo visudo -c -f system-agent/deploy/linux/antivirus-agent-sudoers
+
+            - name: Install sudoers grant for real and verify scope
+              run: |
+                  sudo cp system-agent/deploy/linux/antivirus-agent-sudoers /etc/sudoers.d/antivirus-agent
+                  sudo chmod 440 /etc/sudoers.d/antivirus-agent
+                  sudo visudo -c
+                  sudo -u antivirus-agent sudo -n -l | grep -q "systemctl reload dnsmasq"
+                  echo "OK: sudoers grant present and scoped to systemctl reload dnsmasq"
+                  if sudo -u antivirus-agent sudo -n whoami >/dev/null 2>&1; then
+                      echo "FAIL: agent should not be able to run an arbitrary command via sudo"
+                      exit 1
+                  fi
+                  echo "OK: an arbitrary/ungranted command is correctly refused"
+
+            - name: Install the jar at its production-realistic path
+              run: |
+                  sudo mkdir -p /opt/antivirus-agent
+                  sudo cp system-agent/target/system-agent.jar /opt/antivirus-agent/system-agent.jar
+
+            - name: Prepare and validate systemd unit
+              run: |
+                  cp system-agent/deploy/linux/antivirus-agent.service /tmp/antivirus-agent.service
+                  # Insert into [Service] specifically, Environment= is not
+                  # a valid key anywhere else, and a plain `cat >>` append
+                  # would land these after [Install] at the end of the
+                  # file, where systemd silently ignores them as unknown
+                  # keys with no error, a real bug caught by testing this
+                  # exact modification against systemd-analyze verify
+                  # before trusting it in this workflow.
+                  sed -i '/^Group=antivirus-agent$/a Environment=HOSTS_FILE_PATH=/opt/agent-sim/hosts\nEnvironment=DB_URL=jdbc:h2:mem:agent_sim;MODE=PostgreSQL' \
+                      /tmp/antivirus-agent.service
+                  # Production doesn't need this, /opt/agent-sim only
+                  # exists for this simulation run.
+                  sed -i 's#ReadWritePaths=/etc/hosts /etc/dnsmasq.d#ReadWritePaths=/etc/hosts /etc/dnsmasq.d /opt/agent-sim#' \
+                      /tmp/antivirus-agent.service
+                  # systemd-analyze verify exits 0 even when it finds
+                  # problems, e.g. "Unknown key name X, ignoring", it only
+                  # reports them as warnings on stderr, so a plain exit-code
+                  # check is not enough (verified locally: a deliberately
+                  # broken unit with an invalid directive still exits 0).
+                  # Fail the build on any diagnostic output at all.
+                  output=$(systemd-analyze verify /tmp/antivirus-agent.service 2>&1)
+                  if [ -n "$output" ]; then
+                      echo "$output"
+                      echo "FAIL: systemd-analyze verify produced diagnostic output, treating any output as a failure"
+                      exit 1
+                  fi
+                  echo "OK: unit file verified with zero warnings or errors"
+
+            - name: Install, start, and verify the service actually runs under systemd
+              run: |
+                  sudo cp /tmp/antivirus-agent.service /etc/systemd/system/antivirus-agent.service
+                  sudo systemctl daemon-reload
+                  sudo systemctl start antivirus-agent
+                  sleep 3
+                  sudo systemctl is-active antivirus-agent
+                  sudo journalctl -u antivirus-agent --no-pager | grep -q "system-agent starting"
+                  echo "OK: service started under systemd as the unprivileged antivirus-agent user, sandboxed by ProtectSystem/PrivateTmp/PrivateNetwork/NoNewPrivileges"
+
+            - name: Cleanup
+              if: always()
+              run: |
+                  sudo systemctl stop antivirus-agent || true
+                  sudo systemctl disable antivirus-agent || true
+                  sudo rm -f /etc/systemd/system/antivirus-agent.service
+                  sudo rm -f /etc/sudoers.d/antivirus-agent
+                  sudo systemctl daemon-reload || true
+
+    # Windows equivalent, hosts-file ACL grant only. There is no
+    # dnsmasq/systemctl/sudoers/systemd analog on Windows, and this
+    # project's own DNS-blocking code path is already Linux-only (see
+    # DnsDomainBlockingService.getDnsInstructions() in the main app), so
+    # this job's scope is intentionally narrower than the Linux job's.
+    windows-simulation:
+        runs-on: windows-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Create test agent user
+              shell: pwsh
+              run: |
+                  $password = ConvertTo-SecureString "Temp-CI-Password-$(Get-Random)!" -AsPlainText -Force
+                  New-LocalUser -Name "antivirus-agent" -Password $password -PasswordNeverExpires -AccountNeverExpires | Out-Null
+                  Write-Host "Created local test user antivirus-agent"
+
+            - name: Create throwaway hosts file
+              shell: pwsh
+              run: |
+                  New-Item -ItemType Directory -Force -Path C:\agent-sim | Out-Null
+                  "127.0.0.1 localhost" | Out-File -Encoding ascii C:\agent-sim\hosts
+
+            - name: Run the provisioning script against the throwaway file
+              shell: pwsh
+              run: |
+                  .\system-agent\deploy\windows\provision-hosts-acl.ps1 `
+                      -HostsFilePath "C:\agent-sim\hosts" -AgentUser "antivirus-agent"
+
+            - name: Assert the ACL grant actually applied
+              shell: pwsh
+              run: |
+                  $acl = Get-Acl "C:\agent-sim\hosts"
+                  $grant = $acl.Access | Where-Object {
+                      $_.IdentityReference -like "*antivirus-agent" -and
+                      $_.FileSystemRights -match "Modify|FullControl|Write"
+                  }
+                  if (-not $grant) {
+                      Write-Error "FAIL: no Modify/Write ACL entry found for antivirus-agent on the throwaway hosts file"
+                      exit 1
+                  }
+                  Write-Host "OK: ACL grant present for antivirus-agent: $($grant.FileSystemRights)"
+
+            - name: Assert no unexpectedly broad grant exists
+              shell: pwsh
+              run: |
+                  $acl = Get-Acl "C:\agent-sim\hosts"
+                  $everyone = $acl.Access | Where-Object {
+                      $_.IdentityReference -like "*Everyone" -and $_.FileSystemRights -match "FullControl"
+                  }
+                  if ($everyone) {
+                      Write-Error "FAIL: unexpected broad Everyone:FullControl grant found on the throwaway hosts file"
+                      exit 1
+                  }
+                  Write-Host "OK: no unexpectedly broad grant present"
