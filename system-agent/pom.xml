@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.antivirus</groupId>
+    <artifactId>system-agent</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <packaging>jar</packaging>
+
+    <name>antivirus-system-agent</name>
+    <description>
+        Privileged, network-isolated companion process for the Antivirus
+        web app. See docs/plans/h1-privilege-split-plan.md for the full
+        design. This is the only process that ever writes /etc/hosts or
+        /etc/dnsmasq.d and invokes systemctl; it polls the blocked_domains
+        table over plain JDBC and has no HTTP listener of its own.
+
+        Deliberately NOT a module of the root project's Maven reactor and
+        NOT a Spring Boot application. The whole point of splitting this
+        out is a smaller, independently auditable dependency graph running
+        with real OS privileges, pulling in Spring/Hibernate/the web app's
+        own dependency tree here would defeat that. Build and run this
+        independently: `cd system-agent &amp;&amp; mvn package`, then
+        `java -jar target/system-agent.jar`.
+    </description>
+
+    <properties>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!--
+            H2 because that's what every environment we've actually
+            verified this project against (dev, local) runs today. Add or
+            swap in org.postgresql:postgresql when a real production
+            Postgres instance exists — docs/deployment/provision-agent-db-role.sql
+            already targets Postgres for the DB-role side of that switch.
+        -->
+        <h2.version>2.4.240</h2.version>
+        <junit.version>5.11.3</junit.version>
+        <mockito.version>5.14.2</mockito.version>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <version>${h2.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>${mockito.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <finalName>system-agent</finalName>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.13.0</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.5.2</version>
+            </plugin>
+            <!--
+                Produces target/system-agent.jar as a runnable
+                jar-with-dependencies (just the H2 driver at runtime, so
+                this stays a single self-contained artifact for deployment
+                — see the systemd unit in the plan, ExecStart references
+                exactly this jar).
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-assembly-plugin</artifactId>
+                <version>3.7.1</version>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <mainClass>com.antivirus.agent.AgentMain</mainClass>
+                        </manifest>
+                    </archive>
+                    <descriptorRefs>
+                        <descriptorRef>jar-with-dependencies</descriptorRef>
+                    </descriptorRefs>
+                    <appendAssemblyId>false</appendAssemblyId>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>make-assembly</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>single</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>
