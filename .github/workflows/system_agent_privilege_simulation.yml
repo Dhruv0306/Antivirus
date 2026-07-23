@@ -155,8 +155,41 @@ jobs:
                   sudo cp /tmp/antivirus-agent.service /etc/systemd/system/antivirus-agent.service
                   sudo systemctl daemon-reload
                   sudo systemctl start antivirus-agent
-                  sleep 3
-                  sudo systemctl is-active antivirus-agent
+
+                  # Type=simple units transition to "active" essentially as
+                  # soon as the main process successfully starts, no
+                  # explicit readiness signal is required, but mount
+                  # namespace setup for ProtectSystem=strict/PrivateTmp/
+                  # ProtectHome plus JVM startup can still take a few
+                  # seconds, more under CI load than on a quiet machine. A
+                  # fixed `sleep 3` isn't a reliable margin: poll instead,
+                  # fail fast if the unit reaches "failed" (no point
+                  # waiting out the rest of the timeout for something
+                  # that's already dead), and dump full diagnostics before
+                  # failing so a stuck-but-not-failed unit is never opaque.
+                  ready=false
+                  for i in $(seq 1 20); do
+                      state=$(sudo systemctl is-active antivirus-agent || true)
+                      echo "poll $i: $state"
+                      if [ "$state" = "active" ]; then
+                          ready=true
+                          break
+                      fi
+                      if [ "$state" = "failed" ]; then
+                          break
+                      fi
+                      sleep 1
+                  done
+
+                  if [ "$ready" != "true" ]; then
+                      echo "FAIL: antivirus-agent did not reach 'active' within the timeout (last state: $state)"
+                      echo "--- systemctl status ---"
+                      sudo systemctl status antivirus-agent --no-pager -l || true
+                      echo "--- journalctl ---"
+                      sudo journalctl -u antivirus-agent --no-pager || true
+                      exit 1
+                  fi
+
                   sudo journalctl -u antivirus-agent --no-pager | grep -q "system-agent starting"
                   echo "OK: service started under systemd as the unprivileged antivirus-agent user, sandboxed by ProtectSystem/PrivateTmp/PrivateNetwork/NoNewPrivileges"
 
