@@ -1,0 +1,16 @@
+# antivirus-agent-sudoers
+#
+# Grants the agent user exactly one privileged command: reloading
+# dnsmasq. No wildcards, no other commands. If this file's grant is ever
+# compromised (i.e. the agent host itself is compromised), the entire
+# blast radius on the OS side is "can reload one systemd unit", nothing
+# else. See docs/plans/h1-privilege-split-plan.md section 5.
+#
+# INSTALL:
+#   sudo cp antivirus-agent-sudoers /etc/sudoers.d/antivirus-agent
+#   sudo chmod 440 /etc/sudoers.d/antivirus-agent
+#   sudo visudo -c -f /etc/sudoers.d/antivirus-agent
+#
+# The visudo -c check above is not optional: a malformed file in
+# /etc/sudoers.d/ can break sudo entirely for the whole system.
+antivirus-agent ALL=(root) NOPASSWD: /usr/bin/systemctl reload dnsmasq
