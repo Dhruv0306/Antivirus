@@ -50,7 +50,16 @@ PrivateNetwork=yes
 # back to root by mistake, these settings constrain what the process can
 # touch on disk.
 ProtectSystem=strict
-ReadWritePaths=/etc/hosts /etc/dnsmasq.d
+# -/etc/dnsmasq.d (leading "-"): systemd's soft-path syntax, skip this
+# entry silently if the path doesn't exist rather than failing mount
+# namespace setup outright. DNS blocking defaults to disabled
+# (app.domain-blocking.dns.enabled=false in the main app), so dnsmasq may
+# genuinely not be installed on a given host at all. Without the "-",
+# this unit would crash-loop (status=226/NAMESPACE) on any host that
+# hasn't set up dnsmasq, even when nothing here actually needs it.
+# /etc/hosts has no such prefix: it's a standard file guaranteed to exist
+# on any Linux system, so it staying a hard requirement is correct.
+ReadWritePaths=/etc/hosts -/etc/dnsmasq.d
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectHome=yes

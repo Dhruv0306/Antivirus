@@ -134,7 +134,7 @@ jobs:
                       /tmp/antivirus-agent.service
                   # Production doesn't need this, /opt/agent-sim only
                   # exists for this simulation run.
-                  sed -i 's#ReadWritePaths=/etc/hosts /etc/dnsmasq.d#ReadWritePaths=/etc/hosts /etc/dnsmasq.d /opt/agent-sim#' \
+                  sed -i 's#ReadWritePaths=/etc/hosts -/etc/dnsmasq.d#ReadWritePaths=/etc/hosts -/etc/dnsmasq.d /opt/agent-sim#' \
                       /tmp/antivirus-agent.service
                   # systemd-analyze verify exits 0 even when it finds
                   # problems, e.g. "Unknown key name X, ignoring", it only
