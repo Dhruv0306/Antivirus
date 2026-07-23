@@ -98,7 +98,15 @@ jobs:
               run: |
                   sudo cp ./system-agent/deploy/linux/antivirus-agent-sudoers /etc/sudoers.d/antivirus-agent
                   sudo chmod 440 /etc/sudoers.d/antivirus-agent
-                  sudo visudo -c
+                  # -f validates only the file we just installed. A bare
+                  # `visudo -c` validates every file under /etc/sudoers.d/,
+                  # including ones we don't own, GitHub's own runner image
+                  # ships /etc/sudoers.d/runner (granting the "runner" user
+                  # its own passwordless sudo) with permissions visudo
+                  # itself flags as wrong, unrelated to anything this PR
+                  # touches, but enough to fail a system-wide check every
+                  # single run regardless of whether our grant is correct.
+                  sudo visudo -c -f /etc/sudoers.d/antivirus-agent
                   sudo -u antivirus-agent sudo -n -l | grep -q "systemctl reload dnsmasq"
                   echo "OK: sudoers grant present and scoped to systemctl reload dnsmasq"
                   if sudo -u antivirus-agent sudo -n whoami >/dev/null 2>&1; then
