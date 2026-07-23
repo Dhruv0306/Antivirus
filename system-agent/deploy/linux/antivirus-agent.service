@@ -24,7 +24,12 @@ Type=simple
 User=antivirus-agent
 Group=antivirus-agent
 
-# Replace with the real deployed jar path.
+# Replace with the real deployed jar path. Also confirm /usr/bin/java on
+# the target host actually resolves to a Java 21+ runtime before deploying,
+# don't assume it, some systems have multiple JDKs installed with an older
+# one as the default (this exact assumption broke the CI simulation of
+# this unit: the runner's /usr/bin/java was Java 17, not the 21 the jar
+# was built with, UnsupportedClassVersionError). `java -version` first.
 ExecStart=/usr/bin/java -jar /opt/antivirus-agent/system-agent.jar
 
 Restart=on-failure

@@ -136,6 +136,21 @@ jobs:
                   # exists for this simulation run.
                   sed -i 's#ReadWritePaths=/etc/hosts -/etc/dnsmasq.d#ReadWritePaths=/etc/hosts -/etc/dnsmasq.d /opt/agent-sim#' \
                       /tmp/antivirus-agent.service
+                  # CI-only substitution: ExecStart hardcodes /usr/bin/java
+                  # (an absolute path, bypassing PATH entirely), which is
+                  # correct to assume in a real deployment but wrong here.
+                  # GitHub's runner images ship multiple pre-installed
+                  # JDKs, and /usr/bin/java is a symlink to the base
+                  # image's own default, independent of whatever
+                  # actions/setup-java configured via PATH for this job
+                  # (confirmed: the unmodified unit crash-looped with
+                  # UnsupportedClassVersionError, class file 65.0 vs a
+                  # runtime that only understood up to 61.0, Java 21 vs
+                  # 17). $JAVA_HOME is exported by setup-java for the rest
+                  # of this job and points at the exact JDK actually used
+                  # to build the jar.
+                  sed -i "s#ExecStart=/usr/bin/java#ExecStart=${JAVA_HOME}/bin/java#" \
+                      /tmp/antivirus-agent.service
                   # systemd-analyze verify exits 0 even when it finds
                   # problems, e.g. "Unknown key name X, ignoring", it only
                   # reports them as warnings on stderr, so a plain exit-code
