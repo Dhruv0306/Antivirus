@@ -190,7 +190,35 @@ jobs:
                       exit 1
                   fi
 
-                  sudo journalctl -u antivirus-agent --no-pager | grep -q "system-agent starting"
+                  # "active" (Type=simple) only means the process
+                  # successfully started, not that it's finished booting.
+                  # There's a real gap between systemd reporting active and
+                  # the JVM actually finishing startup and writing this
+                  # specific log line, journald then has to ingest it too.
+                  # A single unbuffered check right after the state-poll
+                  # loop assumes that gap is zero; it isn't (confirmed: the
+                  # previous run reached "active" at poll 6 and then failed
+                  # here with no further margin at all). Same fix as the
+                  # state check above: poll, don't assume, and dump
+                  # diagnostics instead of failing silently under `set -e`.
+                  found=false
+                  for i in $(seq 1 15); do
+                      if sudo journalctl -u antivirus-agent --no-pager 2>/dev/null | grep -q "system-agent starting"; then
+                          found=true
+                          break
+                      fi
+                      sleep 1
+                  done
+
+                  if [ "$found" != "true" ]; then
+                      echo "FAIL: 'system-agent starting' never appeared in the journal within the timeout"
+                      echo "--- systemctl status ---"
+                      sudo systemctl status antivirus-agent --no-pager -l || true
+                      echo "--- journalctl (full) ---"
+                      sudo journalctl -u antivirus-agent --no-pager || true
+                      exit 1
+                  fi
+
                   echo "OK: service started under systemd as the unprivileged antivirus-agent user, sandboxed by ProtectSystem/PrivateTmp/PrivateNetwork/NoNewPrivileges"
 
             - name: Cleanup
