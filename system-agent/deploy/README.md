@@ -13,6 +13,32 @@ not application code. It's validated instead by the CI simulation
 workflows described below, since neither of us can run systemd, `setfacl`,
 or `sudo` meaningfully on a Windows dev machine.
 
+## Running locally alongside the web app (no provisioning needed)
+
+For quick local testing, `system-agent/target/system-agent.jar` can just
+be run directly, no systemd, no ACLs, no sudo, none of the provisioning
+below is needed for this. Point it at the same database the web app's
+`local` profile uses:
+
+```powershell
+# Throwaway hosts file so no admin rights are needed either:
+"127.0.0.1 localhost" | Out-File -Encoding ascii D:\github\Antivirus\test-hosts.txt
+$env:HOSTS_FILE_PATH="D:\github\Antivirus\test-hosts.txt"
+$env:POLL_INTERVAL_SECONDS="5"
+java -jar system-agent\target\system-agent.jar
+```
+
+**If you're running the web app (`local` profile) at the same time**,
+which is the actual point of this, proving the two processes talk to each
+other through the database, both sides need `AUTO_SERVER=TRUE` on the H2
+URL. H2's embedded file mode otherwise locks the database exclusively to
+whichever process opens it first, the second one to connect gets
+`Database may be already in use ... file is locked`, not a real error,
+just H2 refusing concurrent access by default. `AgentConfig`'s own
+default `DB_URL` already includes this, and so does
+`application-local.properties`, so this works out of the box as long as
+neither side overrides `DB_URL` with a URL that drops the flag.
+
 ## Linux deployment order
 
 Run as root (or via `sudo`), in this order, each step depends on the
