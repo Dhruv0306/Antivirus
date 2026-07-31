@@ -58,4 +58,17 @@ class AgentConfigTest {
             assertEquals("/etc/hosts", path);
         }
     }
+
+    @Test
+    void defaultDbUrlShouldIncludeAutoServerSoTheWebAppAndAgentCanShareTheFileConcurrently() {
+        AgentConfig config = AgentConfig.fromProperties(new Properties());
+
+        // Without this, H2's embedded file mode locks the database
+        // exclusively to whichever process opens it first, breaking any
+        // attempt to run the web app and this agent against the same
+        // local file at the same time (see application-local.properties
+        // for the matching web-app-side setting).
+        assertTrue(config.getDbUrl().contains("AUTO_SERVER=TRUE"),
+                "default DB URL must allow concurrent access from another process");
+    }
 }

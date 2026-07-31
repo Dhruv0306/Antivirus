@@ -62,9 +62,14 @@ public final class AgentConfig {
     }
 
     public String getDbUrl() {
-        // Same default as the web app's dev/local profiles, so this works
-        // out of the box against the same H2 file local development uses.
-        return get("db.url", "DB_URL", "jdbc:h2:file:./data/antivirus_local;MODE=PostgreSQL");
+        // Same default as the web app's local profile (see
+        // application-local.properties), so this works out of the box
+        // against the same H2 file local development uses. AUTO_SERVER=TRUE
+        // is required on both sides: H2's embedded file mode otherwise
+        // locks the database exclusively to whichever process opened it
+        // first, and the whole point of local testing is running the web
+        // app and this agent against the same file at the same time.
+        return get("db.url", "DB_URL", "jdbc:h2:file:./data/antivirus_local;MODE=PostgreSQL;AUTO_SERVER=TRUE");
     }
 
     public String getDbUser() {
