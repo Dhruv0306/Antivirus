@@ -76,6 +76,16 @@ That last command failing is not a bug, it's the actual point: confirming
 the grant really is scoped to the one command in the sudoers file and
 nothing broader.
 
+**These commands only confirm what the agent has.** They don't confirm
+the web app doesn't have the same thing, that's a separate, equally
+important check:
+```bash
+sudo ./verify-web-app-has-no-privilege.sh <web-app-service-account>
+```
+See [`../../docs/plans/h1-rollout-runbook.md`](../../docs/plans/h1-rollout-runbook.md)
+step 5, this is the actual H1 completion criterion, not an optional
+extra.
+
 ## Windows (hosts-file grant only)
 
 ```powershell
