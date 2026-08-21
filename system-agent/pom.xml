@@ -40,6 +40,13 @@
         <h2.version>2.4.240</h2.version>
         <junit.version>5.11.3</junit.version>
         <mockito.version>5.14.2</mockito.version>
+        <!-- Matches the version actually resolved by the root project's
+             spring-boot-starter-flyway (see pom.xml there); pinned
+             explicitly here since this module has no Spring Boot parent
+             BOM to inherit it from. Test-scope only: the contract test
+             (DomainSyncContractTest) is the only thing that uses this,
+             production code still has no Flyway dependency at all. -->
+        <flyway.version>12.4.0</flyway.version>
     </properties>
 
     <dependencies>
@@ -53,6 +60,12 @@
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
             <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+            <version>${flyway.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
