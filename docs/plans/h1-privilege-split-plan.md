@@ -206,6 +206,13 @@ The current code already branches on OS (`DomainBlockingServiceImpl`'s `@Value` 
 
 Roughly: 1 day to instantiate the `system-agent` module skeleton and move the write logic over largely as-is; 1 to 2 days for the DB contract, migration, and web-app-side rewiring (`NetworkSecurityController`, repository, deleted classes, updated tests); 1 day for the systemd/ACL/sudoers provisioning and a staging run-through. Call it a multi-day to one-week effort for one person familiar with the codebase, not a multi-week rewrite, most of the actual file-writing logic already exists and is already reasonably well isolated in `DomainBlockingServiceImpl` and `DnsDomainBlockingService`, this plan is primarily about *where* that code runs and *what* can reach it, not rewriting the logic itself.
 
+> **This was an estimate, written before implementation.** Now that
+> sections 3–6 are merged, see
+> [`h1-effort-retrospective.md`](./h1-effort-retrospective.md) for the
+> actual record checked against real merge dates, including where the
+> estimate held and where proving things end-to-end for the first time
+> (not writing the code itself) turned out to be the real cost.
+
 ## 10. Diagrams
 
 Three diagrams support this plan, in Mermaid rather than raw SVG so they render natively in GitHub, GitLab, Obsidian, VS Code (with the Markdown Preview Mermaid extension), and most other markdown viewers without any XML/DTD validation issues.
