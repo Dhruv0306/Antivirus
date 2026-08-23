@@ -244,7 +244,7 @@ jobs:
                   # "the web app has none at all". Must pass clean since
                   # nothing in this job ever granted webapp-svc-sim
                   # anything.
-                  sudo ./system-agent/deploy/linux/verify-web-app-has-no-privilege.sh \
+                  sudo bash ./system-agent/deploy/linux/verify-web-app-has-no-privilege.sh \
                       webapp-svc-sim /opt/agent-sim/hosts antivirus-agent
 
             - name: Confirm the verification script actually catches a violation, not just a clean pass
@@ -254,7 +254,7 @@ jobs:
                   # webapp-svc-sim an ACL entry (the exact thing check 1
                   # exists to catch) and confirm the script now fails.
                   sudo setfacl -m u:webapp-svc-sim:rw /opt/agent-sim/hosts
-                  if sudo ./system-agent/deploy/linux/verify-web-app-has-no-privilege.sh \
+                  if sudo bash ./system-agent/deploy/linux/verify-web-app-has-no-privilege.sh \
                       webapp-svc-sim /opt/agent-sim/hosts antivirus-agent; then
                       echo "FAIL: verification script should have caught the deliberately-granted ACL entry"
                       exit 1
