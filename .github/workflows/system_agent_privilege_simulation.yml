@@ -236,6 +236,32 @@ jobs:
 
                   echo "OK: service started under systemd as the unprivileged antivirus-agent user, sandboxed by ProtectSystem/PrivateTmp/PrivateNetwork/NoNewPrivileges"
 
+            - name: Create a throwaway web app account and verify it has zero privilege
+              run: |
+                  sudo useradd --system --no-create-home --shell /usr/sbin/nologin webapp-svc-sim
+                  # This is the actual H1 completion criterion (section 8,
+                  # step 5): not just "the agent's grants are narrow" but
+                  # "the web app has none at all". Must pass clean since
+                  # nothing in this job ever granted webapp-svc-sim
+                  # anything.
+                  sudo bash ./system-agent/deploy/linux/verify-web-app-has-no-privilege.sh \
+                      webapp-svc-sim /opt/agent-sim/hosts antivirus-agent
+
+            - name: Confirm the verification script actually catches a violation, not just a clean pass
+              run: |
+                  # Prove the negative-verification script isn't just
+                  # trivially passing everything, deliberately grant
+                  # webapp-svc-sim an ACL entry (the exact thing check 1
+                  # exists to catch) and confirm the script now fails.
+                  sudo setfacl -m u:webapp-svc-sim:rw /opt/agent-sim/hosts
+                  if sudo bash ./system-agent/deploy/linux/verify-web-app-has-no-privilege.sh \
+                      webapp-svc-sim /opt/agent-sim/hosts antivirus-agent; then
+                      echo "FAIL: verification script should have caught the deliberately-granted ACL entry"
+                      exit 1
+                  fi
+                  echo "OK: verification script correctly failed against a deliberately-privileged account"
+                  sudo setfacl -x u:webapp-svc-sim /opt/agent-sim/hosts
+
             - name: Cleanup
               if: always()
               run: |
@@ -243,6 +269,7 @@ jobs:
                   sudo systemctl disable antivirus-agent || true
                   sudo rm -f /etc/systemd/system/antivirus-agent.service
                   sudo rm -f /etc/sudoers.d/antivirus-agent
+                  sudo userdel webapp-svc-sim || true
                   sudo systemctl daemon-reload || true
 
     # Windows equivalent, hosts-file ACL grant only. There is no
