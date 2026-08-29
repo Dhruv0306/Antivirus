@@ -215,18 +215,29 @@ Roughly: 1 day to instantiate the `system-agent` module skeleton and move the wr
 
 ## 10. Diagrams
 
-Three diagrams support this plan, in Mermaid rather than raw SVG so they render natively in GitHub, GitLab, Obsidian, VS Code (with the Markdown Preview Mermaid extension), and most other markdown viewers without any XML/DTD validation issues.
+Four diagrams support this plan (one more than the original three, see
+10.4). All four are updated here to reflect what's actually implemented
+and CI-proven as of sections 3–8 merging, not the original pre-implementation
+design. Every diagram below was validated with Mermaid's own parser
+before being committed here, not just written by eye.
 
 ### 10.1 Target architecture
 
-The two-process split at a glance: client traffic only ever reaches the unprivileged web app, which writes intent to the database; the privileged agent, with no network listener, is the only thing that ever touches system files.
+Updated from the original: adds the read-back path that section 6
+actually implemented, `NetworkSecurityController` reads `agent_status`
+back from the database for `/api/network-security/status`, a detail the
+original design diagram didn't have since that endpoint didn't exist yet
+when this was first drawn. Also notes the dnsmasq path is optional
+(section 8's soft-`ReadWritePaths` fix), not a hard requirement.
 
 ```mermaid
 flowchart TD
     A["Client traffic"] --> B["Web app<br/>Unprivileged process"]
-    B -->|"writes intent"| C[("Database<br/>blocked_domains")]
+    B -->|"writes intent"| C[("Database<br/>blocked_domains, agent_status")]
     C -->|"polls, read-only"| D["System agent<br/>Privileged, no listener"]
-    D --> E["System files<br/>hosts, dnsmasq, systemctl"]
+    D -->|"writes status"| C
+    C -.->|"reads status"| B
+    D --> E["System files<br/>hosts, dnsmasq (optional)"]
 
     classDef teal fill:#e0f2f1,stroke:#00796b,color:#00453b;
     classDef coral fill:#fde3e0,stroke:#c62828,color:#5c0f0f;
@@ -238,27 +249,42 @@ flowchart TD
 
 ### 10.2 End-to-end flow of blocking a domain
 
-What actually happens, in order, from the moment an admin clicks "block" to the moment `/etc/hosts` (or the dnsmasq config) reflects it.
+Updated: the original diagram showed a straight-line flow with no
+branching. The actual implementation (`DomainSyncTask`) diffs the active
+domain set against what it last applied and skips the write entirely if
+nothing changed, proven by `DomainSyncTaskTest`'s "second cycle with no
+change triggers zero reloads" case. Also adds the same read-back loop as
+10.1, since `/status` is what a caller actually sees reflected.
 
 ```mermaid
 flowchart TD
-    A["Admin blocks domain<br/>(web UI)"] --> B["Web app<br/>Validates & writes intent to DB"]
+    A["Admin blocks domain<br/>POST /api/network-security/block"] --> B["Web app<br/>Validates & writes intent to DB"]
     B --> C[("Database:<br/>blocked_domains")]
     C --> D["Agent polls<br/>(every 30s)"]
-    D --> E["System agent<br/>Writes hosts/dnsmasq, reloads"]
-    E --> F["agent_status<br/>heartbeat updated"]
+    D --> G{"Domain set changed<br/>since last cycle?"}
+    G -->|"no"| H["Skip write,<br/>heartbeat only"]
+    G -->|"yes"| E["System agent<br/>Writes hosts/dnsmasq, reloads"]
+    E --> F["agent_status updated<br/>(writable + heartbeat)"]
+    H --> F
+    F -.->|"read on next<br/>GET /status"| B
 
     classDef teal fill:#e0f2f1,stroke:#00796b,color:#00453b;
     classDef coral fill:#fde3e0,stroke:#c62828,color:#5c0f0f;
     classDef gray fill:#eceff1,stroke:#546e7a,color:#263238;
     class B teal
-    class D,E coral
+    class D,E,G,H coral
     class A,C,F gray
 ```
 
 ### 10.3 Privilege boundary by account
 
-This is the actual security payoff of the whole plan: exactly what each service account can touch. The web app account has zero OS-level filesystem or sudo grants. The dedicated agent account has exactly four, each scoped as narrowly as the operation allows.
+Updated: the dnsmasq grant is now labeled optional (matching 10.1's
+correction), and this diagram now shows the actual mechanism that proves
+the web app side, `verify-web-app-has-no-privilege.sh`
+(`system-agent/deploy/linux/`), built in section 8 and exercised in CI
+against both a genuinely clean account and three deliberately-broken
+cases. The original version of this diagram showed the *intended* boundary;
+this version shows the boundary as something checked, not just claimed.
 
 ```mermaid
 flowchart LR
@@ -267,15 +293,41 @@ flowchart LR
     end
     subgraph Agent["antivirus-agent account"]
         A1["ACL: /etc/hosts (rw)"]
-        A2["Group: dnsmasq conf (rw)"]
-        A3["Sudoers: dnsmasq reload only"]
+        A2["Group: dnsmasq conf<br/>(rw, optional)"]
+        A3["Sudoers: dnsmasq<br/>reload only"]
         A4["DB role: 2 tables only"]
     end
+    V["verify-web-app-has-no-privilege.sh<br/>CI-proven, not just designed"] -.->|confirms| WebApp
 
     classDef teal fill:#e0f2f1,stroke:#00796b,color:#00453b;
     classDef coral fill:#fde3e0,stroke:#c62828,color:#5c0f0f;
     classDef gray fill:#eceff1,stroke:#546e7a,color:#263238;
     class WebApp teal
     class Agent coral
-    class W1,A1,A2,A3,A4 gray
+    class W1,A1,A2,A3,A4,V gray
+```
+
+### 10.4 CI verification pipeline (new)
+
+Didn't exist in the original three, there was nothing to diagram yet,
+sections 5, 7, and 8 hadn't been built. This is the actual proof chain
+`system_agent_privilege_simulation.yml` runs on every change: real
+accounts and grants provisioned on a disposable VM, the real systemd unit
+started, enforcement and scope asserted, then the web-app-side check run
+both against a clean account (must pass) and a deliberately-broken one
+(must fail), the same "prove the pass path and the fail path, not just
+one" rigor applied throughout section 5's original CI work.
+
+```mermaid
+flowchart TD
+    A["CI: provision real accounts,<br/>ACLs, sudoers, systemd unit"] --> B["Start antivirus-agent.service<br/>for real, under systemd"]
+    B --> C["Assert enforcement:<br/>domain change reaches hosts file"]
+    C --> D["Assert scope:<br/>granted command works,<br/>arbitrary command refused"]
+    D --> E["Assert web app account:<br/>zero ACL, zero group, zero sudoers"]
+    E --> F["Deliberately violate,<br/>confirm the check catches it"]
+
+    classDef coral fill:#fde3e0,stroke:#c62828,color:#5c0f0f;
+    classDef gray fill:#eceff1,stroke:#546e7a,color:#263238;
+    class A,B,C,D coral
+    class E,F gray
 ```
