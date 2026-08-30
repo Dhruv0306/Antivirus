@@ -1,0 +1,82 @@
+name: Release
+on:
+    push:
+        tags:
+            - "v[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+    contents: write
+
+jobs:
+    release:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - name: Check for an existing release on this tag
+              id: existing
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  TAG: ${{ github.ref_name }}
+              run: |
+                  # gh release view exits non-zero if no release exists for the tag.
+                  # This is the "only on the first release of the tag" guard: if a
+                  # release is already published here (e.g. this workflow already
+                  # ran, or someone re-pushed the same tag), skip and do nothing
+                  # rather than overwrite it.
+                  if gh release view "$TAG" >/dev/null 2>&1; then
+                      echo "exists=true" >> "$GITHUB_OUTPUT"
+                  else
+                      echo "exists=false" >> "$GITHUB_OUTPUT"
+                  fi
+
+            - name: Set up JDK 21
+              if: steps.existing.outputs.exists == 'false'
+              uses: actions/setup-java@v4
+              with:
+                  distribution: "temurin"
+                  java-version: "21"
+                  cache: "maven"
+
+            - name: Build backend jar
+              if: steps.existing.outputs.exists == 'false'
+              run: mvn -B clean package -DskipTests
+
+            - name: Build system-agent jar
+              if: steps.existing.outputs.exists == 'false'
+              run: mvn -B -f system-agent/pom.xml clean package -DskipTests
+
+            - name: Extract CHANGELOG section for this version
+              if: steps.existing.outputs.exists == 'false'
+              env:
+                  TAG: ${{ github.ref_name }}
+              run: |
+                  # Strip the leading "v" (v1.0.0 -> 1.0.0) to match the
+                  # "## [1.0.0]" heading style used in CHANGELOG.md.
+                  VERSION="${TAG#v}"
+                  awk -v version="$VERSION" '
+                      BEGIN { found = 0 }
+                      $0 ~ "^## \\[" version "\\]" { found = 1; next }
+                      found && /^## \[/ { exit }
+                      found { print }
+                  ' CHANGELOG.md > release-notes.md
+
+                  if [ ! -s release-notes.md ]; then
+                      echo "No CHANGELOG.md section found for version $VERSION" >&2
+                      echo "Add a \"## [$VERSION]\" heading to CHANGELOG.md before tagging." >&2
+                      exit 1
+                  fi
+
+            - name: Create GitHub release
+              if: steps.existing.outputs.exists == 'false'
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  TAG: ${{ github.ref_name }}
+              run: |
+                  gh release create "$TAG" \
+                      --title "$TAG" \
+                      --notes-file release-notes.md \
+                      target/*.jar \
+                      system-agent/target/*.jar
