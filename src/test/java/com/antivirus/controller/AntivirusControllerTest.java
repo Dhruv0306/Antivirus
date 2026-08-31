@@ -107,7 +107,7 @@ class AntivirusControllerTest {
                 mockMvc.perform(multipart("/api/antivirus/scan/file")
                                 .file(file)
                                 .with(csrf()))
-                                .andExpect(status().is3xxRedirection());
+                                .andExpect(status().isUnauthorized());
         }
 
         // ── /history (ADMIN only) ────────────────────────────────────────
@@ -253,7 +253,7 @@ class AntivirusControllerTest {
         @Test
         void getDirectoryScanStatus_ShouldReturnForbiddenWithoutAuthentication() throws Exception {
                 mockMvc.perform(get("/api/antivirus/scan/directory/status/job-123"))
-                                .andExpect(status().is3xxRedirection());
+                                .andExpect(status().isUnauthorized());
         }
 
         @Test

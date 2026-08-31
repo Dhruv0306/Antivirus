@@ -128,8 +128,8 @@ class AuthControllerTest {
     }
 
     @Test
-    void me_ShouldRedirectToLoginWhenAnonymous() throws Exception {
+    void me_ShouldReturnUnauthorizedWhenAnonymous() throws Exception {
         mockMvc.perform(get("/api/auth/me"))
-                .andExpect(status().is3xxRedirection());
+                .andExpect(status().isUnauthorized());
     }
 }
