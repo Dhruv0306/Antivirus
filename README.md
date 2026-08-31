@@ -1,5 +1,10 @@
 # SecureGuard Antivirus
 
+[![Java CI](https://github.com/Dhruv0306/Antivirus/actions/workflows/build.yml/badge.svg)](https://github.com/Dhruv0306/Antivirus/actions/workflows/build.yml)
+[![Integration Tests](https://github.com/Dhruv0306/Antivirus/actions/workflows/integration-test.yml/badge.svg)](https://github.com/Dhruv0306/Antivirus/actions/workflows/integration-test.yml)
+[![Pressure Tests](https://github.com/Dhruv0306/Antivirus/actions/workflows/pressure-test.yml/badge.svg)](https://github.com/Dhruv0306/Antivirus/actions/workflows/pressure-test.yml)
+[![Release](https://img.shields.io/github/v/release/Dhruv0306/Antivirus)](https://github.com/Dhruv0306/Antivirus/releases)
+
 A full-stack antivirus application with real-time file scanning, quarantine management, and network protection. The backend is Spring Boot, the frontend is React, and privileged OS-level operations (hosts file writes, DNS blocking) run in a separate, narrowly-scoped `system-agent` process rather than inside the web-facing app.
 
 ## Overview
