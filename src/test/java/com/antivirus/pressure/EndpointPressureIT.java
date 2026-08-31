@@ -191,6 +191,13 @@ class EndpointPressureIT {
         String password = "PressureScannerPass123!";
         registerAndLogin(client, username, password);
 
+        // Fetch the CSRF token once, outside the concurrent loop. Fetching it
+        // per-task racily overwrites the shared cookie jar across threads and
+        // produces spurious CSRF failures that have nothing to do with the
+        // scan endpoint itself.
+        String csrfBody = fetchCsrfHeaderAndToken(client);
+        String[] csrf = csrfBody.split("\\|", 2);
+
         int concurrentScans = 20;
         ExecutorService pool = Executors.newFixedThreadPool(concurrentScans);
         AtomicInteger successCount = new AtomicInteger(0);
@@ -201,13 +208,11 @@ class EndpointPressureIT {
             final int index = i;
             tasks.add(() -> {
                 try {
-                    String csrfBody = fetchCsrfHeaderAndToken(client);
-                    String[] csrf = csrfBody.split("\\|", 2);
-
                     String boundary = "----PressureITBoundary" + UUID.randomUUID();
                     String content = "Concurrent pressure test file #" + index + "\n";
                     String multipartBody = "--" + boundary + "\r\n"
-                            + "Content-Disposition: form-data; name=\"file\"; filename=\"pressure-" + index + ".txt\"\r\n"
+                            + "Content-Disposition: form-data; name=\"file\"; filename=\"pressure-" + index
+                            + ".txt\"\r\n"
                             + "Content-Type: text/plain\r\n\r\n"
                             + content + "\r\n"
                             + "--" + boundary + "--\r\n";
