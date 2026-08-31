@@ -1,0 +1,42 @@
+name: Integration Tests
+on:
+    push:
+        branches: ["main"]
+    pull_request:
+        branches: ["main"]
+    workflow_dispatch:
+
+jobs:
+    integration-test:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Set up JDK 21
+              uses: actions/setup-java@v4
+              with:
+                  distribution: "temurin"
+                  java-version: "21"
+                  cache: "maven"
+
+            # Cache the Dependency-Check data directory to speed up the NVD update process
+            - name: Cache OWASP Dependency Check Data
+              uses: actions/cache@v4
+              with:
+                  path: ~/.m2/repository/org/owasp/dependency-check-data
+                  key: ${{ runner.os }}-odc-${{ github.run_number }}
+                  restore-keys: |
+                      ${{ runner.os }}-odc-
+
+            - name: Run full end-to-end integration suite
+              env:
+                  NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+              run: mvn -B verify -Pintegration -DnvdApiKey="$NVD_API_KEY"
+
+            - name: Upload failsafe reports
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: integration-test-reports
+                  path: target/failsafe-reports/
+                  retention-days: 14

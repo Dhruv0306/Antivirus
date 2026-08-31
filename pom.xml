@@ -346,4 +346,72 @@
             </plugin>
         </plugins>
     </build>
+
+    <!--
+        Both profiles below use maven-failsafe-plugin bound to the
+        integration-test/verify phases, activated only when the profile is
+        explicitly selected. Test classes use an *IT.java suffix, which
+        surefire's default include pattern (**/*Test.java, **/Test*.java,
+        **/*Tests.java, **/*TestCase.java) does not match, so `mvn test`
+        never picks these up and stays fast. Only `mvn verify -Pintegration`
+        or `mvn verify -Ppressure` runs them.
+    -->
+    <profiles>
+        <profile>
+            <id>integration</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <configuration>
+                            <includes>
+                                <include>**/*IntegrationIT.java</include>
+                            </includes>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <goals>
+                                    <goal>integration-test</goal>
+                                    <goal>verify</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <profile>
+            <id>pressure</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <configuration>
+                            <includes>
+                                <include>**/*PressureIT.java</include>
+                            </includes>
+                            <!--
+                                Pressure tests hammer the app with concurrent
+                                requests; give them more room than the
+                                default 30s-ish surefire/failsafe forked-JVM
+                                assumptions.
+                            -->
+                            <forkedProcessTimeoutInSeconds>600</forkedProcessTimeoutInSeconds>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <goals>
+                                    <goal>integration-test</goal>
+                                    <goal>verify</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>
