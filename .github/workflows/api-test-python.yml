@@ -1,0 +1,66 @@
+name: API Integration Tests (Python)
+on:
+    push:
+        branches: ["main"]
+    pull_request:
+        branches: ["main"]
+    workflow_dispatch:
+
+jobs:
+    api-tests:
+        runs-on: ubuntu-latest
+        env:
+            ADMIN_USERNAME: api_test_admin
+            ADMIN_PASSWORD: ApiTestAdminPass123!
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Set up JDK 21
+              uses: actions/setup-java@v4
+              with:
+                  distribution: "temurin"
+                  java-version: "21"
+                  cache: "maven"
+
+            - name: Set up Python
+              uses: actions/setup-python@v5
+              with:
+                  python-version: "3.11"
+
+            - name: Install Python dependencies
+              run: pip install requests
+
+            - name: Build jar
+              run: mvn -B clean package -DskipTests
+
+            - name: Start the app (dev profile, background)
+              run: |
+                  nohup java -jar target/antivirus-*.jar --spring.profiles.active=dev > app.log 2>&1 &
+                  echo $! > app.pid
+
+            - name: Wait for the app to become ready
+              run: |
+                  for i in $(seq 1 30); do
+                      if curl -sf http://localhost:8080/api/auth/csrf > /dev/null; then
+                          echo "App is up"
+                          exit 0
+                      fi
+                      echo "Waiting for app... ($i/30)"
+                      sleep 2
+                  done
+                  echo "App did not become ready in time"
+                  cat app.log
+                  exit 1
+
+            - name: Run API integration tests
+              env:
+                  API_BASE_URL: http://localhost:8080
+              run: python3 tests/api_test.py
+
+            - name: Dump app log on failure
+              if: failure()
+              run: cat app.log
+
+            - name: Stop the app
+              if: always()
+              run: kill "$(cat app.pid)" 2>/dev/null || true
