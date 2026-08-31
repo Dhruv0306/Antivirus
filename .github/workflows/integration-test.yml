@@ -20,7 +20,9 @@ jobs:
                   cache: "maven"
 
             - name: Run full end-to-end integration suite
-              run: mvn -B verify -Pintegration
+              env:
+                  NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+              run: mvn -B verify -Pintegration -DnvdApiKey="$NVD_API_KEY"
 
             - name: Upload failsafe reports
               if: always()
