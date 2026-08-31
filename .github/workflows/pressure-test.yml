@@ -1,0 +1,40 @@
+name: Pressure Tests
+on:
+    schedule:
+        # 03:00 UTC daily. Off peak hours, keeps a consistent 24h cadence
+        # without piling onto whatever time the workflow was first merged.
+        - cron: "0 3 * * *"
+    workflow_dispatch:
+
+jobs:
+    pressure-test:
+        runs-on: ubuntu-latest
+        # Concurrent load generation plus the app's own startup and DB work
+        # under that load can run well past the default 6h GitHub Actions
+        # ceiling on a slow runner; this is a generous but bounded cap.
+        timeout-minutes: 30
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Set up JDK 21
+              uses: actions/setup-java@v4
+              with:
+                  distribution: "temurin"
+                  java-version: "21"
+                  cache: "maven"
+
+            - name: Run pressure/load suite
+              run: mvn -B verify -Ppressure
+
+            - name: Upload failsafe reports
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: pressure-test-reports
+                  path: target/failsafe-reports/
+                  retention-days: 14
+
+            - name: Notify on failure
+              if: failure()
+              run: |
+                  echo "::error::Pressure suite failed on schedule. See the failsafe-reports artifact and the job log above for which threshold broke (error rate, latency, or the auth rate limiter not engaging)."
