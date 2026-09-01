@@ -76,7 +76,9 @@ def fetch_csrf(session):
     unauthenticated on purpose, it's how the frontend bootstraps CSRF before
     any state-changing request."""
     resp = session.get(f"{BASE_URL}/api/auth/csrf")
-    assert resp.status_code == 200, f"CSRF bootstrap failed: {resp.status_code} {resp.text}"
+    assert (
+        resp.status_code == 200
+    ), f"CSRF bootstrap failed: {resp.status_code} {resp.text}"
     body = resp.json()
     return body["headerName"], body["token"]
 
@@ -85,7 +87,7 @@ def register(session, user):
     header_name, token = fetch_csrf(session)
     return session.post(
         f"{BASE_URL}/api/auth/register",
-        json=user,
+        json={**user, "confirmPassword": user["password"]},
         headers={header_name: token},
     )
 
@@ -107,26 +109,38 @@ def test_auth_flow():
     user = generate_random_user()
 
     reg_resp = register(session, user)
-    assert reg_resp.status_code == 201, f"Expected 201, got {reg_resp.status_code}. Response: {reg_resp.text}"
+    assert (
+        reg_resp.status_code == 201
+    ), f"Expected 201, got {reg_resp.status_code}. Response: {reg_resp.text}"
     assert reg_resp.json().get("success") is True, f"Registration body: {reg_resp.text}"
 
     login_resp = login(session, user["username"], user["password"])
-    assert login_resp.status_code == 200, f"Expected 200, got {login_resp.status_code}. Response: {login_resp.text}"
+    assert (
+        login_resp.status_code == 200
+    ), f"Expected 200, got {login_resp.status_code}. Response: {login_resp.text}"
 
     me_resp = session.get(f"{BASE_URL}/api/auth/me")
     assert me_resp.status_code == 200, f"Expected 200, got {me_resp.status_code}"
     me_body = me_resp.json()
-    assert me_body.get("username") == user["username"], f"/me returned wrong user: {me_body}"
-    assert me_body.get("role") == "USER", f"Newly registered account should be USER, got: {me_body}"
+    assert (
+        me_body.get("username") == user["username"]
+    ), f"/me returned wrong user: {me_body}"
+    assert (
+        me_body.get("role") == "USER"
+    ), f"Newly registered account should be USER, got: {me_body}"
 
     header_name, token = fetch_csrf(session)
-    logout_resp = session.post(f"{BASE_URL}/api/auth/logout", headers={header_name: token})
-    assert logout_resp.status_code == 200, f"Expected 200, got {logout_resp.status_code}"
+    logout_resp = session.post(
+        f"{BASE_URL}/api/auth/logout", headers={header_name: token}
+    )
+    assert (
+        logout_resp.status_code == 200
+    ), f"Expected 200, got {logout_resp.status_code}"
 
     post_logout_me = session.get(f"{BASE_URL}/api/auth/me")
-    assert post_logout_me.status_code == 401, (
-        f"Expected 401 after logout, got {post_logout_me.status_code}"
-    )
+    assert (
+        post_logout_me.status_code == 401
+    ), f"Expected 401 after logout, got {post_logout_me.status_code}"
 
 
 def test_duplicate_registration_is_anti_enumeration():
@@ -137,11 +151,13 @@ def test_duplicate_registration_is_anti_enumeration():
     assert first.status_code == 201, f"First registration should succeed: {first.text}"
 
     second = register(session, user)
-    assert second.status_code == 409, f"Expected 409 for duplicate username, got {second.status_code}"
+    assert (
+        second.status_code == 409
+    ), f"Expected 409 for duplicate username, got {second.status_code}"
     message = second.json().get("message", "")
-    assert "not available" in message, (
-        f"Duplicate registration should return the generic anti-enumeration message, got: {message}"
-    )
+    assert (
+        "not available" in message
+    ), f"Duplicate registration should return the generic anti-enumeration message, got: {message}"
 
 
 def test_unauthenticated_requests_are_rejected():
@@ -150,7 +166,9 @@ def test_unauthenticated_requests_are_rejected():
     assert me_resp.status_code == 401, f"Expected 401, got {me_resp.status_code}"
 
     history_resp = session.get(f"{BASE_URL}/api/antivirus/history/me")
-    assert history_resp.status_code == 401, f"Expected 401, got {history_resp.status_code}"
+    assert (
+        history_resp.status_code == 401
+    ), f"Expected 401, got {history_resp.status_code}"
 
 
 # ----------------------------------------------------
@@ -163,22 +181,32 @@ def test_scan_file_and_read_own_history():
     login(session, user["username"], user["password"])
 
     header_name, token = fetch_csrf(session)
-    files = {"file": ("api-test.txt", b"A harmless API integration test file.\n", "text/plain")}
+    files = {
+        "file": (
+            "api-test.txt",
+            b"A harmless API integration test file.\n",
+            "text/plain",
+        )
+    }
     scan_resp = session.post(
         f"{BASE_URL}/api/antivirus/scan/file",
         files=files,
         headers={header_name: token},
     )
-    assert scan_resp.status_code == 200, f"Clean file scan should succeed: {scan_resp.status_code} {scan_resp.text}"
+    assert (
+        scan_resp.status_code == 200
+    ), f"Clean file scan should succeed: {scan_resp.status_code} {scan_resp.text}"
     scan_body = scan_resp.json()
-    assert scan_body.get("verdict") == "CLEAN", f"Expected CLEAN verdict, got: {scan_body}"
+    assert (
+        scan_body.get("verdict") == "CLEAN"
+    ), f"Expected CLEAN verdict, got: {scan_body}"
 
     history_resp = session.get(f"{BASE_URL}/api/antivirus/history/me?page=0&size=10")
     assert history_resp.status_code == 200
     history_body = history_resp.json()
-    assert history_body.get("totalElements", 0) >= 1, (
-        f"Own scan history should contain at least the scan just completed: {history_body}"
-    )
+    assert (
+        history_body.get("totalElements", 0) >= 1
+    ), f"Own scan history should contain at least the scan just completed: {history_body}"
 
 
 def test_eicar_file_is_detected():
@@ -194,12 +222,17 @@ def test_eicar_file_is_detected():
         files=files,
         headers={header_name: token},
     )
-    assert scan_resp.status_code == 200, f"EICAR scan request should succeed: {scan_resp.status_code} {scan_resp.text}"
+    assert (
+        scan_resp.status_code == 200
+    ), f"EICAR scan request should succeed: {scan_resp.status_code} {scan_resp.text}"
     scan_body = scan_resp.json()
-    assert scan_body.get("infected") is True, f"EICAR test file should be flagged infected: {scan_body}"
-    assert scan_body.get("verdict") in ("SUSPICIOUS", "MALICIOUS"), (
-        f"EICAR test file should not come back CLEAN: {scan_body}"
-    )
+    assert (
+        scan_body.get("infected") is True
+    ), f"EICAR test file should be flagged infected: {scan_body}"
+    assert scan_body.get("verdict") in (
+        "SUSPICIOUS",
+        "MALICIOUS",
+    ), f"EICAR test file should not come back CLEAN: {scan_body}"
 
 
 # ----------------------------------------------------
@@ -212,7 +245,9 @@ def test_user_cannot_reach_admin_history():
     login(session, user["username"], user["password"])
 
     resp = session.get(f"{BASE_URL}/api/antivirus/history?page=0&size=10")
-    assert resp.status_code == 403, f"USER role must be denied the admin-only /history endpoint, got {resp.status_code}"
+    assert (
+        resp.status_code == 403
+    ), f"USER role must be denied the admin-only /history endpoint, got {resp.status_code}"
 
 
 def test_admin_can_reach_admin_history():
@@ -224,10 +259,14 @@ def test_admin_can_reach_admin_history():
 
     session = requests.Session()
     login_resp = login(session, ADMIN_USERNAME, ADMIN_PASSWORD)
-    assert login_resp.status_code == 200, f"Seeded admin login should succeed: {login_resp.status_code} {login_resp.text}"
+    assert (
+        login_resp.status_code == 200
+    ), f"Seeded admin login should succeed: {login_resp.status_code} {login_resp.text}"
 
     resp = session.get(f"{BASE_URL}/api/antivirus/history?page=0&size=10")
-    assert resp.status_code == 200, f"Seeded ADMIN account should reach the global history endpoint: {resp.status_code}"
+    assert (
+        resp.status_code == 200
+    ), f"Seeded ADMIN account should reach the global history endpoint: {resp.status_code}"
 
 
 def test_user_cannot_quarantine_another_users_scan_result():
@@ -249,15 +288,22 @@ def test_user_cannot_quarantine_another_users_scan_result():
     assert scan_resp.status_code == 200
 
     if not ADMIN_PASSWORD:
-        raise AssertionError("ADMIN_PASSWORD not set; needed to look up the created scan result's ID.")
+        raise AssertionError(
+            "ADMIN_PASSWORD not set; needed to look up the created scan result's ID."
+        )
     admin_session = requests.Session()
     login(admin_session, ADMIN_USERNAME, ADMIN_PASSWORD)
-    admin_history = admin_session.get(f"{BASE_URL}/api/antivirus/history?page=0&size=50").json()
+    admin_history = admin_session.get(
+        f"{BASE_URL}/api/antivirus/history?page=0&size=50"
+    ).json()
     matching = [
-        r for r in admin_history.get("content", [])
+        r
+        for r in admin_history.get("content", [])
         if r.get("fileName") == "owner-file.txt"
     ]
-    assert matching, f"Could not find the owner's scan result in admin history: {admin_history}"
+    assert (
+        matching
+    ), f"Could not find the owner's scan result in admin history: {admin_history}"
     scan_result_id = matching[0]["id"]
 
     other_session = requests.Session()
@@ -285,13 +331,25 @@ if __name__ == "__main__":
     runner = TestRunner()
 
     runner.run_case("Auth Flow (register, login, me, logout)", test_auth_flow)
-    runner.run_case("Duplicate Registration Anti-Enumeration", test_duplicate_registration_is_anti_enumeration)
-    runner.run_case("Unauthenticated Requests Rejected", test_unauthenticated_requests_are_rejected)
-    runner.run_case("Scan Clean File and Read Own History", test_scan_file_and_read_own_history)
+    runner.run_case(
+        "Duplicate Registration Anti-Enumeration",
+        test_duplicate_registration_is_anti_enumeration,
+    )
+    runner.run_case(
+        "Unauthenticated Requests Rejected", test_unauthenticated_requests_are_rejected
+    )
+    runner.run_case(
+        "Scan Clean File and Read Own History", test_scan_file_and_read_own_history
+    )
     runner.run_case("EICAR File Is Detected", test_eicar_file_is_detected)
-    runner.run_case("USER Cannot Reach Admin History", test_user_cannot_reach_admin_history)
+    runner.run_case(
+        "USER Cannot Reach Admin History", test_user_cannot_reach_admin_history
+    )
     runner.run_case("ADMIN Can Reach Admin History", test_admin_can_reach_admin_history)
-    runner.run_case("USER Cannot Quarantine Another User's Scan", test_user_cannot_quarantine_another_users_scan_result)
+    runner.run_case(
+        "USER Cannot Quarantine Another User's Scan",
+        test_user_cannot_quarantine_another_users_scan_result,
+    )
 
     success = runner.summary()
     sys.exit(0 if success else 1)
