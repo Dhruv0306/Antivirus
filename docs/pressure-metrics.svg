@@ -1,0 +1,7 @@
+<svg viewBox="0 0 640 120" width="640" height="120" xmlns="http://www.w3.org/2000/svg">
+<rect x="0" y="0" width="640" height="120" fill="#010409"/>
+<rect x="0" y="16" width="640" height="88" fill="#0d1117" stroke="#30363d" rx="6"/>
+<text x="16" y="39" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" font-weight="600" fill="#58a6ff">Pressure and accuracy metrics</text>
+<line x1="0" y1="50" x2="640" y2="50" stroke="#30363d"/>
+<text x="16" y="76" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Not yet generated. Populated by the pressure-test workflow on its next scheduled run.</text>
+</svg>
