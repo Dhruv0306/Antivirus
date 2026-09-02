@@ -16,21 +16,23 @@
 
     <properties>
         <java.version>21</java.version>
+        <spring-framework.version>7.0.9</spring-framework.version>
+        <spring-security.version>7.1.1</spring-security.version>
         <tomcat.version>11.0.25</tomcat.version>
         <jackson.version>2.22.1</jackson.version>
         <log4j.version>2.26.1</log4j.version>
     </properties>
 
     <!--
-        Explicit overrides for two transitive dependency versions still
-        flagged by OWASP dependency-check after the Boot 4.1.0 bump (Tomcat,
-        Jackson). A third flagged CVE, angus-activation CVE-2025-7962, has no
-        real fix at this artifact, see owasp-suppressions.xml for why it is
-        suppressed instead of version-bumped. These overrides are pulled in
-        transitively by Boot's own BOM, not declared directly below, so
-        bumping Boot alone doesn't move them. Remove each override once a
-        future Spring Boot release pins a version at or above these on its
-        own (check with `mvn dependency:tree` or the dependency-check report).
+        Explicit overrides for transitive dependency versions still flagged by
+        OWASP dependency-check after the Boot 4.1.0 bump. Spring Framework and
+        Spring Security use Boot's documented BOM property override mechanism
+        above; Tomcat, Jackson, and Log4j are overridden in dependencyManagement
+        below. A flagged angus-activation CVE has no real fix at this artifact,
+        see owasp-suppressions.xml for why it is suppressed instead of
+        version-bumped. Remove each override once a future Spring Boot release
+        pins a version at or above these on its own (check with
+        `mvn dependency:tree` or the dependency-check report).
     -->
     <dependencyManagement>
         <dependencies>
