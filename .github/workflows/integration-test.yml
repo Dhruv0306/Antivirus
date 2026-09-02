@@ -40,3 +40,8 @@ jobs:
                   name: integration-test-reports
                   path: target/failsafe-reports/
                   retention-days: 14
+            
+            - name: Notify on failure
+              if: failure()
+              run: |
+                  echo "::error::Integration suite failed. See the failsafe-reports artifact and the job log above for which threshold broke (error rate, latency, or the auth rate limiter not engaging)."
