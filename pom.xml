@@ -394,14 +394,17 @@
                         <configuration>
                             <includes>
                                 <include>**/*PressureIT.java</include>
+                                <include>**/*AccuracyIT.java</include>
                             </includes>
                             <!--
                                 Pressure tests hammer the app with concurrent
-                                requests; give them more room than the
+                                requests, and ScanAccuracyIT scans a 1000+
+                                file synthetic corpus through the real
+                                endpoint; give them more room than the
                                 default 30s-ish surefire/failsafe forked-JVM
                                 assumptions.
                             -->
-                            <forkedProcessTimeoutInSeconds>600</forkedProcessTimeoutInSeconds>
+                            <forkedProcessTimeoutInSeconds>1800</forkedProcessTimeoutInSeconds>
                         </configuration>
                         <executions>
                             <execution>
