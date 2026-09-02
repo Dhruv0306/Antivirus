@@ -138,9 +138,17 @@ mvn verify -Pintegration
 
 # Load/pressure tests
 mvn verify -Ppressure
+
+# Black-box API tests against a real running instance (separate from the
+# above: no embedded Spring context, just plain HTTP against whatever's
+# listening on API_BASE_URL)
+mvn clean package -DskipTests
+java -jar target/antivirus-*.jar --spring.profiles.active=dev &
+pip install requests
+API_BASE_URL=http://localhost:8080 python3 tests/api_test.py
 ```
 
-CI runs unit tests, security scans (Semgrep, SpotBugs/Find Security Bugs, OWASP Dependency-Check, TruffleHog), and the `system-agent` privilege simulation on every push and PR. Integration tests run on every push and PR to `main`. Pressure tests run daily on a schedule and on demand; see `.github/workflows/`.
+CI runs unit tests, security scans (Semgrep, SpotBugs/Find Security Bugs, OWASP Dependency-Check, TruffleHog), and the `system-agent` privilege simulation on every push and PR. Integration tests, pressure tests, and the Python API test suite all run on their own schedule and triggers; see `.github/workflows/`.
 
 ## Security
 

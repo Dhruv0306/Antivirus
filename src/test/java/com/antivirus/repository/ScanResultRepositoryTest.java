@@ -46,6 +46,15 @@ class ScanResultRepositoryTest {
     }
 
     @Test
+    void save_ShouldPersistDisplayFileName() {
+        ScanResult scanResult = newScanResult("/tmp/scan_123_random", "FILE", false, "alice");
+        scanResult.setFileName("owner-file.txt");
+        ScanResult persisted = entityManager.persistFlushFind(scanResult);
+
+        assertThat(persisted.getFileName()).isEqualTo("owner-file.txt");
+    }
+
+    @Test
     void findByScanType_ShouldFilterByScanType() {
         entityManager.persist(newScanResult("/tmp/file1.txt", "FILE", false, "alice"));
         entityManager.persist(newScanResult("/tmp/file2.txt", "FILE", false, "alice"));

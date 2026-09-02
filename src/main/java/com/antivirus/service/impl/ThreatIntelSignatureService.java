@@ -61,7 +61,7 @@ public class ThreatIntelSignatureService {
     // SHA-256 of the EICAR standard antivirus test string, the one hash
     // every AV product can safely ship. See
     // https://www.eicar.org/download-anti-malware-testfile/
-    static final String EICAR_SHA256 = "275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0";
+    static final String EICAR_SHA256 = "275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f";
 
     private static final Pattern SHA256_PATTERN = Pattern.compile("\\b[a-fA-F0-9]{64}\\b");
 
