@@ -20,7 +20,7 @@ public class ScanResult {
     @Column(nullable = false, length = 1024)
     private String filePath;
 
-    @Transient
+    @Column(name = "file_name", length = 255)
     private String fileName;
 
     @Column(name = "owner_username")

@@ -9,6 +9,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -103,6 +104,19 @@ class SecurityServiceImplTest {
         assertEquals("testuser", result.getOwnerUsername());
         verify(scanResultRepository, times(1)).save(any(ScanResult.class));
         verify(logService, times(1)).logScanResult(any(ScanResult.class));
+    }
+
+    @Test
+    void scanFile_WithDisplayFileNameShouldPersistDisplayName() throws IOException {
+        File testFile = tempDir.resolve("upload-temp-name").toFile();
+        Files.writeString(testFile.toPath(), "This is a safe file with ordinary text content.");
+
+        ScanResult result = securityService.scanFile(testFile, "owner-file.txt");
+
+        assertEquals("owner-file.txt", result.getFileName());
+        ArgumentCaptor<ScanResult> captor = ArgumentCaptor.forClass(ScanResult.class);
+        verify(scanResultRepository).save(captor.capture());
+        assertEquals("owner-file.txt", captor.getValue().getFileName());
     }
 
     // ── scanFile: known-hash match ──────────────────────────────────

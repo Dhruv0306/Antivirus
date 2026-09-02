@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -65,14 +66,18 @@ class AntivirusControllerTest {
                 ScanResult cleanResult = new ScanResult();
                 cleanResult.setVerdict("CLEAN");
                 cleanResult.setInfected(false);
-                when(securityService.scanFile(any())).thenReturn(cleanResult);
+                cleanResult.setFileName("document.pdf");
+                when(securityService.scanFile(any(), eq("document.pdf"))).thenReturn(cleanResult);
 
                 mockMvc.perform(multipart("/api/antivirus/scan/file")
                                 .file(file)
                                 .with(csrf())
                                 .with(user("testuser").roles("USER")))
                                 .andExpect(status().isOk())
-                                .andExpect(jsonPath("$.verdict").value("CLEAN"));
+                                .andExpect(jsonPath("$.verdict").value("CLEAN"))
+                                .andExpect(jsonPath("$.fileName").value("document.pdf"));
+
+                verify(securityService).scanFile(any(), eq("document.pdf"));
         }
 
         @Test

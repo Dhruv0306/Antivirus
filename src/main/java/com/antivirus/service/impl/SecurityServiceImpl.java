@@ -359,8 +359,16 @@ public class SecurityServiceImpl implements SecurityService {
 
     @Override
     public ScanResult scanFile(File file) {
+        return scanFile(file, null);
+    }
+
+    @Override
+    public ScanResult scanFile(File file, String displayFileName) {
         ScanResult result = new ScanResult();
         result.setFilePath(file.getAbsolutePath());
+        if (displayFileName != null && !displayFileName.isBlank()) {
+            result.setFileName(displayFileName);
+        }
         result.setOwnerUsername(resolveCurrentUsername());
         result.setInfected(false);
         result.setVerdict("CLEAN");

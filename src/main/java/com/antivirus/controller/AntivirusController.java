@@ -114,8 +114,7 @@ public class AntivirusController {
             logger.info("File uploaded successfully: {}", tempFile.getAbsolutePath());
 
             // Perform scan
-            ScanResult result = securityService.scanFile(tempFile);
-            result.setFileName(originalFilename);
+            ScanResult result = securityService.scanFile(tempFile, originalFilename);
             logger.info("File scan completed: {}", result);
             return ResponseEntity.ok(result);
 

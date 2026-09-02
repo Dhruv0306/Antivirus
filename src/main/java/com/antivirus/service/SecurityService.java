@@ -11,6 +11,8 @@ public interface SecurityService {
     // File System Security (X.800)
     ScanResult scanFile(File file);
 
+    ScanResult scanFile(File file, String displayFileName);
+
     List<ScanResult> scanDirectory(String directoryPath, boolean recursive);
 
     // Runs on a background thread; returns immediately once the scan has

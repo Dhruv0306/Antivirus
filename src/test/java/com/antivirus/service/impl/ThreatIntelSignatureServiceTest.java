@@ -13,8 +13,10 @@ import java.io.IOException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
 import java.util.List;
 import java.util.Set;
 
@@ -68,6 +70,16 @@ class ThreatIntelSignatureServiceTest {
         assertTrue(service.isKnownMalicious(ThreatIntelSignatureService.EICAR_SHA256));
         assertEquals(1, service.signatureCount());
         verifyNoInteractions(httpClient);
+    }
+
+    @Test
+    void eicarSignature_ShouldMatchStandardTestStringSha256() throws Exception {
+        String eicar = "X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*";
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+
+        String actual = bytesToHex(digest.digest(eicar.getBytes(StandardCharsets.US_ASCII)));
+
+        assertEquals(ThreatIntelSignatureService.EICAR_SHA256, actual);
     }
 
     @SuppressWarnings("unchecked")
@@ -162,6 +174,14 @@ class ThreatIntelSignatureServiceTest {
     }
 
     // ── helpers ──────────────────────────────────────────────────────
+
+    private static String bytesToHex(byte[] bytes) {
+        StringBuilder result = new StringBuilder();
+        for (byte b : bytes) {
+            result.append(String.format("%02x", b));
+        }
+        return result.toString();
+    }
 
     @SuppressWarnings("unchecked")
     private void stubFeedResponse(int statusCode, String body) throws Exception {
