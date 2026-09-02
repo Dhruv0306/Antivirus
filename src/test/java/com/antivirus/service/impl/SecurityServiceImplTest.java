@@ -119,6 +119,37 @@ class SecurityServiceImplTest {
         assertEquals("owner-file.txt", captor.getValue().getFileName());
     }
 
+    @Test
+    void scanFile_WithDisplayFileNameContainingPathSegmentsShouldPersistOnlyBasename() throws IOException {
+        File testFile = tempDir.resolve("upload-temp-name-2").toFile();
+        Files.writeString(testFile.toPath(), "This is a safe file with ordinary text content.");
+
+        ScanResult result = securityService.scanFile(testFile, "C:\\Users\\dhruv\\Desktop\\owner-file.txt");
+
+        assertEquals("owner-file.txt", result.getFileName());
+    }
+
+    @Test
+    void scanFile_WithOversizedDisplayFileNameShouldTruncateToColumnLength() throws IOException {
+        File testFile = tempDir.resolve("upload-temp-name-3").toFile();
+        Files.writeString(testFile.toPath(), "This is a safe file with ordinary text content.");
+
+        String oversizedName = "a".repeat(300) + ".txt";
+        ScanResult result = securityService.scanFile(testFile, oversizedName);
+
+        assertEquals(255, result.getFileName().length());
+    }
+
+    @Test
+    void scanFile_WithBlankDisplayFileNameShouldFallBackToDerivedName() throws IOException {
+        File testFile = tempDir.resolve("upload-temp-name-4").toFile();
+        Files.writeString(testFile.toPath(), "This is a safe file with ordinary text content.");
+
+        ScanResult result = securityService.scanFile(testFile, "   ");
+
+        assertEquals(testFile.getName(), result.getFileName());
+    }
+
     // ── scanFile: known-hash match ──────────────────────────────────
 
     @Test

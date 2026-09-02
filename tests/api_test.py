@@ -15,7 +15,8 @@ Usage:
     python3 tests/api_test.py
 
 Environment:
-    API_BASE_URL   Base URL of a running instance (default: http://localhost:8080)
+    API_BASE_URL         Base URL of a running instance (default: http://localhost:8080)
+    API_TIMEOUT_SECONDS  Per-request timeout in seconds (default: 10)
 
 The target instance must be running with the `dev` profile (or any profile
 with ADMIN_USERNAME / ADMIN_PASSWORD set and CORS validation relaxed), since
@@ -31,8 +32,24 @@ import requests
 BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8080")
 ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+API_TIMEOUT_SECONDS = float(os.environ.get("API_TIMEOUT_SECONDS", "10"))
 
 EICAR_STRING = b"X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*"
+
+
+class TimeoutSession(requests.Session):
+    """requests.Session that applies a default timeout to every call. Plain
+    requests.Session calls block forever by default, so a stalled server or
+    a hung connection would otherwise stall this script until the CI job's
+    own timeout kills it, hiding the real failure."""
+
+    def request(self, method, url, *args, **kwargs):
+        kwargs.setdefault("timeout", API_TIMEOUT_SECONDS)
+        return super().request(method, url, *args, **kwargs)
+
+
+def new_session():
+    return TimeoutSession()
 
 
 class TestRunner:
@@ -105,7 +122,7 @@ def login(session, username, password):
 # 1. Auth flow
 # ----------------------------------------------------
 def test_auth_flow():
-    session = requests.Session()
+    session = new_session()
     user = generate_random_user()
 
     reg_resp = register(session, user)
@@ -144,7 +161,7 @@ def test_auth_flow():
 
 
 def test_duplicate_registration_is_anti_enumeration():
-    session = requests.Session()
+    session = new_session()
     user = generate_random_user()
 
     first = register(session, user)
@@ -161,7 +178,7 @@ def test_duplicate_registration_is_anti_enumeration():
 
 
 def test_unauthenticated_requests_are_rejected():
-    session = requests.Session()
+    session = new_session()
     me_resp = session.get(f"{BASE_URL}/api/auth/me")
     assert me_resp.status_code == 401, f"Expected 401, got {me_resp.status_code}"
 
@@ -175,7 +192,7 @@ def test_unauthenticated_requests_are_rejected():
 # 2. Scanning and own history
 # ----------------------------------------------------
 def test_scan_file_and_read_own_history():
-    session = requests.Session()
+    session = new_session()
     user = generate_random_user()
     register(session, user)
     login(session, user["username"], user["password"])
@@ -210,7 +227,7 @@ def test_scan_file_and_read_own_history():
 
 
 def test_eicar_file_is_detected():
-    session = requests.Session()
+    session = new_session()
     user = generate_random_user()
     register(session, user)
     login(session, user["username"], user["password"])
@@ -239,7 +256,7 @@ def test_eicar_file_is_detected():
 # 3. Role-based access control
 # ----------------------------------------------------
 def test_user_cannot_reach_admin_history():
-    session = requests.Session()
+    session = new_session()
     user = generate_random_user()
     register(session, user)
     login(session, user["username"], user["password"])
@@ -257,7 +274,7 @@ def test_admin_can_reach_admin_history():
             "Set it to whatever ADMIN_PASSWORD the target instance was started with."
         )
 
-    session = requests.Session()
+    session = new_session()
     login_resp = login(session, ADMIN_USERNAME, ADMIN_PASSWORD)
     assert (
         login_resp.status_code == 200
@@ -273,7 +290,7 @@ def test_user_cannot_quarantine_another_users_scan_result():
     """Ownership enforcement is separate from role checks: even though
     /quarantine has no role restriction, a USER shouldn't be able to act on
     another user's scan result just by guessing its ID."""
-    owner_session = requests.Session()
+    owner_session = new_session()
     owner = generate_random_user()
     register(owner_session, owner)
     login(owner_session, owner["username"], owner["password"])
@@ -291,11 +308,15 @@ def test_user_cannot_quarantine_another_users_scan_result():
         raise AssertionError(
             "ADMIN_PASSWORD not set; needed to look up the created scan result's ID."
         )
-    admin_session = requests.Session()
+    admin_session = new_session()
     login(admin_session, ADMIN_USERNAME, ADMIN_PASSWORD)
-    admin_history = admin_session.get(
+    admin_history_resp = admin_session.get(
         f"{BASE_URL}/api/antivirus/history?page=0&size=50"
-    ).json()
+    )
+    assert (
+        admin_history_resp.status_code == 200
+    ), f"Admin history lookup failed: {admin_history_resp.status_code} {admin_history_resp.text}"
+    admin_history = admin_history_resp.json()
     matching = [
         r
         for r in admin_history.get("content", [])
@@ -306,7 +327,7 @@ def test_user_cannot_quarantine_another_users_scan_result():
     ), f"Could not find the owner's scan result in admin history: {admin_history}"
     scan_result_id = matching[0]["id"]
 
-    other_session = requests.Session()
+    other_session = new_session()
     other = generate_random_user()
     register(other_session, other)
     login(other_session, other["username"], other["password"])

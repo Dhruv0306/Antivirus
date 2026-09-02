@@ -144,6 +144,21 @@ class ThreatIntelSignatureServiceTest {
         assertTrue(lines.contains("818ed536a50e205f6ef036a109c847869ff78100e87ceae800f5c43d62bb26bd"));
     }
 
+    @Test
+    void refreshFromRemote_ShouldPreservePreviouslyCachedSignatures() throws Exception {
+        String cachedHash = "1111111111111111111111111111111111111111111111111111111111111111";
+        String fetchedHash = "2222222222222222222222222222222222222222222222222222222222222222";
+        Files.writeString(cacheFile, cachedHash + "\n", StandardCharsets.UTF_8);
+        stubFeedResponse(200, fetchedHash + "\n");
+
+        service.init();
+        service.refreshFromRemote();
+
+        List<String> lines = Files.readAllLines(cacheFile);
+        assertTrue(lines.contains(cachedHash));
+        assertTrue(lines.contains(fetchedHash));
+    }
+
     // ── extractSha256Signatures() ───────────────────────────────────
 
     @Test

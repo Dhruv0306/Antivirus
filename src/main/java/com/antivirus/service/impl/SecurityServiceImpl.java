@@ -362,12 +362,42 @@ public class SecurityServiceImpl implements SecurityService {
         return scanFile(file, null);
     }
 
+    /**
+     * Reduces a client-supplied display filename to a safe basename before it
+     * is persisted in scan_results.file_name (VARCHAR(255)). Strips any
+     * directory segments (both '/' and Windows-style '\\'), trims
+     * whitespace, and truncates to fit the column so an oversized or
+     * path-bearing filename can't cause a save failure or a misleading
+     * history entry.
+     *
+     * @return the normalized basename, or {@code null} if there is nothing
+     *         usable to persist
+     */
+    private static String normalizeDisplayFileName(String displayFileName) {
+        if (displayFileName == null) {
+            return null;
+        }
+
+        String normalized = displayFileName.replace('\\', '/').trim();
+        int lastSlash = normalized.lastIndexOf('/');
+        if (lastSlash >= 0) {
+            normalized = normalized.substring(lastSlash + 1).trim();
+        }
+
+        if (normalized.length() > 255) {
+            normalized = normalized.substring(0, 255);
+        }
+
+        return normalized.isBlank() ? null : normalized;
+    }
+
     @Override
     public ScanResult scanFile(File file, String displayFileName) {
         ScanResult result = new ScanResult();
         result.setFilePath(file.getAbsolutePath());
-        if (displayFileName != null && !displayFileName.isBlank()) {
-            result.setFileName(displayFileName);
+        String normalizedDisplayName = normalizeDisplayFileName(displayFileName);
+        if (normalizedDisplayName != null) {
+            result.setFileName(normalizedDisplayName);
         }
         result.setOwnerUsername(resolveCurrentUsername());
         result.setInfected(false);
