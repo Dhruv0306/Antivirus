@@ -399,6 +399,17 @@ public class SecurityServiceImpl implements SecurityService {
         if (normalizedDisplayName != null) {
             result.setFileName(normalizedDisplayName);
         }
+        // Upload path (AntivirusController) always scans through a randomly
+        // named temp file (File.createTempFile("scan_", "_" + UUID...)), so
+        // file.getName() is never the name a user or an attacker actually
+        // chose. Every name-based signal below (ransomware extension,
+        // extension masquerade, trojan filename keywords, zip detection)
+        // must be evaluated against the caller-supplied display name when
+        // one is available, or those signals are silently dead for every
+        // web-uploaded file. Falls back to file.getName() for callers that
+        // scan a real filesystem path directly (e.g. system/directory scans
+        // via scanFile(File)), where the physical name is the real one.
+        String effectiveFileName = normalizedDisplayName != null ? normalizedDisplayName : file.getName();
         result.setOwnerUsername(resolveCurrentUsername());
         result.setInfected(false);
         result.setVerdict("CLEAN");
@@ -448,7 +459,7 @@ public class SecurityServiceImpl implements SecurityService {
             // not a content-based threat verdict, so it is reported as
             // SUSPICIOUS (not scored against the malware engine) rather than
             // folded into the malware score.
-            if (isZipFile(file)) {
+            if (isZipFile(effectiveFileName)) {
                 ZipEvaluation zipEval = evaluateZipArchive(file);
                 if (zipEval.bomb()) {
                     applyVerdict(result, "SUSPICIOUS", "WARNING",
@@ -465,13 +476,13 @@ public class SecurityServiceImpl implements SecurityService {
 
             byte[] header = readFilePrefix(file, 8);
 
-            int masqueradeScore = checkExtensionMasquerade(file, header);
+            String extension = getFileExtension(effectiveFileName).toLowerCase();
+            int masqueradeScore = checkExtensionMasquerade(extension, header);
             if (masqueradeScore > 0) {
                 score += masqueradeScore;
                 signals.add("EXTENSION_MASQUERADE");
             }
 
-            String extension = getFileExtension(file).toLowerCase();
             if (RANSOMWARE_EXTENSIONS.contains(extension)) {
                 score += SCORE_RANSOMWARE_EXTENSION;
                 signals.add("RANSOMWARE_EXTENSION");
@@ -486,7 +497,7 @@ public class SecurityServiceImpl implements SecurityService {
                 signals.add("RANSOMWARE_DIRECTORY_BEHAVIOR");
             }
 
-            String fileName = file.getName().toLowerCase();
+            String fileName = effectiveFileName.toLowerCase();
             for (String sig : TROJAN_NAME_SIGNATURES) {
                 if (fileName.contains(sig)) {
                     score += SCORE_TROJAN_NAME;
@@ -503,7 +514,7 @@ public class SecurityServiceImpl implements SecurityService {
             score += rootkitScore.total();
             signals.addAll(rootkitScore.signals());
 
-            if (isZipFile(file)) {
+            if (isZipFile(effectiveFileName)) {
                 ZipEvaluation zipEval = evaluateZipArchive(file);
                 if (zipEval.suspiciousEntries() > 0) {
                     score += SCORE_ZIP_SUSPICIOUS_ENTRY;
@@ -662,7 +673,10 @@ public class SecurityServiceImpl implements SecurityService {
     }
 
     private String getFileExtension(File file) {
-        String name = file.getName();
+        return getFileExtension(file.getName());
+    }
+
+    private String getFileExtension(String name) {
         int lastIndexOf = name.lastIndexOf(".");
         if (lastIndexOf == -1) {
             return "";
@@ -677,9 +691,12 @@ public class SecurityServiceImpl implements SecurityService {
     // into scanFile().
 
     private boolean isZipFile(File file) {
-        return file.getName().toLowerCase().endsWith(".zip") ||
-                file.getName().toLowerCase().endsWith(".jar") ||
-                file.getName().toLowerCase().endsWith(".war");
+        return isZipFile(file.getName());
+    }
+
+    private boolean isZipFile(String name) {
+        String lower = name.toLowerCase();
+        return lower.endsWith(".zip") || lower.endsWith(".jar") || lower.endsWith(".war");
     }
 
     // Resource-safety result (entry count / decompression bomb) kept separate
@@ -760,8 +777,11 @@ public class SecurityServiceImpl implements SecurityService {
     // PE binary). A .exe or .dll legitimately having an MZ header is expected
     // and not scored at all.
     private int checkExtensionMasquerade(File file, byte[] header) {
-        String ext = getFileExtension(file).toLowerCase();
-        if (ext.isEmpty() || SUSPICIOUS_EXTENSIONS.contains(ext)) {
+        return checkExtensionMasquerade(getFileExtension(file).toLowerCase(), header);
+    }
+
+    private int checkExtensionMasquerade(String extensionLowerCase, byte[] header) {
+        if (extensionLowerCase.isEmpty() || SUSPICIOUS_EXTENSIONS.contains(extensionLowerCase)) {
             return 0;
         }
         return containsSuspiciousBytes(header) ? SCORE_EXTENSION_MASQUERADE : 0;
