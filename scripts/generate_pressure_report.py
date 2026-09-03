@@ -19,7 +19,7 @@ Usage:
 
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -193,7 +193,7 @@ def render_svg(generated_at, load_rows, accuracy_rows):
         f'<rect x="0" y="0" width="{width}" height="{total_height}" fill="#010409"/>\n'
         + "\n".join(blocks) + "\n"
         f'<text x="16" y="{footer_y}" font-family="Consolas, Menlo, monospace" font-size="10.5" '
-        f'fill="#6e7681">Generated {esc(generated_at)} (UTC)</text>\n'
+        f'fill="#6e7681">Generated {esc(generated_at)} (UTC + 5:30)</text>\n'
         "</svg>\n"
     )
     return svg
@@ -214,7 +214,9 @@ def main():
     accuracy_data = (accuracy_metrics or {}).get("accuracy") if accuracy_metrics else None
     load_rows, accuracy_rows = build_rows(load_metrics, accuracy_data)
 
-    generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    # Use IST timezone for generated_at timestamp to match the timezone used in the GitHub Actions workflow.
+    ist = timezone(timedelta(hours=5, minutes=30))
+    generated_at = datetime.now(ist).strftime("%Y-%m-%d %H:%M:%S")
 
     DOCS_DIR.mkdir(parents=True, exist_ok=True)
     MD_PATH.write_text(render_markdown(generated_at, load_rows, accuracy_rows), encoding="utf-8")
