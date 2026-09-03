@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.net.CookieManager;
@@ -50,10 +51,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * Each test also records its results into PressureMetricsCollector; see
  * flushMetrics() below and docs/pressure-metrics.md for where those end up.
+ *
+ * @DirtiesContext(AFTER_CLASS): authRateLimiterEngagesUnderBurstTraffic
+ * deliberately exhausts the in-memory auth rate limiter for "this IP".
+ * Without this annotation, Spring's test context cache would hand that
+ * same exhausted context (same rate limiter, same port) to the next
+ * *IT class with a matching @SpringBootTest/@ActiveProfiles signature
+ * (ScanAccuracyIT), and every request that class makes to register/login
+ * would fail before it ever got to scan anything. Evicting the context
+ * after this class finishes costs one extra Spring Boot startup for
+ * whichever *IT class runs next, in exchange for real isolation.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("pressuretest")
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class EndpointPressureIT {
 
     @LocalServerPort
