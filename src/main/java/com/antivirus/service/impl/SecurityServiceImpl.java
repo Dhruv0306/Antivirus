@@ -690,6 +690,7 @@ public class SecurityServiceImpl implements SecurityService {
     // paper but never ran. evaluateZipArchive() below is now wired directly
     // into scanFile().
 
+    @SuppressWarnings("unused")
     private boolean isZipFile(File file) {
         return isZipFile(file.getName());
     }
