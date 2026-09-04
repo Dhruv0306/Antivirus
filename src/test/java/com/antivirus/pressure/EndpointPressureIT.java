@@ -2,12 +2,14 @@ package com.antivirus.pressure;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.net.CookieManager;
@@ -27,6 +29,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -45,10 +48,24 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * pom.xml). Thresholds below are deliberately generous: the goal is to
  * catch the app falling over or a defense silently disappearing, not to
  * enforce a strict performance SLA in CI.
+ *
+ * Each test also records its results into PressureMetricsCollector; see
+ * flushMetrics() below and docs/pressure-metrics.md for where those end up.
+ *
+ * @DirtiesContext(AFTER_CLASS): authRateLimiterEngagesUnderBurstTraffic
+ * deliberately exhausts the in-memory auth rate limiter for "this IP".
+ * Without this annotation, Spring's test context cache would hand that
+ * same exhausted context (same rate limiter, same port) to the next
+ * *IT class with a matching @SpringBootTest/@ActiveProfiles signature
+ * (ScanAccuracyIT), and every request that class makes to register/login
+ * would fail before it ever got to scan anything. Evicting the context
+ * after this class finishes costs one extra Spring Boot startup for
+ * whichever *IT class runs next, in exchange for real isolation.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("pressuretest")
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class EndpointPressureIT {
 
     @LocalServerPort
@@ -109,6 +126,17 @@ class EndpointPressureIT {
 
         int totalRequests = concurrentClients * requestsPerClient;
         double errorRate = errorCount.get() / (double) totalRequests;
+        long incompleteTasks = futures.stream().filter(f -> !f.isDone()).count();
+
+        Map<String, Object> metrics = new LinkedHashMap<>();
+        metrics.put("concurrentClients", concurrentClients);
+        metrics.put("requestsPerClient", requestsPerClient);
+        metrics.put("totalRequests", totalRequests);
+        metrics.put("errorCount", errorCount.get());
+        metrics.put("errorRatePct", round2(errorRate * 100));
+        metrics.put("maxLatencyMs", maxLatencyMs.get());
+        metrics.put("incompleteTasks", incompleteTasks);
+        PressureMetricsCollector.record("concurrentTraffic", metrics);
 
         assertTrue(errorRate < 0.02,
                 "Error rate under " + concurrentClients + " concurrent clients was "
@@ -116,8 +144,6 @@ class EndpointPressureIT {
                         + " failed), expected under 2%");
         assertTrue(maxLatencyMs.get() < 10_000,
                 "Slowest single request took " + maxLatencyMs.get() + "ms under concurrent load, expected under 10s");
-
-        long incompleteTasks = futures.stream().filter(f -> !f.isDone()).count();
         assertTrue(incompleteTasks == 0,
                 incompleteTasks + " of " + concurrentClients + " client tasks did not finish within 120s");
     }
@@ -143,13 +169,7 @@ class EndpointPressureIT {
         AtomicInteger rateLimitedCount = new AtomicInteger(0);
 
         for (int i = 0; i < burstSize; i++) {
-            String csrfHeaderName;
-            String csrfToken;
-            HttpRequest csrfReq = HttpRequest.newBuilder(URI.create(baseUrl() + "/api/auth/csrf")).GET().build();
-            HttpResponse<String> csrfResp = client.send(csrfReq, HttpResponse.BodyHandlers.ofString());
-            JsonNode csrfNode = mapper.readTree(csrfResp.body());
-            csrfHeaderName = csrfNode.get("headerName").asText();
-            csrfToken = csrfNode.get("token").asText();
+            String[] csrf = PressureTestAuthSupport.fetchCsrfHeaderAndToken(client, baseUrl()).split("\\|", 2);
 
             String username = "pressure_burst_" + UUID.randomUUID().toString().substring(0, 8);
             String body = mapper.writeValueAsString(Map.of(
@@ -160,7 +180,7 @@ class EndpointPressureIT {
 
             HttpRequest registerReq = HttpRequest.newBuilder(URI.create(baseUrl() + "/api/auth/register"))
                     .header("Content-Type", "application/json")
-                    .header(csrfHeaderName, csrfToken)
+                    .header(csrf[0], csrf[1])
                     .POST(BodyPublishers.ofString(body))
                     .build();
             HttpResponse<String> registerResp = client.send(registerReq, HttpResponse.BodyHandlers.ofString());
@@ -168,6 +188,11 @@ class EndpointPressureIT {
                 rateLimitedCount.incrementAndGet();
             }
         }
+
+        Map<String, Object> metrics = new LinkedHashMap<>();
+        metrics.put("burstSize", burstSize);
+        metrics.put("rateLimitedCount", rateLimitedCount.get());
+        PressureMetricsCollector.record("rateLimiter", metrics);
 
         assertTrue(rateLimitedCount.get() > 0,
                 "Sent " + burstSize + " rapid registrations from one client and got zero 429 responses. "
@@ -189,14 +214,13 @@ class EndpointPressureIT {
 
         String username = "pressure_scanner_" + UUID.randomUUID().toString().substring(0, 8);
         String password = "PressureScannerPass123!";
-        registerAndLogin(client, username, password);
+        PressureTestAuthSupport.registerAndLogin(client, baseUrl(), username, password);
 
         // Fetch the CSRF token once, outside the concurrent loop. Fetching it
         // per-task racily overwrites the shared cookie jar across threads and
         // produces spurious CSRF failures that have nothing to do with the
         // scan endpoint itself.
-        String csrfBody = fetchCsrfHeaderAndToken(client);
-        String[] csrf = csrfBody.split("\\|", 2);
+        String[] csrf = PressureTestAuthSupport.fetchCsrfHeaderAndToken(client, baseUrl()).split("\\|", 2);
 
         int concurrentScans = 20;
         ExecutorService pool = Executors.newFixedThreadPool(concurrentScans);
@@ -239,50 +263,43 @@ class EndpointPressureIT {
         pool.shutdown();
 
         double errorRate = errorCount.get() / (double) concurrentScans;
-        assertTrue(errorRate < 0.05,
-                "Error rate for " + concurrentScans + " concurrent scans from one authenticated user was "
-                        + (errorRate * 100) + "%, expected under 5%");
 
         // Every successful scan should be visible in this user's history.
         HttpRequest historyReq = HttpRequest.newBuilder(
                 URI.create(baseUrl() + "/api/antivirus/history/me?page=0&size=50")).GET().build();
         HttpResponse<String> historyResp = client.send(historyReq, HttpResponse.BodyHandlers.ofString());
         JsonNode historyBody = mapper.readTree(historyResp.body());
-        assertTrue(historyBody.get("totalElements").asInt() >= successCount.get(),
+        int totalInHistory = historyBody.get("totalElements").asInt();
+
+        Map<String, Object> metrics = new LinkedHashMap<>();
+        metrics.put("concurrentScans", concurrentScans);
+        metrics.put("successCount", successCount.get());
+        metrics.put("errorCount", errorCount.get());
+        metrics.put("errorRatePct", round2(errorRate * 100));
+        metrics.put("historyTotalElements", totalInHistory);
+        PressureMetricsCollector.record("concurrentScans", metrics);
+
+        assertTrue(errorRate < 0.05,
+                "Error rate for " + concurrentScans + " concurrent scans from one authenticated user was "
+                        + (errorRate * 100) + "%, expected under 5%");
+        assertTrue(totalInHistory >= successCount.get(),
                 "Expected at least " + successCount.get() + " scans in history after concurrent uploads, found "
-                        + historyBody.get("totalElements").asInt());
+                        + totalInHistory);
     }
 
-    private void registerAndLogin(HttpClient client, String username, String password) throws Exception {
-        String csrfBody = fetchCsrfHeaderAndToken(client);
-        String[] csrf = csrfBody.split("\\|", 2);
-        String registerBody = mapper.writeValueAsString(Map.of(
-                "username", username,
-                "email", username + "@example.com",
-                "password", password,
-                "confirmPassword", password));
-        HttpRequest registerReq = HttpRequest.newBuilder(URI.create(baseUrl() + "/api/auth/register"))
-                .header("Content-Type", "application/json")
-                .header(csrf[0], csrf[1])
-                .POST(BodyPublishers.ofString(registerBody))
-                .build();
-        client.send(registerReq, HttpResponse.BodyHandlers.ofString());
-
-        String loginCsrfBody = fetchCsrfHeaderAndToken(client);
-        String[] loginCsrf = loginCsrfBody.split("\\|", 2);
-        String form = "username=" + username + "&password=" + password;
-        HttpRequest loginReq = HttpRequest.newBuilder(URI.create(baseUrl() + "/api/auth/login"))
-                .header("Content-Type", "application/x-www-form-urlencoded")
-                .header(loginCsrf[0], loginCsrf[1])
-                .POST(BodyPublishers.ofString(form))
-                .build();
-        client.send(loginReq, HttpResponse.BodyHandlers.ofString());
+    /**
+     * Flushes whichever of the three tests above ran in this JVM fork to
+     * load-metrics.json. ScanAccuracyIT flushes its own accuracy-metrics.json
+     * independently; scripts/generate_pressure_report.py combines both
+     * after "mvn verify -Ppressure" finishes.
+     */
+    @AfterAll
+    static void flushMetrics() {
+        PressureMetricsCollector.flush("load-metrics.json",
+                "concurrentTraffic", "concurrentScans", "rateLimiter");
     }
 
-    private String fetchCsrfHeaderAndToken(HttpClient client) throws Exception {
-        HttpRequest req = HttpRequest.newBuilder(URI.create(baseUrl() + "/api/auth/csrf")).GET().build();
-        HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString());
-        JsonNode node = mapper.readTree(resp.body());
-        return node.get("headerName").asText() + "|" + node.get("token").asText();
+    private static double round2(double value) {
+        return Math.round(value * 100.0) / 100.0;
     }
 }

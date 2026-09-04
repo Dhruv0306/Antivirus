@@ -1,0 +1,72 @@
+<svg viewBox="0 0 640 808" width="640" height="808" xmlns="http://www.w3.org/2000/svg">
+<rect x="0" y="0" width="640" height="808" fill="#010409"/>
+<rect x="0" y="16" width="640" height="306" fill="#0d1117" stroke="#30363d" rx="6"/>
+<text x="16" y="39" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" font-weight="600" fill="#58a6ff">Load and concurrency</text>
+<line x1="0" y1="50" x2="640" y2="50" stroke="#30363d"/>
+<text x="16" y="68" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Concurrent unauthenticated clients</text>
+<text x="624" y="68" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">100</text>
+<rect x="0" y="76" width="640" height="26" fill="#161b22"/>
+<text x="16" y="94" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Requests per client</text>
+<text x="624" y="94" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">5</text>
+<text x="16" y="120" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Total requests</text>
+<text x="624" y="120" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">500</text>
+<rect x="0" y="128" width="640" height="26" fill="#161b22"/>
+<text x="16" y="146" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Error rate (unauthenticated burst)</text>
+<text x="624" y="146" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">0.00%</text>
+<text x="16" y="172" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Max latency under load</text>
+<text x="624" y="172" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">1402 ms</text>
+<rect x="0" y="180" width="640" height="26" fill="#161b22"/>
+<text x="16" y="198" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Concurrent authenticated scans</text>
+<text x="624" y="198" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">20</text>
+<text x="16" y="224" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Error rate (concurrent scans)</text>
+<text x="624" y="224" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">0.00%</text>
+<rect x="0" y="232" width="640" height="26" fill="#161b22"/>
+<text x="16" y="250" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Scan history entries after burst</text>
+<text x="624" y="250" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">20</text>
+<text x="16" y="276" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Rate-limiter burst size</text>
+<text x="624" y="276" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">30</text>
+<rect x="0" y="284" width="640" height="26" fill="#161b22"/>
+<text x="16" y="302" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Requests rejected (HTTP 429)</text>
+<text x="624" y="302" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">21</text>
+<rect x="0" y="338" width="640" height="436" fill="#0d1117" stroke="#30363d" rx="6"/>
+<text x="16" y="361" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" font-weight="600" fill="#58a6ff">Detection accuracy</text>
+<line x1="0" y1="372" x2="640" y2="372" stroke="#30363d"/>
+<text x="16" y="390" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Total synthetic files scanned</text>
+<text x="624" y="390" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">10000</text>
+<rect x="0" y="398" width="640" height="26" fill="#161b22"/>
+<text x="16" y="416" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Scan requests that errored</text>
+<text x="624" y="416" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">0</text>
+<text x="16" y="442" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">True positive</text>
+<text x="624" y="442" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">5100</text>
+<rect x="0" y="450" width="640" height="26" fill="#161b22"/>
+<text x="16" y="468" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">False positive</text>
+<text x="624" y="468" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">0</text>
+<text x="16" y="494" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">True negative</text>
+<text x="624" y="494" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">4900</text>
+<rect x="0" y="502" width="640" height="26" fill="#161b22"/>
+<text x="16" y="520" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">False negative</text>
+<text x="624" y="520" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">0</text>
+<text x="16" y="546" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Accuracy</text>
+<text x="624" y="546" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">1.0000</text>
+<rect x="0" y="554" width="640" height="26" fill="#161b22"/>
+<text x="16" y="572" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Precision</text>
+<text x="624" y="572" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">1.0000</text>
+<text x="16" y="598" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Recall</text>
+<text x="624" y="598" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">1.0000</text>
+<rect x="0" y="606" width="640" height="26" fill="#161b22"/>
+<text x="16" y="624" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">F1 score</text>
+<text x="624" y="624" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">1.0000</text>
+<text x="16" y="650" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Verdict: MALICIOUS</text>
+<text x="624" y="650" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">2550</text>
+<rect x="0" y="658" width="640" height="26" fill="#161b22"/>
+<text x="16" y="676" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Verdict: SUSPICIOUS</text>
+<text x="624" y="676" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">2550</text>
+<text x="16" y="702" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Verdict: CLEAN</text>
+<text x="624" y="702" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">4900</text>
+<rect x="0" y="710" width="640" height="26" fill="#161b22"/>
+<text x="16" y="728" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Malicious-labeled detected as MALICIOUS</text>
+<text x="624" y="728" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">2550</text>
+<text x="16" y="754" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Malicious-labeled detected as SUSPICIOUS</text>
+<text x="624" y="754" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">2550</text>
+<text x="16" y="796" font-family="Consolas, Menlo, monospace" font-size="10.5" fill="#6e7681">Generated 2026-09-04 07:41:40 (UTC + 5:30)</text>
+</svg>
