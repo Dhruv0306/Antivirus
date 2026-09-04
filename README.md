@@ -136,7 +136,7 @@ cd frontend && npm test
 # Full end-to-end integration tests (real Spring context, real HTTP calls)
 mvn verify -Pintegration
 
-# Load/pressure tests, plus a 1000+ file synthetic detection-accuracy corpus
+# Load/pressure tests, plus a 10,000 file synthetic detection-accuracy corpus
 mvn verify -Ppressure
 
 # Black-box API tests against a real running instance (separate from the
@@ -155,7 +155,7 @@ CI runs unit tests, security scans (Semgrep, SpotBugs/Find Security Bugs, OWASP 
 `mvn verify -Ppressure` runs two suites under `src/test/java/com/antivirus/pressure/`:
 
 - `EndpointPressureIT`: concurrent load against the app (unauthenticated traffic burst, concurrent authenticated scans, and the auth rate limiter under a real burst)
-- `ScanAccuracyIT`: scans a 1000+ file synthetic, safely labeled corpus through the real scan endpoint and builds a confusion matrix (the corpus is generated in memory at test time, not sourced from any real malware collection)
+- `ScanAccuracyIT`: scans a 10,000 file synthetic, safely labeled corpus through the real scan endpoint and builds a confusion matrix (the corpus is generated in memory at test time, not sourced from any real malware collection)
 
 On every scheduled or manually-dispatched run, CI regenerates and commits [`docs/pressure-metrics.md`](docs/pressure-metrics.md) with the full numbers, and the same data as an image below:
 

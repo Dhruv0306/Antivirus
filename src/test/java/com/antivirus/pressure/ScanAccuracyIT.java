@@ -61,11 +61,17 @@ class ScanAccuracyIT {
 
     private final ObjectMapper mapper = new ObjectMapper();
 
-    // Samples per malicious-labeled category. 6 categories x 90 = 540.
-    private static final int MALICIOUS_PER_CATEGORY = 90;
-    // Samples per benign-labeled category. 4 categories x 130 = 520.
-    private static final int BENIGN_PER_CATEGORY = 130;
-    private static final int CONCURRENCY = 16;
+    // Samples per malicious-labeled category. 6 categories x 850 = 5,100.
+    private static final int MALICIOUS_PER_CATEGORY = 850;
+    // Samples per benign-labeled category. 4 categories x 1,225 = 4,900.
+    private static final int BENIGN_PER_CATEGORY = 1225;
+    // Total corpus: 10,000 files. Bumped 10x from the original 1,060-file
+    // corpus once the filename-signal bug (see SecurityServiceImpl fix,
+    // "evaluate filename-based detection signals against the uploaded
+    // display name, not the temp file name") was confirmed and fixed;
+    // a larger corpus gives a tighter confidence interval on the accuracy
+    // percentage and stresses the scan endpoint harder under concurrency.
+    private static final int CONCURRENCY = 24;
 
     private String baseUrl() {
         return "http://localhost:" + port;
@@ -86,8 +92,8 @@ class ScanAccuracyIT {
         String[] csrf = PressureTestAuthSupport.fetchCsrfHeaderAndToken(client, baseUrl()).split("\\|", 2);
 
         List<LabeledSample> corpus = buildCorpus();
-        assertTrue(corpus.size() >= 1000,
-                "Expected a corpus of at least 1000 synthetic files, built " + corpus.size());
+        assertTrue(corpus.size() >= 10_000,
+                "Expected a corpus of at least 10,000 synthetic files, built " + corpus.size());
 
         ExecutorService pool = Executors.newFixedThreadPool(CONCURRENCY);
         AtomicInteger truePositive = new AtomicInteger(0);
@@ -134,7 +140,7 @@ class ScanAccuracyIT {
             });
         }
 
-        pool.invokeAll(tasks, 20, TimeUnit.MINUTES);
+        pool.invokeAll(tasks, 30, TimeUnit.MINUTES);
         pool.shutdown();
 
         int tp = truePositive.get();

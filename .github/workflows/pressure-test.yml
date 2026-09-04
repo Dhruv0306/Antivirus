@@ -13,10 +13,10 @@ jobs:
     pressure-test:
         runs-on: ubuntu-latest
         # Concurrent load generation, the app's own startup/DB work under
-        # that load, and now a 1000+ file accuracy corpus scanned through
+        # that load, and now a 10,000 file accuracy corpus scanned through
         # the real endpoint can run well past the default 6h GitHub Actions
         # ceiling on a slow runner; this is a generous but bounded cap.
-        timeout-minutes: 45
+        timeout-minutes: 75
         steps:
             - uses: actions/checkout@v4
 

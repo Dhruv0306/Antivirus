@@ -398,13 +398,13 @@
                             </includes>
                             <!--
                                 Pressure tests hammer the app with concurrent
-                                requests, and ScanAccuracyIT scans a 1000+
+                                requests, and ScanAccuracyIT scans a 10,000
                                 file synthetic corpus through the real
                                 endpoint; give them more room than the
                                 default 30s-ish surefire/failsafe forked-JVM
                                 assumptions.
                             -->
-                            <forkedProcessTimeoutInSeconds>1800</forkedProcessTimeoutInSeconds>
+                            <forkedProcessTimeoutInSeconds>3000</forkedProcessTimeoutInSeconds>
                         </configuration>
                         <executions>
                             <execution>
