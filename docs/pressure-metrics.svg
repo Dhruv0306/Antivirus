@@ -14,7 +14,7 @@
 <text x="16" y="146" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Error rate (unauthenticated burst)</text>
 <text x="624" y="146" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">0.00%</text>
 <text x="16" y="172" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Max latency under load</text>
-<text x="624" y="172" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">1402 ms</text>
+<text x="624" y="172" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">314 ms</text>
 <rect x="0" y="180" width="640" height="26" fill="#161b22"/>
 <text x="16" y="198" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Concurrent authenticated scans</text>
 <text x="624" y="198" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">20</text>
@@ -68,5 +68,5 @@
 <text x="624" y="728" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">2550</text>
 <text x="16" y="754" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Malicious-labeled detected as SUSPICIOUS</text>
 <text x="624" y="754" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">2550</text>
-<text x="16" y="796" font-family="Consolas, Menlo, monospace" font-size="10.5" fill="#6e7681">Generated 2026-09-04 07:41:40 (UTC + 5:30)</text>
+<text x="16" y="796" font-family="Consolas, Menlo, monospace" font-size="10.5" fill="#6e7681">Generated 2026-09-04 13:05:57 (UTC + 5:30)</text>
 </svg>
