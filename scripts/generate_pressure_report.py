@@ -36,6 +36,33 @@ def load_json(path):
         return json.load(f)
 
 
+def build_evasion_rows(evasion_metrics):
+    """Returns (evasion_rows, false_positive_rows, evasion_detail, blind_spots)."""
+    evasion_rows = []
+    evasion_detail = []
+    blind_spots = []
+    evasion = (evasion_metrics or {}).get("evasion") if evasion_metrics else None
+    if evasion:
+        evasion_rows.append(("Techniques tried", str(evasion.get("totalTechniques", "-"))))
+        evasion_rows.append(("Expected to still be caught", str(evasion.get("expectedCaught", "-"))))
+        evasion_rows.append(("Actually caught", str(evasion.get("actuallyCaught", "-"))))
+        evasion_rows.append(("Evasion resistance rate", f"{evasion.get('evasionResistanceRate', 0):.4f}"))
+        evasion_rows.append(("Documented blind spots", str(evasion.get("knownBlindSpotCount", "-"))))
+        for row in evasion.get("results", []):
+            evasion_detail.append((row.get("technique", "-"), row.get("expectCaught"), row.get("verdict", "-")))
+            if not row.get("expectCaught") and not row.get("caught"):
+                blind_spots.append(row.get("technique", "-"))
+
+    false_positive_rows = []
+    fp = (evasion_metrics or {}).get("falsePositive") if evasion_metrics else None
+    if fp:
+        false_positive_rows.append(("Legitimate scenarios tried", str(fp.get("totalScenarios", "-"))))
+        false_positive_rows.append(("Flagged MALICIOUS", str(fp.get("falsePositiveCount", "-"))))
+        false_positive_rows.append(("False positive rate", f"{fp.get('falsePositiveRate', 0):.4f}"))
+
+    return evasion_rows, false_positive_rows, evasion_detail, blind_spots
+
+
 def pct(value):
     return f"{value:.2f}%"
 
@@ -84,7 +111,8 @@ def build_rows(load_metrics, accuracy_metrics):
     return load_rows, accuracy_rows
 
 
-def render_markdown(generated_at, load_rows, accuracy_rows):
+def render_markdown(generated_at, load_rows, accuracy_rows, evasion_rows, false_positive_rows,
+                     evasion_detail, blind_spots):
     lines = [
         "# Pressure and accuracy metrics",
         "",
@@ -126,6 +154,61 @@ def render_markdown(generated_at, load_rows, accuracy_rows):
         "signature, rootkit text pattern); benign-labeled samples contain none of those signals. This "
         "measures whether the engine's own designed-for signals still fire correctly, not real-world "
         "malware coverage.",
+        "",
+        "## Evasion resistance (adversarial synthetic corpus)",
+        "",
+        "| Metric | Value |",
+        "|---|---|",
+    ]
+    for label, value in evasion_rows:
+        lines.append(f"| {label} | {value} |")
+    if not evasion_rows:
+        lines.append("| _No evasion-metrics.json found_ | - |")
+
+    lines += [
+        "",
+        "**Note:** see `ScanEvasionIT.java` under `src/test/java/com/antivirus/pressure/`. This measures "
+        "how well the engine holds up against synthetic files engineered to exploit its own published "
+        "detection logic (keyword fragmentation, base64-hidden payload text, benign filenames wrapping "
+        "malicious-shaped content, an oversized file placing its trigger text past the 10MB pattern-scan "
+        "cap), not against any real malware sample. Techniques the engine's own logic already accounts for "
+        "(double-extension masquerade, ransomware-extension case variation) are asserted against; documented "
+        "blind spots are reported, not asserted, since hiding a known gap by asserting around it would defeat "
+        "the point of tracking it.",
+        "",
+    ]
+
+    if evasion_detail:
+        lines += ["| Technique | Expected caught | Actual verdict |", "|---|---|---|"]
+        for technique, expect_caught, verdict in evasion_detail:
+            lines.append(f"| {technique} | {'Yes' if expect_caught else 'Known blind spot'} | {verdict} |")
+        lines.append("")
+
+    if blind_spots:
+        lines += [
+            "**Currently open blind spots:** " + "; ".join(blind_spots) + ". "
+            "Tracked here deliberately rather than hidden by the test; each one is a candidate for a "
+            "future detection improvement.",
+            "",
+        ]
+
+    lines += [
+        "## False-positive resistance (legitimate content)",
+        "",
+        "| Metric | Value |",
+        "|---|---|",
+    ]
+    for label, value in false_positive_rows:
+        lines.append(f"| {label} | {value} |")
+    if not false_positive_rows:
+        lines.append("| _No falsePositive section in evasion-metrics.json_ | - |")
+
+    lines += [
+        "",
+        "**Note:** legitimate sysadmin scripts, backup-tool documentation, and developer notes that happen "
+        "to mention things like `Runtime.exec`, `chmod 777`, `eval(`, or plain sockets. A MALICIOUS verdict "
+        "here is treated as a hard failure; that is the failure mode that erodes user trust in a real "
+        "product fastest.",
         "",
     ]
     return "\n".join(lines)
@@ -171,7 +254,7 @@ def render_svg_table(title, rows, y_offset, width):
     return "\n".join(parts), height
 
 
-def render_svg(generated_at, load_rows, accuracy_rows):
+def render_svg(generated_at, load_rows, accuracy_rows, evasion_rows=None):
     width = 640
     y = 16
     blocks = []
@@ -183,6 +266,12 @@ def render_svg(generated_at, load_rows, accuracy_rows):
     accuracy_svg, accuracy_h = render_svg_table("Detection accuracy", accuracy_rows, y, width)
     blocks.append(accuracy_svg)
     y += accuracy_h + 8
+
+    if evasion_rows:
+        y += 8
+        evasion_svg, evasion_h = render_svg_table("Evasion resistance", evasion_rows, y, width)
+        blocks.append(evasion_svg)
+        y += evasion_h + 8
 
     footer_y = y + 14
     total_height = footer_y + 12
@@ -202,8 +291,9 @@ def render_svg(generated_at, load_rows, accuracy_rows):
 def main():
     load_metrics = load_json(METRICS_DIR / "load-metrics.json")
     accuracy_metrics = load_json(METRICS_DIR / "accuracy-metrics.json")
+    evasion_metrics = load_json(METRICS_DIR / "evasion-metrics.json")
 
-    if load_metrics is None and accuracy_metrics is None:
+    if load_metrics is None and accuracy_metrics is None and evasion_metrics is None:
         print(
             "No metrics JSON found under target/pressure-metrics/. "
             "Run \"mvn verify -Ppressure\" first.",
@@ -213,14 +303,18 @@ def main():
 
     accuracy_data = (accuracy_metrics or {}).get("accuracy") if accuracy_metrics else None
     load_rows, accuracy_rows = build_rows(load_metrics, accuracy_data)
+    evasion_rows, false_positive_rows, evasion_detail, blind_spots = build_evasion_rows(evasion_metrics)
 
     # Use IST timezone for generated_at timestamp to match the timezone used in the GitHub Actions workflow.
     ist = timezone(timedelta(hours=5, minutes=30))
     generated_at = datetime.now(ist).strftime("%Y-%m-%d %H:%M:%S")
 
     DOCS_DIR.mkdir(parents=True, exist_ok=True)
-    MD_PATH.write_text(render_markdown(generated_at, load_rows, accuracy_rows), encoding="utf-8")
-    SVG_PATH.write_text(render_svg(generated_at, load_rows, accuracy_rows), encoding="utf-8")
+    MD_PATH.write_text(
+        render_markdown(generated_at, load_rows, accuracy_rows, evasion_rows, false_positive_rows,
+                         evasion_detail, blind_spots),
+        encoding="utf-8")
+    SVG_PATH.write_text(render_svg(generated_at, load_rows, accuracy_rows, evasion_rows), encoding="utf-8")
 
     print(f"Wrote {MD_PATH.relative_to(REPO_ROOT)}")
     print(f"Wrote {SVG_PATH.relative_to(REPO_ROOT)}")
