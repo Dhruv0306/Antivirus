@@ -1,6 +1,6 @@
 # Pressure and accuracy metrics
 
-_Last generated: 2026-09-04 07:41:40 (UTC), by `.github/workflows/pressure-test.yml`._
+_Last generated: 2026-09-04 13:05:57 (UTC), by `.github/workflows/pressure-test.yml`._
 
 Regenerated automatically on every scheduled or manually-dispatched run of the pressure suite (`mvn verify -Ppressure`). See `EndpointPressureIT.java` and `ScanAccuracyIT.java` under `src/test/java/com/antivirus/pressure/` for what each number below actually measures, and `scripts/generate_pressure_report.py` for how this file and `pressure-metrics.svg` are rendered from the raw JSON in `target/pressure-metrics/`.
 
@@ -12,7 +12,7 @@ Regenerated automatically on every scheduled or manually-dispatched run of the p
 | Requests per client | 5 |
 | Total requests | 500 |
 | Error rate (unauthenticated burst) | 0.00% |
-| Max latency under load | 1402 ms |
+| Max latency under load | 314 ms |
 | Concurrent authenticated scans | 20 |
 | Error rate (concurrent scans) | 0.00% |
 | Scan history entries after burst | 20 |
