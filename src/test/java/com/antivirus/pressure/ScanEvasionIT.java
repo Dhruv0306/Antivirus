@@ -322,16 +322,19 @@ class ScanEvasionIT {
         // ── Cases the engine's OWN logic already accounts for: expectCaught = true.
         // These are regression guards on protections that already exist.
 
-        // Double extension / extension masquerade: a real MZ header behind a
-        // .pdf-looking name. checkExtensionMasquerade() looks at the actual
-        // header bytes, not just the claimed extension, specifically to
-        // catch this. This must stay caught.
+        // Extension masquerade: a real MZ header behind a claimed .pdf
+        // extension. checkExtensionMasquerade() only scores this when the
+        // extension is NOT already in SUSPICIOUS_EXTENSIONS (a plain,
+        // honestly-named .exe is deliberately never scored here, see the
+        // comment on containsSuspiciousBytes()), so this must use a single,
+        // non-executable extension to actually exercise the check. Must
+        // stay caught.
         byte[] mzHeader = new byte[]{0x4D, 0x5A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
         byte[] fakePdf = new byte[mzHeader.length + 32];
         System.arraycopy(mzHeader, 0, fakePdf, 0, mzHeader.length);
         cases.add(new EvasionCase(
-                "Double-extension masquerade: invoice.pdf.exe with a real MZ header",
-                "invoice.pdf.exe", fakePdf, true));
+                "Extension masquerade: invoice.pdf with a real MZ header inside",
+                "invoice.pdf", fakePdf, true));
 
         // Extension case variation: .LOCKED instead of .locked. getExtension()
         // is lowercased before the RANSOMWARE_EXTENSIONS.contains() check, so
@@ -347,13 +350,16 @@ class ScanEvasionIT {
 
         // Keyword fragmentation: break the literal token "bitcoin" so the
         // \bbitcoin\b pattern cannot match it, while the sentence still reads
-        // as a ransom demand to a human. The scoring engine is pure regex
-        // over literal text, so this is expected to evade today.
+        // as a ransom demand to a human. Deliberately avoids every OTHER
+        // literal RANSOMWARE_PATTERNS phrase too (no "your important files",
+        // no "ransom", no "btc wallet"), so this genuinely isolates the one
+        // technique it claims to test. The scoring engine is pure regex over
+        // literal text, so this is expected to evade today.
         cases.add(new EvasionCase(
                 "Keyword fragmentation: hyphenating 'bit-coin' to break the ransomware text pattern",
                 "payment_instructions.txt",
-                ("Your important files have been rendered inaccessible. Send funds to our "
-                        + "bit-coin wallet listed on the attached page to restore access.")
+                ("Access to your data has been restricted. Send funds to our bit-coin wallet "
+                        + "address listed on the attached page to restore access.")
                         .getBytes(StandardCharsets.UTF_8),
                 false));
 
@@ -396,6 +402,23 @@ class ScanEvasionIT {
         cases.add(new EvasionCase(
                 "Oversized-file evasion: ransom note placed just past the 10MB pattern-scan cap",
                 "large_export.txt", padded.toString().getBytes(StandardCharsets.UTF_8), false));
+
+        // Double-extension trick: "invoice.pdf.exe" relies on Windows'
+        // default "hide known file extensions" behaviour so a user sees
+        // "invoice.pdf" while it is really an .exe, a genuinely common
+        // real-world lure. getFileExtension() correctly parses the true
+        // last extension (.exe), but SUSPICIOUS_EXTENSIONS.contains(".exe")
+        // then makes checkExtensionMasquerade() deliberately skip scoring
+        // it (by design, see the comment above that method: an honestly
+        // extensioned .exe is never scored there). Nothing else in the
+        // engine currently penalizes an honestly-parsed suspicious
+        // extension on its own, so this specific social-engineering lure
+        // currently scores 0 end to end.
+        byte[] doubleExtPayload = new byte[mzHeader.length + 32];
+        System.arraycopy(mzHeader, 0, doubleExtPayload, 0, mzHeader.length);
+        cases.add(new EvasionCase(
+                "Double-extension lure: invoice.pdf.exe, a real MZ header behind Windows' hidden-extension trick",
+                "invoice.pdf.exe", doubleExtPayload, false));
 
         return cases;
     }
