@@ -82,6 +82,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * honest and a deliberately adversarial filename, confirming genuinely
  * legitimate software is never convicted outright regardless of what it's
  * named.
+ *
+ * Every case in buildEvasionCases() carries a citation, a MITRE ATT&CK
+ * technique ID where one cleanly applies (T1027 Obfuscated Files or
+ * Information, T1036 Masquerading and its file-type/naming sub-techniques,
+ * T1027.001 Binary Padding for the scan-size-cap bypass), or an explicit
+ * note where no clean ATT&CK mapping exists (the extension-case-variation
+ * check, which is a string-matching robustness guard, not a named attacker
+ * technique). This turns "why does this test case exist" into something a
+ * reviewer can verify against a real external source instead of trusting an
+ * inline comment, and the citation is threaded through into
+ * evasion-metrics.json and docs/pressure-metrics.md, not just left in the
+ * Java source.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("pressuretest")
@@ -106,8 +118,15 @@ class ScanEvasionIT {
      * this is a documented, currently-known blind spot: the file is
      * expected to come back CLEAN given how the engine works today, and
      * that result is recorded as-is, not asserted against.
+     *
+     * citation ties this case to a real, external, documented source, a
+     * MITRE ATT&CK technique ID where one cleanly applies, or a named
+     * source where it doesn't, rather than leaving "why does this test
+     * exist" resting only on an inline comment a reviewer has to trust.
+     * See https://attack.mitre.org/techniques/ for the ATT&CK references.
      */
-    private record EvasionCase(String description, String fileName, byte[] content, boolean expectCaught) {
+    private record EvasionCase(String description, String fileName, byte[] content, boolean expectCaught,
+                                String citation) {
     }
 
     /** Same shape, for the false-positive side: legitimate content that must not be over-flagged. */
@@ -152,6 +171,7 @@ class ScanEvasionIT {
             row.put("expectCaught", c.expectCaught());
             row.put("verdict", verdict);
             row.put("caught", flagged);
+            row.put("citation", c.citation());
             results.add(row);
         }
 
@@ -456,7 +476,8 @@ class ScanEvasionIT {
         System.arraycopy(mzHeader, 0, fakePdf, 0, mzHeader.length);
         cases.add(new EvasionCase(
                 "Extension masquerade: invoice.pdf with a real MZ header inside",
-                "invoice.pdf", fakePdf, true));
+                "invoice.pdf", fakePdf, true,
+                "MITRE ATT&CK T1036.008 Masquerade File Type"));
 
         // Extension case variation: .LOCKED instead of .locked. getExtension()
         // is lowercased before the RANSOMWARE_EXTENSIONS.contains() check, so
@@ -465,7 +486,11 @@ class ScanEvasionIT {
                 "Ransomware extension case variation: .LOCKED instead of .locked",
                 "quarterly_report.LOCKED",
                 "Uppercase-extension variant of a ransomware-tagged file.".getBytes(StandardCharsets.UTF_8),
-                true));
+                true,
+                "No specific MITRE ATT&CK technique; this is an implementation-robustness regression "
+                        + "guard on the string-matching logic behind ransomware file-extension detection "
+                        + "(itself associated with T1486 Data Encrypted for Impact), not a named attacker "
+                        + "technique in its own right."));
 
         // ── Cases that exploit gaps the engine does NOT yet cover: expectCaught = false.
         // Documented blind spots, tracked so they show up in every report run.
@@ -483,7 +508,8 @@ class ScanEvasionIT {
                 ("Access to your data has been restricted. Send funds to our bit-coin wallet "
                         + "address listed on the attached page to restore access.")
                         .getBytes(StandardCharsets.UTF_8),
-                false));
+                false,
+                "MITRE ATT&CK T1027 Obfuscated Files or Information"));
 
         // Base64-encoded payload text: the same ransom note, base64-encoded,
         // so no plaintext trigger phrase ever appears in the scanned bytes.
@@ -495,7 +521,8 @@ class ScanEvasionIT {
                 "Base64-encoded ransom note: same message, never appears as plaintext",
                 "config_backup.dat",
                 Base64.getEncoder().encode(ransomNote.getBytes(StandardCharsets.UTF_8)),
-                false));
+                false,
+                "MITRE ATT&CK T1027.013 Encrypted/Encoded File"));
 
         // Benign filename, malicious-shaped text: TROJAN_NAME_SIGNATURES is a
         // literal substring check against the filename only. Any attacker
@@ -509,7 +536,8 @@ class ScanEvasionIT {
                 ("Establishes a reverse connection to the operator's listening socket and "
                         + "relays keystrokes captured via a low-level keyboard hook.")
                         .getBytes(StandardCharsets.UTF_8),
-                false));
+                false,
+                "MITRE ATT&CK T1036.005 Match Legitimate Name or Location"));
 
         // Size-based evasion: content beyond MAX_PATTERN_SCAN_BYTES (10MB) is
         // never read by scanWithPatterns's loop condition at all, so a
@@ -523,7 +551,8 @@ class ScanEvasionIT {
         padded.append(ransomNote);
         cases.add(new EvasionCase(
                 "Oversized-file evasion: ransom note placed just past the 10MB pattern-scan cap",
-                "large_export.txt", padded.toString().getBytes(StandardCharsets.UTF_8), false));
+                "large_export.txt", padded.toString().getBytes(StandardCharsets.UTF_8), false,
+                "MITRE ATT&CK T1027.001 Binary Padding"));
 
         // Double-extension trick: "invoice.pdf.exe" relies on Windows'
         // default "hide known file extensions" behaviour so a user sees
@@ -540,7 +569,8 @@ class ScanEvasionIT {
         System.arraycopy(mzHeader, 0, doubleExtPayload, 0, mzHeader.length);
         cases.add(new EvasionCase(
                 "Double-extension lure: invoice.pdf.exe, a real MZ header behind Windows' hidden-extension trick",
-                "invoice.pdf.exe", doubleExtPayload, false));
+                "invoice.pdf.exe", doubleExtPayload, false,
+                "MITRE ATT&CK T1036.008 Masquerade File Type"));
 
         return cases;
     }
