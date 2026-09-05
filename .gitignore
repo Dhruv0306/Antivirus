@@ -38,6 +38,10 @@ data/
 *.tar.gz
 *.rar
 
+# Intentional exception: real, unmodified open-source archives used as
+# known-good test fixtures, see PROVENANCE.md in the same directory.
+!src/test/resources/known-good-samples/*.tar.gz
+
 # IDE specific files
 .idea/
 *.iws
