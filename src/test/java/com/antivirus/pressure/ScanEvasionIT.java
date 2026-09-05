@@ -257,7 +257,8 @@ class ScanEvasionIT {
                     "Main payload DLL hash, cross-referenced across Hitachi HIRT-PUB17010, "
                             + "Barracuda Networks research, and CISA/US-CERT TA17-181A"));
 
-    @Test
+    @SuppressWarnings("null")
+@Test
     void knownMalwareHashesFromPublicThreatIntelAreDetected() throws Exception {
         // ── Part 1: the exact hash-lookup mechanism, against real published IOCs across multiple families.
         Map<String, Boolean> perFamilyRecognized = new LinkedHashMap<>();
