@@ -50,7 +50,8 @@ def build_evasion_rows(evasion_metrics):
         evasion_rows.append(("Evasion resistance rate", f"{evasion.get('evasionResistanceRate', 0):.4f}"))
         evasion_rows.append(("Documented blind spots", str(evasion.get("knownBlindSpotCount", "-"))))
         for row in evasion.get("results", []):
-            evasion_detail.append((row.get("technique", "-"), row.get("expectCaught"), row.get("verdict", "-")))
+            evasion_detail.append((row.get("technique", "-"), row.get("expectCaught"), row.get("verdict", "-"),
+                                    row.get("citation", "-")))
             if not row.get("expectCaught") and not row.get("caught"):
                 blind_spots.append(row.get("technique", "-"))
 
@@ -203,9 +204,10 @@ def render_markdown(generated_at, load_rows, accuracy_rows, evasion_rows, false_
     ]
 
     if evasion_detail:
-        lines += ["| Technique | Expected caught | Actual verdict |", "|---|---|---|"]
-        for technique, expect_caught, verdict in evasion_detail:
-            lines.append(f"| {technique} | {'Yes' if expect_caught else 'Known blind spot'} | {verdict} |")
+        lines += ["| Technique | Expected caught | Actual verdict | Citation |", "|---|---|---|---|"]
+        for technique, expect_caught, verdict, citation in evasion_detail:
+            lines.append(
+                f"| {technique} | {'Yes' if expect_caught else 'Known blind spot'} | {verdict} | {citation} |")
         lines.append("")
 
     if blind_spots:
