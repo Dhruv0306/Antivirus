@@ -1,0 +1,52 @@
+name: Threat-Intel Feed Integrity Check
+on:
+    schedule:
+        # 04:00 UTC daily, an hour after the pressure-test workflow's 03:00
+        # slot so the two never contend for the same runner queue.
+        - cron: "0 4 * * *"
+    workflow_dispatch:
+
+# Read-only: this workflow never commits anything back to the repo, unlike
+# pressure-test.yml, so it doesn't need contents: write.
+permissions:
+    contents: read
+
+jobs:
+    threat-intel-feed-check:
+        runs-on: ubuntu-latest
+        # This is a single, fast HTTP call and parse, not a load test; a
+        # short cap keeps a hung/slow third-party response from tying up a
+        # runner all night instead of just failing the job.
+        timeout-minutes: 10
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Set up JDK 21
+              uses: actions/setup-java@v4
+              with:
+                  distribution: "temurin"
+                  java-version: "21"
+                  cache: "maven"
+
+            # Deliberately its own profile (live-feed-check), never
+            # -Ppressure: this test hits real internet infrastructure
+            # (bazaar.abuse.ch) and must never be able to block a PR merge
+            # if that third party is briefly slow or down. See the
+            # class-level Javadoc on ThreatIntelLiveFeedIT for the full
+            # rationale, and docs/plans/real-world-testing-phase-plan.md,
+            # Phase 3.
+            - name: Check live MalwareBazaar feed integration
+              run: mvn -B verify -Plive-feed-check
+
+            - name: Upload failsafe reports
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: threat-intel-feed-check-reports
+                  path: target/failsafe-reports/
+                  retention-days: 14
+
+            - name: Notify on failure
+              if: failure()
+              run: |
+                  echo "::error::The live MalwareBazaar recent-feed check failed. This means either the feed is down, or its export format changed and ThreatIntelSignatureService.extractSha256Signatures() needs updating, either way it's worth a look before assuming known-hash detection still works in production. See the failsafe-reports artifact and the job log above for the parsed hash count."
