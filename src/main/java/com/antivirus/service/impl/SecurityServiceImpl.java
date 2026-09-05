@@ -1853,21 +1853,33 @@ public class SecurityServiceImpl implements SecurityService {
 
     private void runDirectoryScanJobInternal(DirectoryScanJob job) {
         dirListingCache.get().clear();
+        DirectoryScanStatus finalStatus;
         try (Stream<Path> paths = Files.walk(job.tempDir)) {
             paths.filter(Files::isRegularFile)
                     .filter(p -> !isFileExcluded(p))
                     .forEach(path -> scanOneJobFile(job, path));
-
-            job.status = DirectoryScanStatus.COMPLETED;
-            logger.info("Directory scan job {} completed: {}/{} files, {} infected",
-                    job.id, job.processedFiles.get(), job.totalFiles, job.infectedFiles.get());
+            finalStatus = DirectoryScanStatus.COMPLETED;
         } catch (Exception e) {
             logger.error("Directory scan job {} failed: {}", job.id, e.getMessage(), e);
-            job.status = DirectoryScanStatus.FAILED;
+            finalStatus = DirectoryScanStatus.FAILED;
             job.errorMessage = SAFE_ERROR_MESSAGES.get("SCAN_ERROR");
         } finally {
             dirListingCache.remove();
-            deleteTempDirQuietly(job.tempDir);
+        }
+
+        // Clean up the temp directory BEFORE publishing the terminal status.
+        // job.status is the only signal external pollers (getDirectoryScanJobStatus,
+        // and ultimately the frontend) have that the job is done, so publishing it
+        // before cleanup finishes lets a caller observe isRunning == false while the
+        // temp directory still exists on disk, a real race, not just test flakiness.
+        // It's more likely to bite on Windows, where file deletion is slower and more
+        // contention-prone than on Linux, but it was never actually guaranteed on any
+        // platform. See SecurityServiceImplTest#directoryScanJob_ShouldCompleteAsynchronouslyAndReportResults.
+        deleteTempDirQuietly(job.tempDir);
+        job.status = finalStatus;
+        if (finalStatus == DirectoryScanStatus.COMPLETED) {
+            logger.info("Directory scan job {} completed: {}/{} files, {} infected",
+                    job.id, job.processedFiles.get(), job.totalFiles, job.infectedFiles.get());
         }
     }
 
