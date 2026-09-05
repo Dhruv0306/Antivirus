@@ -420,5 +420,40 @@
                 </plugins>
             </build>
         </profile>
+
+        <profile>
+            <!--
+                Phase 3: nightly-only live threat-intel feed integrity check.
+                Deliberately its own profile, not folded into `pressure`,
+                since this hits real internet infrastructure
+                (bazaar.abuse.ch) and must never be able to block a PR if
+                that third party is slow or briefly down. Only
+                .github/workflows/threat-intel-feed-check.yml invokes this,
+                on a nightly schedule.
+            -->
+            <id>live-feed-check</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <configuration>
+                            <includes>
+                                <include>**/*LiveFeedIT.java</include>
+                            </includes>
+                            <forkedProcessTimeoutInSeconds>120</forkedProcessTimeoutInSeconds>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <goals>
+                                    <goal>integration-test</goal>
+                                    <goal>verify</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
     </profiles>
 </project>
