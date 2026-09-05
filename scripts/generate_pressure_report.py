@@ -37,7 +37,8 @@ def load_json(path):
 
 
 def build_evasion_rows(evasion_metrics):
-    """Returns (evasion_rows, false_positive_rows, evasion_detail, blind_spots)."""
+    """Returns (evasion_rows, false_positive_rows, evasion_detail, blind_spots,
+    known_hash_rows, known_good_rows, known_good_detail)."""
     evasion_rows = []
     evasion_detail = []
     blind_spots = []
@@ -60,7 +61,30 @@ def build_evasion_rows(evasion_metrics):
         false_positive_rows.append(("Flagged MALICIOUS", str(fp.get("falsePositiveCount", "-"))))
         false_positive_rows.append(("False positive rate", f"{fp.get('falsePositiveRate', 0):.4f}"))
 
-    return evasion_rows, false_positive_rows, evasion_detail, blind_spots
+    known_hash_rows = []
+    khp = (evasion_metrics or {}).get("knownHashPathway") if evasion_metrics else None
+    if khp:
+        known_hash_rows.append(("Malware families covered", str(khp.get("familiesCovered", "-"))))
+        known_hash_rows.append(("Families recognized", str(khp.get("familiesRecognized", "-"))))
+        for family, recognized in (khp.get("knownHashCoverageByFamily") or {}).items():
+            known_hash_rows.append((f"  {family}", "Recognized" if recognized else "NOT recognized"))
+        known_hash_rows.append(("End-to-end hash-match verdict", str(khp.get("endToEndHashMatchVerdict", "-"))))
+
+    known_good_rows = []
+    known_good_detail = []
+    kga = (evasion_metrics or {}).get("knownGoodArchive") if evasion_metrics else None
+    if kga:
+        known_good_rows.append(("Real open-source archives checked", str(kga.get("archivesChecked", "-"))))
+        known_good_rows.append(("Flagged MALICIOUS", str(kga.get("falsePositiveCount", "-"))))
+        for row in kga.get("results", []):
+            known_good_detail.append((
+                row.get("archive", "-"),
+                row.get("honestFilenameVerdict", "-"),
+                row.get("adversarialFilenameVerdict", "-"),
+            ))
+
+    return (evasion_rows, false_positive_rows, evasion_detail, blind_spots,
+            known_hash_rows, known_good_rows, known_good_detail)
 
 
 def pct(value):
@@ -112,7 +136,7 @@ def build_rows(load_metrics, accuracy_metrics):
 
 
 def render_markdown(generated_at, load_rows, accuracy_rows, evasion_rows, false_positive_rows,
-                     evasion_detail, blind_spots):
+                     evasion_detail, blind_spots, known_hash_rows, known_good_rows, known_good_detail):
     lines = [
         "# Pressure and accuracy metrics",
         "",
@@ -211,6 +235,53 @@ def render_markdown(generated_at, load_rows, accuracy_rows, evasion_rows, false_
         "product fastest.",
         "",
     ]
+    lines += [
+        "## Known-malware hash coverage (real published IOCs)",
+        "",
+        "| Metric | Value |",
+        "|---|---|",
+    ]
+    for label, value in known_hash_rows:
+        lines.append(f"| {label} | {value} |")
+    if not known_hash_rows:
+        lines.append("| _No knownHashPathway section in evasion-metrics.json_ | - |")
+
+    lines += [
+        "",
+        "**Note:** each family's SHA-256 is a real, published IOC hash, never an actual payload. See "
+        "`ScanEvasionIT.KNOWN_MALWARE_IOCS` for per-entry source citations (MalwareBazaar, US-CERT, "
+        "cross-referenced vendor research). This measures hash-lookup coverage across distinct families, "
+        "not detection of any live sample.",
+        "",
+        "## Known-good real-world archive resistance",
+        "",
+        "| Metric | Value |",
+        "|---|---|",
+    ]
+    for label, value in known_good_rows:
+        lines.append(f"| {label} | {value} |")
+    if not known_good_rows:
+        lines.append("| _No knownGoodArchive section in evasion-metrics.json_ | - |")
+
+    lines += [
+        "",
+        "**Note:** these are real, unmodified GitHub tag source archives for well-known open-source "
+        "projects (jq, ripgrep, shellcheck), not synthetic content, see "
+        "`src/test/resources/known-good-samples/PROVENANCE.md` for exact provenance and independent "
+        "reproduction commands. Each is scanned under both its honest filename and a deliberately "
+        "adversarial one; a SUSPICIOUS verdict on the adversarial filename is expected and correct "
+        "(the engine flagging a suspicious name for review), a MALICIOUS verdict on either is a hard "
+        "failure, since real, legitimate open-source software must never be convicted outright by name "
+        "alone.",
+        "",
+    ]
+
+    if known_good_detail:
+        lines += ["| Archive | Honest filename verdict | Adversarial filename verdict |", "|---|---|---|"]
+        for archive, honest_verdict, adversarial_verdict in known_good_detail:
+            lines.append(f"| {archive} | {honest_verdict} | {adversarial_verdict} |")
+        lines.append("")
+
     return "\n".join(lines)
 
 
@@ -303,7 +374,8 @@ def main():
 
     accuracy_data = (accuracy_metrics or {}).get("accuracy") if accuracy_metrics else None
     load_rows, accuracy_rows = build_rows(load_metrics, accuracy_data)
-    evasion_rows, false_positive_rows, evasion_detail, blind_spots = build_evasion_rows(evasion_metrics)
+    (evasion_rows, false_positive_rows, evasion_detail, blind_spots,
+     known_hash_rows, known_good_rows, known_good_detail) = build_evasion_rows(evasion_metrics)
 
     # Use IST timezone for generated_at timestamp to match the timezone used in the GitHub Actions workflow.
     ist = timezone(timedelta(hours=5, minutes=30))
@@ -312,7 +384,7 @@ def main():
     DOCS_DIR.mkdir(parents=True, exist_ok=True)
     MD_PATH.write_text(
         render_markdown(generated_at, load_rows, accuracy_rows, evasion_rows, false_positive_rows,
-                         evasion_detail, blind_spots),
+                         evasion_detail, blind_spots, known_hash_rows, known_good_rows, known_good_detail),
         encoding="utf-8")
     SVG_PATH.write_text(render_svg(generated_at, load_rows, accuracy_rows, evasion_rows), encoding="utf-8")
 
