@@ -1,5 +1,5 @@
-<svg viewBox="0 0 640 808" width="640" height="808" xmlns="http://www.w3.org/2000/svg">
-<rect x="0" y="0" width="640" height="808" fill="#010409"/>
+<svg viewBox="0 0 640 1000" width="640" height="1000" xmlns="http://www.w3.org/2000/svg">
+<rect x="0" y="0" width="640" height="1000" fill="#010409"/>
 <rect x="0" y="16" width="640" height="306" fill="#0d1117" stroke="#30363d" rx="6"/>
 <text x="16" y="39" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" font-weight="600" fill="#58a6ff">Load and concurrency</text>
 <line x1="0" y1="50" x2="640" y2="50" stroke="#30363d"/>
@@ -14,7 +14,7 @@
 <text x="16" y="146" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Error rate (unauthenticated burst)</text>
 <text x="624" y="146" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">0.00%</text>
 <text x="16" y="172" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Max latency under load</text>
-<text x="624" y="172" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">314 ms</text>
+<text x="624" y="172" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">358 ms</text>
 <rect x="0" y="180" width="640" height="26" fill="#161b22"/>
 <text x="16" y="198" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Concurrent authenticated scans</text>
 <text x="624" y="198" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">20</text>
@@ -68,5 +68,20 @@
 <text x="624" y="728" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">2550</text>
 <text x="16" y="754" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Malicious-labeled detected as SUSPICIOUS</text>
 <text x="624" y="754" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">2550</text>
-<text x="16" y="796" font-family="Consolas, Menlo, monospace" font-size="10.5" fill="#6e7681">Generated 2026-09-04 13:05:57 (UTC + 5:30)</text>
+<rect x="0" y="790" width="640" height="176" fill="#0d1117" stroke="#30363d" rx="6"/>
+<text x="16" y="813" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" font-weight="600" fill="#58a6ff">Evasion resistance</text>
+<line x1="0" y1="824" x2="640" y2="824" stroke="#30363d"/>
+<text x="16" y="842" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Techniques tried</text>
+<text x="624" y="842" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">7</text>
+<rect x="0" y="850" width="640" height="26" fill="#161b22"/>
+<text x="16" y="868" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Expected to still be caught</text>
+<text x="624" y="868" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">2</text>
+<text x="16" y="894" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Actually caught</text>
+<text x="624" y="894" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">2</text>
+<rect x="0" y="902" width="640" height="26" fill="#161b22"/>
+<text x="16" y="920" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Evasion resistance rate</text>
+<text x="624" y="920" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">1.0000</text>
+<text x="16" y="946" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Documented blind spots</text>
+<text x="624" y="946" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">5</text>
+<text x="16" y="988" font-family="Consolas, Menlo, monospace" font-size="10.5" fill="#6e7681">Generated 2026-09-05 12:46:31 (UTC + 5:30)</text>
 </svg>
