@@ -36,6 +36,13 @@ jobs:
                   restore-keys: |
                       ${{ runner.os }}-odc-
 
+            # Phase 5: lets EntropyDetectionIT's real-packer validation
+            # actually run in CI instead of skipping via Assumptions
+            # (locally, that test degrades gracefully if upx isn't
+            # installed, see the class-level Javadoc on EntropyDetectionIT).
+            - name: Install upx
+              run: sudo apt-get update && sudo apt-get install -y upx-ucl
+
             - name: Run pressure/load/accuracy suite
               env:
                   NVD_API_KEY: ${{ secrets.NVD_API_KEY }}

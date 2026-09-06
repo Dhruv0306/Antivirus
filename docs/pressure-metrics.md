@@ -1,6 +1,6 @@
 # Pressure and accuracy metrics
 
-_Last generated: 2026-09-06 12:59:30 (UTC), by `.github/workflows/pressure-test.yml`._
+_Last generated: 2026-09-06 15:00:43 (UTC), by `.github/workflows/pressure-test.yml`._
 
 Regenerated automatically on every scheduled or manually-dispatched run of the pressure suite (`mvn verify -Ppressure`). See `EndpointPressureIT.java` and `ScanAccuracyIT.java` under `src/test/java/com/antivirus/pressure/` for what each number below actually measures, and `scripts/generate_pressure_report.py` for how this file and `pressure-metrics.svg` are rendered from the raw JSON in `target/pressure-metrics/`.
 
@@ -12,7 +12,7 @@ Regenerated automatically on every scheduled or manually-dispatched run of the p
 | Requests per client | 5 |
 | Total requests | 500 |
 | Error rate (unauthenticated burst) | 0.00% |
-| Max latency under load | 563 ms |
+| Max latency under load | 1652 ms |
 | Concurrent authenticated scans | 20 |
 | Error rate (concurrent scans) | 0.00% |
 | Scan history entries after burst | 20 |
@@ -101,3 +101,11 @@ Regenerated automatically on every scheduled or manually-dispatched run of the p
 | jq-1.7.1.tar.gz | CLEAN | SUSPICIOUS |
 | ripgrep-14.1.0.tar.gz | CLEAN | SUSPICIOUS |
 | shellcheck-0.10.0.tar.gz | CLEAN | SUSPICIOUS |
+
+## Entropy-based packer detection (Phase 5)
+
+| Metric | Value |
+|---|---|
+| Real UPX-packer validation | Skipped (upx not available on this runner) |
+
+**Note:** `SecurityServiceImpl` scores Shannon entropy over files that already look executable (by extension or by real header bytes), the standard cheap first line of defense against packed or encrypted malware, which structurally evades every text/pattern-based signal above. See `EntropyDetectionIT.java` for both the portable synthetic validation (always runs, uses cryptographically random bytes as a correctness-guaranteed high-entropy stand-in) and the real UPX-packed-binary validation (runs when `upx` is installed, skips gracefully otherwise, and is installed explicitly in this project's own CI for that reason).
