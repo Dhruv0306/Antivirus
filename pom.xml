@@ -396,6 +396,7 @@
                                 <include>**/*PressureIT.java</include>
                                 <include>**/*AccuracyIT.java</include>
                                 <include>**/*EvasionIT.java</include>
+                                <include>**/*EntropyDetectionIT.java</include>
                             </includes>
                             <!--
                                 Pressure tests hammer the app with concurrent

@@ -137,7 +137,8 @@ def build_rows(load_metrics, accuracy_metrics):
 
 
 def render_markdown(generated_at, load_rows, accuracy_rows, evasion_rows, false_positive_rows,
-                     evasion_detail, blind_spots, known_hash_rows, known_good_rows, known_good_detail):
+                     evasion_detail, blind_spots, known_hash_rows, known_good_rows, known_good_detail,
+                     entropy_rows):
     lines = [
         "# Pressure and accuracy metrics",
         "",
@@ -284,6 +285,27 @@ def render_markdown(generated_at, load_rows, accuracy_rows, evasion_rows, false_
             lines.append(f"| {archive} | {honest_verdict} | {adversarial_verdict} |")
         lines.append("")
 
+    lines += [
+        "## Entropy-based packer detection (Phase 5)",
+        "",
+        "| Metric | Value |",
+        "|---|---|",
+    ]
+    for label, value in entropy_rows:
+        lines.append(f"| {label} | {value} |")
+
+    lines += [
+        "",
+        "**Note:** `SecurityServiceImpl` scores Shannon entropy over files that already look executable "
+        "(by extension or by real header bytes), the standard cheap first line of defense against packed "
+        "or encrypted malware, which structurally evades every text/pattern-based signal above. See "
+        "`EntropyDetectionIT.java` for both the portable synthetic validation (always runs, uses "
+        "cryptographically random bytes as a correctness-guaranteed high-entropy stand-in) and the real "
+        "UPX-packed-binary validation (runs when `upx` is installed, skips gracefully otherwise, and is "
+        "installed explicitly in this project's own CI for that reason).",
+        "",
+    ]
+
     return "\n".join(lines)
 
 
@@ -361,12 +383,28 @@ def render_svg(generated_at, load_rows, accuracy_rows, evasion_rows=None):
     return svg
 
 
+def build_entropy_rows(entropy_metrics):
+    """Returns entropy_rows. Handles the case where EntropyDetectionIT's real-packer
+    test was skipped (upx not installed) and no entropyDetection section exists."""
+    rows = []
+    entropy = (entropy_metrics or {}).get("entropyDetection") if entropy_metrics else None
+    if not entropy:
+        rows.append(("Real UPX-packer validation", "Skipped (upx not available on this runner)"))
+        return rows
+    rows.append(("Source binary", str(entropy.get("sourceBinary", "-"))))
+    rows.append(("Unpacked binary flagged high-entropy", str(entropy.get("unpackedHasEntropySignal", "-"))))
+    rows.append(("Packed binary flagged high-entropy", str(entropy.get("packedHasEntropySignal", "-"))))
+    rows.append(("Packed binary verdict", str(entropy.get("packedVerdict", "-"))))
+    return rows
+
+
 def main():
     load_metrics = load_json(METRICS_DIR / "load-metrics.json")
     accuracy_metrics = load_json(METRICS_DIR / "accuracy-metrics.json")
     evasion_metrics = load_json(METRICS_DIR / "evasion-metrics.json")
+    entropy_metrics = load_json(METRICS_DIR / "entropy-metrics.json")
 
-    if load_metrics is None and accuracy_metrics is None and evasion_metrics is None:
+    if load_metrics is None and accuracy_metrics is None and evasion_metrics is None and entropy_metrics is None:
         print(
             "No metrics JSON found under target/pressure-metrics/. "
             "Run \"mvn verify -Ppressure\" first.",
@@ -378,6 +416,7 @@ def main():
     load_rows, accuracy_rows = build_rows(load_metrics, accuracy_data)
     (evasion_rows, false_positive_rows, evasion_detail, blind_spots,
      known_hash_rows, known_good_rows, known_good_detail) = build_evasion_rows(evasion_metrics)
+    entropy_rows = build_entropy_rows(entropy_metrics)
 
     # Use IST timezone for generated_at timestamp to match the timezone used in the GitHub Actions workflow.
     ist = timezone(timedelta(hours=5, minutes=30))
@@ -386,7 +425,8 @@ def main():
     DOCS_DIR.mkdir(parents=True, exist_ok=True)
     MD_PATH.write_text(
         render_markdown(generated_at, load_rows, accuracy_rows, evasion_rows, false_positive_rows,
-                         evasion_detail, blind_spots, known_hash_rows, known_good_rows, known_good_detail),
+                         evasion_detail, blind_spots, known_hash_rows, known_good_rows, known_good_detail,
+                         entropy_rows),
         encoding="utf-8")
     SVG_PATH.write_text(render_svg(generated_at, load_rows, accuracy_rows, evasion_rows), encoding="utf-8")
 

@@ -565,6 +565,19 @@ class ScanEvasionIT {
         // engine currently penalizes an honestly-parsed suspicious
         // extension on its own, so this specific social-engineering lure
         // currently scores 0 end to end.
+        //
+        // Phase 5 note: this fixture is a tiny, near-empty MZ stub (mostly
+        // 0x00 padding), which is why it stays in this near-zero-entropy
+        // bucket even after Phase 5's entropy detection landed, that stub
+        // has nowhere near enough byte-value variety to approach
+        // THRESHOLD_HIGH_ENTROPY. A REAL packed or encrypted payload behind
+        // this exact same double-extension lure would now trip
+        // HIGH_ENTROPY_EXECUTABLE (.exe is in SUSPICIOUS_EXTENSIONS, so the
+        // entropy gate applies regardless of the masquerade carve-out
+        // above). This case is deliberately kept as a pure, isolated test
+        // of the byte-pattern/extension gap specifically, not widened to
+        // also cover entropy, since EntropyDetectionIT already covers that
+        // dimension on its own.
         byte[] doubleExtPayload = new byte[mzHeader.length + 32];
         System.arraycopy(mzHeader, 0, doubleExtPayload, 0, mzHeader.length);
         cases.add(new EvasionCase(

@@ -251,6 +251,40 @@ public class SecurityServiceImpl implements SecurityService {
     private static final int MAX_WEAK_PATTERN_SCORE = 32;
     private static final int SCORE_ZIP_SUSPICIOUS_ENTRY = 15;
 
+    // High-entropy detection (Phase 5): packed/encrypted executables are the
+    // majority of real-world malware precisely because packing defeats
+    // every text/pattern-based signal above. Shannon entropy over the byte
+    // distribution is the standard, cheap first line of defense against
+    // that: packed or encrypted content has a measurably higher, more
+    // uniform byte-value distribution than typical plaintext or structured
+    // binary data. THRESHOLD_HIGH_ENTROPY (7.2 out of a possible 8.0 bits
+    // per byte for a uniform 256-symbol distribution) matches the
+    // conservative end of the range widely used in packer-detection
+    // heuristics (PEiD/Detect It Easy-style tooling and academic packer
+    // literature generally cite 7.0-7.5 as the packed/encrypted band, well
+    // above typical compiled-but-unpacked code at roughly 5.0-6.5 and
+    // plaintext at roughly 4.0-4.5).
+    //
+    // Deliberately scoped to files that already look executable (either by
+    // extension, via SUSPICIOUS_EXTENSIONS, or by real header bytes, via
+    // containsSuspiciousBytes), not applied to every upload. An ordinary
+    // .zip, .jpg, or already-encrypted backup is naturally high-entropy and
+    // completely legitimate; scoring entropy against every file type would
+    // make this the least selective, highest-false-positive signal in the
+    // engine instead of the most targeted one. See
+    // isExecutableLikeForEntropy() below.
+    //
+    // Calibrated to reach SUSPICIOUS on its own (flag for review) but not
+    // MALICIOUS on its own (convict outright): a legitimate application
+    // that happens to ship a packed/compressed executable is a real,
+    // documented false-positive category for this technique, and
+    // SUSPICIOUS is the proportionate response to "this looks packed",
+    // reserving MALICIOUS for when entropy corroborates another signal
+    // (e.g. a ransomware extension, or a masquerading header).
+    private static final int ENTROPY_SAMPLE_BYTES = (int) MAX_PATTERN_SCAN_BYTES;
+    private static final double THRESHOLD_HIGH_ENTROPY = 7.2;
+    private static final int SCORE_HIGH_ENTROPY = 30;
+
     private static final int THRESHOLD_MALICIOUS = 60;
     private static final int THRESHOLD_SUSPICIOUS = 25;
 
@@ -481,6 +515,12 @@ public class SecurityServiceImpl implements SecurityService {
             if (masqueradeScore > 0) {
                 score += masqueradeScore;
                 signals.add("EXTENSION_MASQUERADE");
+            }
+
+            int entropyScore = checkHighEntropy(file, extension, header);
+            if (entropyScore > 0) {
+                score += entropyScore;
+                signals.add("HIGH_ENTROPY_EXECUTABLE");
             }
 
             if (RANSOMWARE_EXTENSIONS.contains(extension)) {
@@ -786,6 +826,66 @@ public class SecurityServiceImpl implements SecurityService {
             return 0;
         }
         return containsSuspiciousBytes(header) ? SCORE_EXTENSION_MASQUERADE : 0;
+    }
+
+    // Deliberately the same "does this look meant to be executable" test as
+    // checkExtensionMasquerade uses for header bytes, applied here to decide
+    // whether entropy is even worth computing. An ordinary .zip, .jpg, or
+    // already-encrypted backup is naturally high-entropy and completely
+    // legitimate; gating on "executable by extension OR executable by real
+    // header bytes" keeps entropy scoring targeted at the packed-executable
+    // problem it exists to catch, instead of penalizing every compressed or
+    // encrypted file type on the system.
+    private boolean isExecutableLikeForEntropy(String extensionLowerCase, byte[] header) {
+        return SUSPICIOUS_EXTENSIONS.contains(extensionLowerCase) || containsSuspiciousBytes(header);
+    }
+
+    // See the ENTROPY_SAMPLE_BYTES/THRESHOLD_HIGH_ENTROPY/SCORE_HIGH_ENTROPY
+    // comment block near their declarations for the full rationale and
+    // calibration notes. Reads are bounded the same way scorePatterns()
+    // bounds its own reads, entropy on a 10MB sample is exactly as
+    // representative as entropy on the full file for anything packed, since
+    // packed/encrypted regions are uniformly high-entropy throughout, not
+    // concentrated at the end.
+    private int checkHighEntropy(File file, String extensionLowerCase, byte[] header) {
+        if (!isExecutableLikeForEntropy(extensionLowerCase, header)) {
+            return 0;
+        }
+        try {
+            byte[] sample = readFilePrefix(file, ENTROPY_SAMPLE_BYTES);
+            if (sample.length == 0) {
+                return 0;
+            }
+            double entropy = calculateShannonEntropy(sample);
+            return entropy >= THRESHOLD_HIGH_ENTROPY ? SCORE_HIGH_ENTROPY : 0;
+        } catch (IOException e) {
+            logger.error("Error computing entropy for {}: {}", file.getAbsolutePath(), e.getMessage());
+            return 0;
+        }
+    }
+
+    // Standard Shannon entropy over a byte-value histogram: H = -sum(p_i *
+    // log2(p_i)) across the 256 possible byte values, in [0, 8] bits per
+    // byte for byte-oriented data. A single pass to build the histogram,
+    // then a single pass over at most 256 non-zero buckets, this is O(n) in
+    // the sample size and negligible next to the regex-based pattern scan
+    // that already runs over the same order of magnitude of bytes.
+    private double calculateShannonEntropy(byte[] data) {
+        int[] byteCounts = new int[256];
+        for (byte b : data) {
+            byteCounts[b & 0xFF]++;
+        }
+
+        double entropy = 0.0;
+        double length = data.length;
+        for (int count : byteCounts) {
+            if (count == 0) {
+                continue;
+            }
+            double probability = count / length;
+            entropy -= probability * (Math.log(probability) / Math.log(2));
+        }
+        return entropy;
     }
 
     // Aggregates strong- and weak-pattern hits into a single bounded score in
