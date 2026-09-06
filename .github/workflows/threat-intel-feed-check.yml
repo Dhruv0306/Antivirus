@@ -28,6 +28,15 @@ jobs:
                   java-version: "21"
                   cache: "maven"
 
+            # Cache the Dependency-Check data directory to speed up the NVD update process
+            - name: Cache OWASP Dependency Check Data
+              uses: actions/cache@v4
+              with:
+                  path: ~/.m2/repository/org/owasp/dependency-check-data
+                  key: ${{ runner.os }}-odc-${{ github.run_number }}
+                  restore-keys: |
+                      ${{ runner.os }}-odc-
+
             # Deliberately its own profile (live-feed-check), never
             # -Ppressure: this test hits real internet infrastructure
             # (bazaar.abuse.ch) and must never be able to block a PR merge
@@ -36,7 +45,9 @@ jobs:
             # rationale, and docs/plans/real-world-testing-phase-plan.md,
             # Phase 3.
             - name: Check live MalwareBazaar feed integration
-              run: mvn -B verify -Plive-feed-check
+              env:
+                    NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+              run: mvn -B verify -Plive-feed-check -DnvdApiKey="$NVD_API_KEY" --file pom.xml
 
             - name: Upload failsafe reports
               if: always()
