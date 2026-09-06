@@ -135,6 +135,7 @@ class EntropyDetectionIT {
                         + "should never be penalized just for having a suspicious extension");
     }
 
+    @SuppressWarnings("null")
     @Test
     void realUpxPackedBinaryIsFlaggedByEntropyWhenUpxIsAvailable(@TempDir Path tempDir) throws Exception {
         Assumptions.assumeTrue(isUpxAvailable(), "upx not found on PATH, skipping real-packer validation");
