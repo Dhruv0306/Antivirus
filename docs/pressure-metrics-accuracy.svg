@@ -1,0 +1,44 @@
+<svg viewBox="0 0 640 486" width="640" height="486" xmlns="http://www.w3.org/2000/svg">
+<rect x="0" y="0" width="640" height="486" fill="#010409"/>
+<rect x="0" y="16" width="640" height="436" fill="#0d1117" stroke="#30363d" rx="6"/>
+<text x="16" y="39" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" font-weight="600" fill="#58a6ff">Detection accuracy</text>
+<line x1="0" y1="50" x2="640" y2="50" stroke="#30363d"/>
+<text x="16" y="68" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Total synthetic files scanned</text>
+<text x="624" y="68" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">10000</text>
+<rect x="0" y="76" width="640" height="26" fill="#161b22"/>
+<text x="16" y="94" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Scan requests that errored</text>
+<text x="624" y="94" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">0</text>
+<text x="16" y="120" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">True positive</text>
+<text x="624" y="120" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">5100</text>
+<rect x="0" y="128" width="640" height="26" fill="#161b22"/>
+<text x="16" y="146" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">False positive</text>
+<text x="624" y="146" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">0</text>
+<text x="16" y="172" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">True negative</text>
+<text x="624" y="172" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">4900</text>
+<rect x="0" y="180" width="640" height="26" fill="#161b22"/>
+<text x="16" y="198" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">False negative</text>
+<text x="624" y="198" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">0</text>
+<text x="16" y="224" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Accuracy</text>
+<text x="624" y="224" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">1.0000</text>
+<rect x="0" y="232" width="640" height="26" fill="#161b22"/>
+<text x="16" y="250" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Precision</text>
+<text x="624" y="250" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">1.0000</text>
+<text x="16" y="276" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Recall</text>
+<text x="624" y="276" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">1.0000</text>
+<rect x="0" y="284" width="640" height="26" fill="#161b22"/>
+<text x="16" y="302" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">F1 score</text>
+<text x="624" y="302" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">1.0000</text>
+<text x="16" y="328" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Verdict: MALICIOUS</text>
+<text x="624" y="328" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">2550</text>
+<rect x="0" y="336" width="640" height="26" fill="#161b22"/>
+<text x="16" y="354" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Verdict: SUSPICIOUS</text>
+<text x="624" y="354" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">2550</text>
+<text x="16" y="380" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Verdict: CLEAN</text>
+<text x="624" y="380" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">4900</text>
+<rect x="0" y="388" width="640" height="26" fill="#161b22"/>
+<text x="16" y="406" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Malicious-labeled detected as MALICIOUS</text>
+<text x="624" y="406" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">2550</text>
+<text x="16" y="432" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Malicious-labeled detected as SUSPICIOUS</text>
+<text x="624" y="432" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">2550</text>
+<text x="16" y="474" font-family="Consolas, Menlo, monospace" font-size="10.5" fill="#6e7681">Generated 2026-09-06 15:00:43 (UTC + 5:30)</text>
+</svg>

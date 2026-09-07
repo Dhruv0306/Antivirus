@@ -174,3 +174,7 @@ Thumbs.db
 # Ignore Patch & Bundle files
 *.patch
 *.bundle
+
+# Python bytecode cache (scripts/generate_pressure_report.py)
+__pycache__/
+*.pyc

@@ -1,12 +1,20 @@
 """
-Reads the JSON metrics written by EndpointPressureIT and ScanAccuracyIT
-(target/pressure-metrics/load-metrics.json, accuracy-metrics.json) after
-"mvn verify -Ppressure" finishes, and renders two committed report files:
+Reads the JSON metrics written by the pressure suite
+(target/pressure-metrics/*.json) after "mvn verify -Ppressure" finishes,
+and renders:
 
-    docs/pressure-metrics.md   a plain markdown table (diffable, readable
-                                straight in the GitHub file browser)
-    docs/pressure-metrics.svg  the same numbers as a styled table image,
-                                embedded directly in README.md
+    docs/pressure-metrics.md          plain markdown, all sections, diffable
+    docs/pressure-metrics-<section>.svg   one small styled-table image per
+                                           section (load, accuracy, evasion,
+                                           false-positive, known-hash,
+                                           known-good, entropy), each
+                                           embedded on its own in README.md
+
+One image per section instead of a single tall combined image: the combined
+version grew to one screen-height per pressure phase added and became hard
+to scan. Every section always gets a file, even with no matching JSON on
+disk, using the same "no data" placeholder row the markdown report already
+uses, so a README embed never points at a missing file.
 
 Deliberately stdlib-only (json, pathlib, datetime), no new Python
 dependency, consistent with tests/api_test.py using nothing beyond
@@ -26,7 +34,24 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 METRICS_DIR = REPO_ROOT / "target" / "pressure-metrics"
 DOCS_DIR = REPO_ROOT / "docs"
 MD_PATH = DOCS_DIR / "pressure-metrics.md"
-SVG_PATH = DOCS_DIR / "pressure-metrics.svg"
+
+# Canonical section list: (key, title). key drives the filename
+# (docs/pressure-metrics-<key>.svg), title is the on-image heading and the
+# markdown H2. Order here is the order both the markdown report and the
+# README embeds appear in.
+SVG_SECTIONS = [
+    ("load", "Load and concurrency"),
+    ("accuracy", "Detection accuracy"),
+    ("evasion", "Evasion resistance"),
+    ("false-positive", "False-positive resistance"),
+    ("known-hash", "Known-malware hash coverage"),
+    ("known-good", "Known-good archive resistance"),
+    ("entropy", "Entropy-based packer detection"),
+]
+
+
+def svg_path(key):
+    return DOCS_DIR / f"pressure-metrics-{key}.svg"
 
 
 def load_json(path):
@@ -145,10 +170,11 @@ def render_markdown(generated_at, load_rows, accuracy_rows, evasion_rows, false_
         f"_Last generated: {generated_at} (UTC), by `.github/workflows/pressure-test.yml`._",
         "",
         "Regenerated automatically on every scheduled or manually-dispatched run of the pressure suite "
-        "(`mvn verify -Ppressure`). See `EndpointPressureIT.java` and `ScanAccuracyIT.java` under "
+        "(`mvn verify -Ppressure`). See the `*IT.java` classes under "
         "`src/test/java/com/antivirus/pressure/` for what each number below actually measures, and "
-        "`scripts/generate_pressure_report.py` for how this file and `pressure-metrics.svg` are rendered "
-        "from the raw JSON in `target/pressure-metrics/`.",
+        "`scripts/generate_pressure_report.py` for how this file and the per-section "
+        "`pressure-metrics-*.svg` images in README.md are rendered from the raw JSON in "
+        "`target/pressure-metrics/`.",
         "",
         "## Load and concurrency",
         "",
@@ -349,38 +375,29 @@ def render_svg_table(title, rows, y_offset, width):
     return "\n".join(parts), height
 
 
-def render_svg(generated_at, load_rows, accuracy_rows, evasion_rows=None):
+def render_section_svg(title, rows, generated_at):
+    """One small standalone SVG: a single table for one section plus a footer timestamp."""
     width = 640
     y = 16
-    blocks = []
 
-    load_svg, load_h = render_svg_table("Load and concurrency", load_rows, y, width)
-    blocks.append(load_svg)
-    y += load_h + 16
+    if not rows:
+        rows = [("No data", "not available for this run")]
 
-    accuracy_svg, accuracy_h = render_svg_table("Detection accuracy", accuracy_rows, y, width)
-    blocks.append(accuracy_svg)
-    y += accuracy_h + 8
+    table_svg, table_h = render_svg_table(title, rows, y, width)
+    y += table_h
 
-    if evasion_rows:
-        y += 8
-        evasion_svg, evasion_h = render_svg_table("Evasion resistance", evasion_rows, y, width)
-        blocks.append(evasion_svg)
-        y += evasion_h + 8
-
-    footer_y = y + 14
+    footer_y = y + 22
     total_height = footer_y + 12
 
-    svg = (
+    return (
         f'<svg viewBox="0 0 {width} {total_height}" width="{width}" height="{total_height}" '
         f'xmlns="http://www.w3.org/2000/svg">\n'
         f'<rect x="0" y="0" width="{width}" height="{total_height}" fill="#010409"/>\n'
-        + "\n".join(blocks) + "\n"
+        f"{table_svg}\n"
         f'<text x="16" y="{footer_y}" font-family="Consolas, Menlo, monospace" font-size="10.5" '
         f'fill="#6e7681">Generated {esc(generated_at)} (UTC + 5:30)</text>\n'
         "</svg>\n"
     )
-    return svg
 
 
 def build_entropy_rows(entropy_metrics):
@@ -428,10 +445,21 @@ def main():
                          evasion_detail, blind_spots, known_hash_rows, known_good_rows, known_good_detail,
                          entropy_rows),
         encoding="utf-8")
-    SVG_PATH.write_text(render_svg(generated_at, load_rows, accuracy_rows, evasion_rows), encoding="utf-8")
-
     print(f"Wrote {MD_PATH.relative_to(REPO_ROOT)}")
-    print(f"Wrote {SVG_PATH.relative_to(REPO_ROOT)}")
+
+    rows_by_key = {
+        "load": load_rows,
+        "accuracy": accuracy_rows,
+        "evasion": evasion_rows,
+        "false-positive": false_positive_rows,
+        "known-hash": known_hash_rows,
+        "known-good": known_good_rows,
+        "entropy": entropy_rows,
+    }
+    for key, title in SVG_SECTIONS:
+        path = svg_path(key)
+        path.write_text(render_section_svg(title, rows_by_key[key], generated_at), encoding="utf-8")
+        print(f"Wrote {path.relative_to(REPO_ROOT)}")
 
 
 if __name__ == "__main__":

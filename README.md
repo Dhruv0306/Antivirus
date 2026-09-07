@@ -152,14 +152,24 @@ CI runs unit tests, security scans (Semgrep, SpotBugs/Find Security Bugs, OWASP 
 
 ### Pressure and accuracy metrics
 
-`mvn verify -Ppressure` runs two suites under `src/test/java/com/antivirus/pressure/`:
+`mvn verify -Ppressure` runs four suites under `src/test/java/com/antivirus/pressure/`:
 
 - `EndpointPressureIT`: concurrent load against the app (unauthenticated traffic burst, concurrent authenticated scans, and the auth rate limiter under a real burst)
 - `ScanAccuracyIT`: scans a 10,000 file synthetic, safely labeled corpus through the real scan endpoint and builds a confusion matrix (the corpus is generated in memory at test time, not sourced from any real malware collection)
+- `ScanEvasionIT`: adversarial evasion resistance, false-positive resistance against legitimate content, known-malware hash coverage against real published IOCs, and known-good resistance against real open-source archives
+- `EntropyDetectionIT`: Shannon-entropy packer detection, both a portable synthetic check and a real UPX-packed-binary check when `upx` is available
 
-On every scheduled or manually-dispatched run, CI regenerates and commits [`docs/pressure-metrics.md`](docs/pressure-metrics.md) with the full numbers, and the same data as an image below:
+`ThreatIntelSignatureService`'s live feed integration has its own separate, non-PR-blocking nightly check (`mvn verify -Plive-feed-check`, see `.github/workflows/threat-intel-feed-check.yml`).
 
-![Pressure and accuracy metrics](docs/pressure-metrics.svg)
+On every scheduled or manually-dispatched run, CI regenerates and commits [`docs/pressure-metrics.md`](docs/pressure-metrics.md) with the full numbers, and the same data as one image per section below:
+
+![Load and concurrency](docs/pressure-metrics-load.svg)
+![Detection accuracy](docs/pressure-metrics-accuracy.svg)
+![Evasion resistance](docs/pressure-metrics-evasion.svg)
+![False-positive resistance](docs/pressure-metrics-false-positive.svg)
+![Known-malware hash coverage](docs/pressure-metrics-known-hash.svg)
+![Known-good archive resistance](docs/pressure-metrics-known-good.svg)
+![Entropy-based packer detection](docs/pressure-metrics-entropy.svg)
 
 Read the full report at [`docs/pressure-metrics.md`](docs/pressure-metrics.md).
 

@@ -1,0 +1,19 @@
+<svg viewBox="0 0 640 226" width="640" height="226" xmlns="http://www.w3.org/2000/svg">
+<rect x="0" y="0" width="640" height="226" fill="#010409"/>
+<rect x="0" y="16" width="640" height="176" fill="#0d1117" stroke="#30363d" rx="6"/>
+<text x="16" y="39" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" font-weight="600" fill="#58a6ff">Evasion resistance</text>
+<line x1="0" y1="50" x2="640" y2="50" stroke="#30363d"/>
+<text x="16" y="68" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Techniques tried</text>
+<text x="624" y="68" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">7</text>
+<rect x="0" y="76" width="640" height="26" fill="#161b22"/>
+<text x="16" y="94" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Expected to still be caught</text>
+<text x="624" y="94" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">2</text>
+<text x="16" y="120" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Actually caught</text>
+<text x="624" y="120" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">2</text>
+<rect x="0" y="128" width="640" height="26" fill="#161b22"/>
+<text x="16" y="146" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Evasion resistance rate</text>
+<text x="624" y="146" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">1.0000</text>
+<text x="16" y="172" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Documented blind spots</text>
+<text x="624" y="172" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">5</text>
+<text x="16" y="214" font-family="Consolas, Menlo, monospace" font-size="10.5" fill="#6e7681">Generated 2026-09-06 15:00:43 (UTC + 5:30)</text>
+</svg>
