@@ -5,5 +5,5 @@
 <line x1="0" y1="50" x2="640" y2="50" stroke="#30363d"/>
 <text x="16" y="68" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#c9d1d9">Real UPX-packer validation</text>
 <text x="624" y="68" font-family="Consolas, Menlo, monospace" font-size="12.5" fill="#7ee787" text-anchor="end" font-weight="600">Skipped (upx not available on this runner)</text>
-<text x="16" y="110" font-family="Consolas, Menlo, monospace" font-size="10.5" fill="#6e7681">Generated 2026-09-06 15:00:43 (UTC + 5:30)</text>
+<text x="16" y="110" font-family="Consolas, Menlo, monospace" font-size="10.5" fill="#6e7681">Generated 2026-09-07 07:45:49 (UTC + 5:30)</text>
 </svg>
