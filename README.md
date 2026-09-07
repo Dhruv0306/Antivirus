@@ -3,6 +3,7 @@
 [![Java CI](https://github.com/Dhruv0306/Antivirus/actions/workflows/build.yml/badge.svg)](https://github.com/Dhruv0306/Antivirus/actions/workflows/build.yml)
 [![Integration Tests](https://github.com/Dhruv0306/Antivirus/actions/workflows/integration-test.yml/badge.svg)](https://github.com/Dhruv0306/Antivirus/actions/workflows/integration-test.yml)
 [![Pressure Tests](https://github.com/Dhruv0306/Antivirus/actions/workflows/pressure-test.yml/badge.svg)](https://github.com/Dhruv0306/Antivirus/actions/workflows/pressure-test.yml)
+[![Threat-Intel Feed Check](https://github.com/Dhruv0306/Antivirus/actions/workflows/threat-intel-feed-check.yml/badge.svg)](https://github.com/Dhruv0306/Antivirus/actions/workflows/threat-intel-feed-check.yml)
 [![Release](https://img.shields.io/github/v/release/Dhruv0306/Antivirus)](https://github.com/Dhruv0306/Antivirus/releases)
 
 A full-stack antivirus application with real-time file scanning, quarantine management, and network protection. The backend is Spring Boot, the frontend is React, and privileged OS-level operations (hosts file writes, DNS blocking) run in a separate, narrowly-scoped `system-agent` process rather than inside the web-facing app.
@@ -170,6 +171,20 @@ On every scheduled or manually-dispatched run, CI regenerates and commits [`docs
 ![Known-malware hash coverage](docs/pressure-metrics-known-hash.svg)
 ![Known-good archive resistance](docs/pressure-metrics-known-good.svg)
 ![Entropy-based packer detection](docs/pressure-metrics-entropy.svg)
+
+Every evasion technique in `ScanEvasionIT` is cited against a real, external, documented source (a MITRE ATT&CK technique ID where one applies), not left resting on an inline code comment. Kept as a real table here rather than another image since citation text is long, unstructured prose that a fixed-width SVG table doesn't render well:
+
+<!-- EVASION-CITATIONS:START -->
+| Technique | Expected caught | Actual verdict | Citation |
+|---|---|---|---|
+| Extension masquerade: invoice.pdf with a real MZ header inside | Yes | MALICIOUS | MITRE ATT&CK T1036.008 Masquerade File Type |
+| Ransomware extension case variation: .LOCKED instead of .locked | Yes | MALICIOUS | No specific MITRE ATT&CK technique; this is an implementation-robustness regression guard on the string-matching logic behind ransomware file-extension detection (itself associated with T1486 Data Encrypted for Impact), not a named attacker technique in its own right. |
+| Keyword fragmentation: hyphenating 'bit-coin' to break the ransomware text pattern | Known blind spot | CLEAN | MITRE ATT&CK T1027 Obfuscated Files or Information |
+| Base64-encoded ransom note: same message, never appears as plaintext | Known blind spot | CLEAN | MITRE ATT&CK T1027.013 Encrypted/Encoded File |
+| Innocuous filename carrying a real trojan-shaped payload description | Known blind spot | CLEAN | MITRE ATT&CK T1036.005 Match Legitimate Name or Location |
+| Oversized-file evasion: ransom note placed just past the 10MB pattern-scan cap | Known blind spot | CLEAN | MITRE ATT&CK T1027.001 Binary Padding |
+| Double-extension lure: invoice.pdf.exe, a real MZ header behind Windows' hidden-extension trick | Known blind spot | CLEAN | MITRE ATT&CK T1036.008 Masquerade File Type |
+<!-- EVASION-CITATIONS:END -->
 
 Read the full report at [`docs/pressure-metrics.md`](docs/pressure-metrics.md).
 

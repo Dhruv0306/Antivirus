@@ -34,6 +34,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 METRICS_DIR = REPO_ROOT / "target" / "pressure-metrics"
 DOCS_DIR = REPO_ROOT / "docs"
 MD_PATH = DOCS_DIR / "pressure-metrics.md"
+README_PATH = REPO_ROOT / "README.md"
+README_CITATIONS_START = "<!-- EVASION-CITATIONS:START -->"
+README_CITATIONS_END = "<!-- EVASION-CITATIONS:END -->"
 
 # Canonical section list: (key, title). key drives the filename
 # (docs/pressure-metrics-<key>.svg), title is the on-image heading and the
@@ -415,6 +418,50 @@ def build_entropy_rows(entropy_metrics):
     return rows
 
 
+def render_citations_table_markdown(evasion_detail):
+    """The same per-technique/citation rows shown in pressure-metrics.md, rendered standalone
+    for embedding directly in README.md between the EVASION-CITATIONS markers."""
+    if not evasion_detail:
+        return "_No evasion-metrics.json found for this run._"
+    lines = ["| Technique | Expected caught | Actual verdict | Citation |", "|---|---|---|---|"]
+    for technique, expect_caught, verdict, citation in evasion_detail:
+        lines.append(f"| {technique} | {'Yes' if expect_caught else 'Known blind spot'} | {verdict} | {citation} |")
+    return "\n".join(lines)
+
+
+def update_readme_citations_table(evasion_detail):
+    """Replaces the content between the EVASION-CITATIONS markers in README.md in place,
+    leaving the rest of the file untouched. Fails loudly if the markers are missing rather
+    than silently doing nothing, a missing marker means the README was edited in a way that
+    broke this wiring, not that there's nothing to update."""
+    if not README_PATH.exists():
+        print(f"README not found at {README_PATH}, skipping citation table update.", file=sys.stderr)
+        return False
+
+    text = README_PATH.read_text(encoding="utf-8")
+    start_idx = text.find(README_CITATIONS_START)
+    end_idx = text.find(README_CITATIONS_END)
+    if start_idx == -1 or end_idx == -1 or end_idx < start_idx:
+        print(
+            f"Could not find {README_CITATIONS_START} / {README_CITATIONS_END} markers in "
+            f"README.md, skipping citation table update. Someone likely edited the README "
+            f"around that section; re-add the markers to restore auto-updating.",
+            file=sys.stderr,
+        )
+        return False
+
+    before = text[: start_idx + len(README_CITATIONS_START)]
+    after = text[end_idx:]
+    table = render_citations_table_markdown(evasion_detail)
+    new_text = f"{before}\n{table}\n{after}"
+    if new_text != text:
+        README_PATH.write_text(new_text, encoding="utf-8")
+        print(f"Updated {README_PATH.relative_to(REPO_ROOT)}")
+    else:
+        print(f"{README_PATH.relative_to(REPO_ROOT)} citation table already up to date")
+    return True
+
+
 def main():
     load_metrics = load_json(METRICS_DIR / "load-metrics.json")
     accuracy_metrics = load_json(METRICS_DIR / "accuracy-metrics.json")
@@ -460,6 +507,8 @@ def main():
         path = svg_path(key)
         path.write_text(render_section_svg(title, rows_by_key[key], generated_at), encoding="utf-8")
         print(f"Wrote {path.relative_to(REPO_ROOT)}")
+
+    update_readme_citations_table(evasion_detail)
 
 
 if __name__ == "__main__":
