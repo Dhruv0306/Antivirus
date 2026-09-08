@@ -25,23 +25,23 @@ import { styled } from '@mui/material/styles';
 
 // Styled components
 const StyledCard = styled(Card)(({ theme }) => ({
-  backgroundColor: '#ffffff',
-  color: '#2c3e50',
-  border: '1px solid rgba(0, 0, 0, 0.12)',
-  borderRadius: '8px',
-  transition: 'all 0.2s ease-in-out',
+  backgroundColor: 'var(--background-paper)',
+  color: 'var(--text-primary)',
+  border: '1px solid var(--border-main)',
+  borderRadius: 'var(--border-radius-medium)',
+  transition: 'border-color var(--duration-base) ease, box-shadow var(--duration-base) ease',
   marginBottom: '16px',
   '&:hover': {
-    borderColor: '#0068ff',
-    boxShadow: '0 8px 16px rgba(0, 0, 0, 0.15)'
+    borderColor: 'var(--primary-main)',
+    boxShadow: 'var(--shadow-medium)'
   }
 }));
 
 const StyledPaper = styled(Paper)(({ theme }) => ({
   padding: '24px',
-  backgroundColor: '#ffffff',
-  border: '1px solid rgba(0, 0, 0, 0.12)',
-  borderRadius: '8px',
+  backgroundColor: 'var(--background-paper)',
+  border: '1px solid var(--border-main)',
+  borderRadius: 'var(--border-radius-medium)',
   marginBottom: '16px',
   [theme.breakpoints.down('sm')]: {
     padding: '16px',
@@ -52,8 +52,8 @@ const AutoScanGuide = () => {
   return (
     <Box sx={{
       p: { xs: 2, sm: 3 },
-      color: '#2c3e50',
-      backgroundColor: '#f5f5f5',
+      color: 'var(--text-primary)',
+      backgroundColor: 'var(--background-default)',
       minHeight: '100vh'
     }}>
       {/* Main Title */}
@@ -62,7 +62,7 @@ const AutoScanGuide = () => {
         gutterBottom
         align="center"
         sx={{
-          color: '#2c3e50',
+          color: 'var(--text-primary)',
           mb: 4,
           fontWeight: 600
         }}
@@ -85,7 +85,7 @@ const AutoScanGuide = () => {
       <StyledCard>
         <CardContent>
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-            <SettingsIcon sx={{ fontSize: 30, mr: 1, color: '#0068ff' }} />
+            <SettingsIcon sx={{ fontSize: 30, mr: 1, color: 'var(--primary-main)' }} />
             <Typography variant="h5" component="div">
               Step-by-Step Setup Guide
             </Typography>
@@ -95,7 +95,7 @@ const AutoScanGuide = () => {
             {/* Step 1 */}
             <ListItem>
               <ListItemIcon>
-                <SearchIcon sx={{ color: '#0068ff' }} />
+                <SearchIcon sx={{ color: 'var(--primary-main)' }} />
               </ListItemIcon>
               <ListItemText
                 primary="Step 1: Open Task Scheduler"
@@ -114,7 +114,7 @@ const AutoScanGuide = () => {
             {/* Step 2 */}
             <ListItem>
               <ListItemIcon>
-                <ComputerIcon sx={{ color: '#0068ff' }} />
+                <ComputerIcon sx={{ color: 'var(--primary-main)' }} />
               </ListItemIcon>
               <ListItemText
                 primary="Step 2: Create a New Task"
@@ -133,7 +133,7 @@ const AutoScanGuide = () => {
             {/* Step 3 */}
             <ListItem>
               <ListItemIcon>
-                <TimerIcon sx={{ color: '#0068ff' }} />
+                <TimerIcon sx={{ color: 'var(--primary-main)' }} />
               </ListItemIcon>
               <ListItemText
                 primary="Step 3: Set the Schedule"
@@ -153,7 +153,7 @@ const AutoScanGuide = () => {
             {/* Step 4 */}
             <ListItem>
               <ListItemIcon>
-                <SettingsIcon sx={{ color: '#0068ff' }} />
+                <SettingsIcon sx={{ color: 'var(--primary-main)' }} />
               </ListItemIcon>
               <ListItemText
                 primary="Step 4: Configure the Action"
@@ -175,7 +175,7 @@ const AutoScanGuide = () => {
       <StyledCard>
         <CardContent>
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-            <InfoIcon sx={{ fontSize: 30, mr: 1, color: '#0068ff' }} />
+            <InfoIcon sx={{ fontSize: 30, mr: 1, color: 'var(--primary-main)' }} />
             <Typography variant="h5" component="div">
               Additional Task Settings
             </Typography>
@@ -184,7 +184,7 @@ const AutoScanGuide = () => {
           <List>
             <ListItem>
               <ListItemIcon>
-                <CheckCircleIcon sx={{ color: '#00a854' }} />
+                <CheckCircleIcon sx={{ color: 'var(--success-main)' }} />
               </ListItemIcon>
               <ListItemText
                 primary="Run with Highest Privileges"
@@ -194,7 +194,7 @@ const AutoScanGuide = () => {
 
             <ListItem>
               <ListItemIcon>
-                <CheckCircleIcon sx={{ color: '#00a854' }} />
+                <CheckCircleIcon sx={{ color: 'var(--success-main)' }} />
               </ListItemIcon>
               <ListItemText
                 primary="Wake Computer"
@@ -204,7 +204,7 @@ const AutoScanGuide = () => {
 
             <ListItem>
               <ListItemIcon>
-                <CheckCircleIcon sx={{ color: '#00a854' }} />
+                <CheckCircleIcon sx={{ color: 'var(--success-main)' }} />
               </ListItemIcon>
               <ListItemText
                 primary="Start When Available"
@@ -219,7 +219,7 @@ const AutoScanGuide = () => {
       <StyledCard>
         <CardContent>
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-            <ScheduleIcon sx={{ fontSize: 30, mr: 1, color: '#0068ff' }} />
+            <ScheduleIcon sx={{ fontSize: 30, mr: 1, color: 'var(--primary-main)' }} />
             <Typography variant="h5" component="div">
               Best Practices
             </Typography>
