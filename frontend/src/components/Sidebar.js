@@ -40,7 +40,7 @@ const StyledPaper = styled(Paper)(({ theme }) => ({
   height: 'fit-content',
   position: 'sticky',
   top: 16,
-  transition: 'all 0.2s ease-in-out',
+  transition: 'box-shadow var(--duration-base) ease',
   '&:hover': { boxShadow: 'var(--shadow-xlarge)' },
 }));
 
@@ -59,48 +59,41 @@ const DrawerContent = styled(Box)(({ theme }) => ({
 }));
 
 const LogoContainer = styled(Box)(({ theme }) => ({
-  padding: '12px',
+  padding: '14px 16px',
   display: 'flex',
   alignItems: 'center',
-  gap: 8,
+  gap: 10,
   borderBottom: '1px solid var(--border-main)',
-  background: 'linear-gradient(145deg, var(--background-dark), var(--background-paper))',
 }));
 
 const LogoIcon = styled(SecurityIcon)(({ theme }) => ({
   color: 'var(--primary-main)',
-  fontSize: '1.5rem',
-  animation: 'pulse 2s infinite',
-  '@keyframes pulse': {
-    '0%': { opacity: 0.6 },
-    '50%': { opacity: 1 },
-    '100%': { opacity: 0.6 },
-  },
+  fontSize: '1.4rem',
 }));
 
 const LogoText = styled(Typography)(({ theme }) => ({
   color: 'var(--text-primary)',
-  fontSize: '1.2rem',
+  fontSize: '1.1rem',
   fontWeight: 600,
-  background: 'linear-gradient(45deg, var(--primary-main), var(--primary-light))',
-  WebkitBackgroundClip: 'text',
-  WebkitTextFillColor: 'transparent',
+  letterSpacing: '-0.01em',
 }));
 
 const StyledListItem = styled(ListItem)(({ theme }) => ({
   color: 'var(--text-primary)',
+  position: 'relative',
+  borderLeft: '2px solid transparent',
   '&:hover': {
-    backgroundColor: 'var(--primary-transparent-hover)',
+    backgroundColor: 'var(--background-dark)',
     '& .MuiListItemIcon-root': { color: 'var(--primary-main)' },
   },
-  transition: 'all 0.2s ease',
-  borderRadius: 'var(--border-radius-medium)',
-  margin: '4px 8px',
-  marginBottom: 4,
-  padding: '6px',
+  transition: 'background-color var(--duration-base) ease, border-color var(--duration-base) ease',
+  borderRadius: '0 var(--border-radius-medium) var(--border-radius-medium) 0',
+  margin: '2px 8px 2px 0',
+  padding: '8px 12px',
   minHeight: '40px',
   '&.active': {
-    backgroundColor: 'var(--primary-transparent)',
+    backgroundColor: 'var(--background-dark)',
+    borderLeftColor: 'var(--primary-main)',
     '& .MuiListItemIcon-root': { color: 'var(--primary-main)' },
     '& .MuiListItemText-root .MuiTypography-root': {
       fontWeight: 600,
