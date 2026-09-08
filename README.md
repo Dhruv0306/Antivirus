@@ -16,6 +16,70 @@ A full-stack antivirus application with real-time file scanning, quarantine mana
 - Network protection: domain blocking and a local blocking proxy, backed by a privileged `system-agent` that owns the actual hosts file / DNS writes
 - Scan history and reporting, stored in a relational schema managed by Flyway
 
+## Screenshots
+
+The frontend uses a dark "Night Watch" theme: charcoal surfaces, a single
+muted gold accent, and hairline borders instead of shadow-heavy cards.
+
+<table>
+<tr>
+<td width="50%">
+
+**Sign in**
+<img src="docs/screenshots/login.png" alt="Login screen" width="100%">
+
+</td>
+<td width="50%">
+
+**Create account**
+<img src="docs/screenshots/register.png" alt="Register screen" width="100%">
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+**Dashboard**
+<img src="docs/screenshots/dashboard.png" alt="System dashboard" width="100%">
+
+</td>
+<td width="50%">
+
+**File scan**
+<img src="docs/screenshots/file-scan.png" alt="File scan results" width="100%">
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+**Directory scan**
+<img src="docs/screenshots/directory-scan.png" alt="Directory scan" width="100%">
+
+</td>
+<td width="50%">
+
+**System scan**
+<img src="docs/screenshots/system-scan.png" alt="System scan results" width="100%">
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+**Network security**
+<img src="docs/screenshots/network-security.png" alt="Network security controls" width="100%">
+
+</td>
+<td width="50%">
+
+**Auto-scan setup guide**
+<img src="docs/screenshots/auto-scan-guide.png" alt="Auto scan guide" width="100%">
+
+</td>
+</tr>
+</table>
+
 ## Tech stack
 
 **Backend**
