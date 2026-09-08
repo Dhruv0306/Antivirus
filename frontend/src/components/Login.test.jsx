@@ -12,7 +12,10 @@ vi.mock('../context/AuthContext', () => ({
 
 function renderLogin(initialEntries = ['/login']) {
     return render(
-        <MemoryRouter initialEntries={initialEntries}>
+        <MemoryRouter
+            initialEntries={initialEntries}
+            future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+        >
             <Routes>
                 <Route path="/login" element={<Login />} />
                 <Route path="/" element={<div>Dashboard Page</div>} />

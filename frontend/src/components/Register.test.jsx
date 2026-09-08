@@ -16,7 +16,10 @@ vi.mock('../api/client', () => ({
 
 function renderRegister() {
     return render(
-        <MemoryRouter initialEntries={['/register']}>
+        <MemoryRouter
+            initialEntries={['/register']}
+            future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+        >
             <Routes>
                 <Route path="/register" element={<Register />} />
                 <Route path="/login" element={<div>Login Page</div>} />
