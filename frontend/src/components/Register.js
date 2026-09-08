@@ -4,8 +4,6 @@ import {
     Alert,
     Box,
     Button,
-    Card,
-    CardContent,
     CircularProgress,
     TextField,
     Typography,
@@ -93,22 +91,58 @@ function Register() {
     return (
         <Box
             sx={{
-                minHeight: '100vh',
+                minHeight: '100dvh',
                 display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
                 bgcolor: 'background.default',
-                p: 2,
             }}
         >
-            <Card sx={{ width: '100%', maxWidth: 420 }}>
-                <CardContent sx={{ p: { xs: 3, sm: 4 } }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 3, gap: 1 }}>
-                        <SecurityIcon color="primary" />
-                        <Typography variant="h5" component="h1" fontWeight={600}>
-                            Create account
-                        </Typography>
-                    </Box>
+            {/* Brand panel — mirrors Login's split layout so the two auth
+                screens read as one flow. */}
+            <Box
+                sx={{
+                    display: { xs: 'none', sm: 'flex' },
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    width: { sm: '38%', md: '34%' },
+                    p: 5,
+                    bgcolor: 'var(--secondary-dark)',
+                    borderRight: '1px solid var(--border-main)',
+                }}
+            >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <SecurityIcon sx={{ color: 'var(--primary-main)' }} />
+                    <Typography variant="subtitle1" fontWeight={600} letterSpacing="-0.01em" sx={{ color: 'var(--text-primary)' }}>
+                        SecureGuard
+                    </Typography>
+                </Box>
+                <Box>
+                    <Typography variant="h4" fontWeight={600} sx={{ mb: 2, letterSpacing: '-0.01em', color: 'var(--text-primary)' }}>
+                        One account, every scan surface.
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: 'var(--text-secondary)', maxWidth: 340 }}>
+                        File, directory, and (for admins) system and network
+                        scanning, all under one login.
+                    </Typography>
+                </Box>
+                <Typography variant="caption" sx={{ color: 'var(--text-disabled)' }}>
+                    &copy; {new Date().getFullYear()} SecureGuard Antivirus
+                </Typography>
+            </Box>
+
+            {/* Form panel */}
+            <Box
+                sx={{
+                    flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    p: 2,
+                }}
+            >
+                <Box sx={{ width: '100%', maxWidth: 360 }}>
+                    <Typography variant="h5" component="h1" fontWeight={600} sx={{ mb: 1 }}>
+                        Create account
+                    </Typography>
 
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
                         Register for file and directory scanning access.
@@ -181,8 +215,8 @@ function Register() {
                             </Link>
                         </Typography>
                     </Box>
-                </CardContent>
-            </Card>
+                </Box>
+            </Box>
         </Box>
     );
 }
