@@ -6,6 +6,7 @@ export default defineConfig(({ mode }) => ({
     plugins: [
         {
             name: 'treat-js-files-as-jsx',
+            enforce: 'pre',
             async transform(code, id) {
                 if (!id.match(/src\/.*\.js$/)) {
                     return null;
@@ -18,9 +19,14 @@ export default defineConfig(({ mode }) => ({
         },
         react(),
     ],
-    esbuild: {
-        // Drop console/debugger only in production builds
-        drop: mode === 'production' ? ['console', 'debugger'] : [],
+    build: {
+        minify: mode === 'production' ? 'terser' : false,
+        terserOptions: {
+            compress: {
+                drop_console: true,
+                drop_debugger: true,
+            },
+        },
     },
     server: {
         port: 5000,
