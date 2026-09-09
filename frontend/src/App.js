@@ -54,9 +54,8 @@ function MobileAppBar({ onMenuClick }) {
           component="div"
           sx={{
             fontWeight: 600,
-            background: 'linear-gradient(45deg, var(--primary-main), var(--primary-light))',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
+            letterSpacing: '-0.01em',
+            color: 'var(--text-primary)',
           }}
         >
           SecureGuard
@@ -116,21 +115,21 @@ function App() {
     const colors = getThemeColors();
     return createTheme({
       palette: {
-        mode: 'light',
+        mode: 'dark',
         ...colors,
       },
       typography: {
-        fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
+        fontFamily: '"Manrope", "Roboto", "Helvetica", "Arial", sans-serif',
       },
       shape: {
-        borderRadius: 8,
+        borderRadius: 6,
       },
     });
   }, []);
 
   return (
     <AuthProvider>
-      <Router>
+      <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ThemeProvider theme={theme}>
           <CssBaseline />
           <Routes>

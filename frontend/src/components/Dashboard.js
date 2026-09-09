@@ -43,7 +43,7 @@ const StyledCard = styled(Card)(({ theme }) => ({
   borderRadius: 'var(--border-radius-medium)',
   border: '2px solid var(--border-main)',
   boxShadow: 'var(--shadow-medium)',
-  transition: 'all 0.2s ease-in-out',
+  transition: 'border-color var(--duration-base) ease, box-shadow var(--duration-base) ease, transform var(--duration-base) var(--ease-out)',
   '&:hover': {
     borderColor: 'var(--primary-main)',
     boxShadow: 'var(--shadow-large)',
@@ -79,7 +79,7 @@ const StyledProgress = styled(LinearProgress)(({ theme }) => ({
 const StyledIconButton = styled(IconButton)(({ theme }) => ({
   color: 'var(--primary-main)',
   '&:hover': {
-    backgroundColor: 'rgba(33, 150, 243, 0.1)'
+    backgroundColor: 'var(--primary-transparent)'
   }
 }));
 
