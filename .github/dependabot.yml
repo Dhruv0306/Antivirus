@@ -1,0 +1,68 @@
+version: 2
+updates:
+  # Web app dependencies (root pom.xml). Security updates open PRs
+  # immediately regardless of this schedule; the interval below only
+  # governs routine version-bump PRs so they don't arrive daily.
+  - package-ecosystem: "maven"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "security"
+    groups:
+      spring-boot:
+        patterns:
+          - "org.springframework.boot:*"
+          - "org.springframework*:*"
+
+  # system-agent dependencies — a separate module with its own pom.xml,
+  # not covered by the root Maven entry above. No Spring Boot here, so
+  # no grouping needed.
+  - package-ecosystem: "maven"
+    directory: "/system-agent"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "security"
+      - "system-agent"
+
+  # Frontend dependencies (frontend/package.json).
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "frontend"
+    groups:
+      mui:
+        patterns:
+          - "@mui/*"
+          - "@emotion/*"
+      react:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "react-router-dom"
+      build-and-test:
+        patterns:
+          - "vite"
+          - "vitest"
+          - "@vitejs/*"
+          - "@testing-library/*"
+          - "jsdom"
+
+  # GitHub Actions workflow dependencies (actions/checkout@vX, etc.) — these
+  # are a supply-chain surface too and are easy to forget.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "ci"
