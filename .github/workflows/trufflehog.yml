@@ -9,7 +9,7 @@ jobs:
     trufflehog:
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v7
               with:
                   # Full history required: TruffleHog needs to walk commits
                   # to find secrets that were added and later removed but

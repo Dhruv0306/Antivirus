@@ -14,7 +14,7 @@ jobs:
         container:
             image: semgrep/semgrep
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v7
 
             # Report-only for now (no --error flag): this codebase has
             # never been scanned by Semgrep before, so the current
