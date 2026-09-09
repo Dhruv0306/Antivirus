@@ -37,7 +37,7 @@
             Postgres instance exists — docs/deployment/provision-agent-db-role.sql
             already targets Postgres for the DB-role side of that switch.
         -->
-        <h2.version>2.4.240</h2.version>
+        <h2.version>2.5.250</h2.version>
         <junit.version>6.1.3</junit.version>
         <mockito.version>5.23.0</mockito.version>
         <!-- Matches the version actually resolved by the root project's
