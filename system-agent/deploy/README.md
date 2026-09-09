@@ -28,6 +28,12 @@ $env:POLL_INTERVAL_SECONDS="5"
 java -jar system-agent\target\system-agent.jar
 ```
 
+Wait for `"hosts file updated with 0 blocked domain(s)"` in the agent's
+own log before doing anything else — that's confirmation it started,
+found the hosts file, and completed its first poll cycle. If that line
+doesn't appear, don't move on to testing domain blocking; see
+"Troubleshooting" below.
+
 **If you're running the web app (`local` profile) at the same time**,
 which is the actual point of this, proving the two processes talk to each
 other through the database, both sides need `AUTO_SERVER=TRUE` on the H2
@@ -38,6 +44,116 @@ just H2 refusing concurrent access by default. `AgentConfig`'s own
 default `DB_URL` already includes this, and so does
 `application-local.properties`, so this works out of the box as long as
 neither side overrides `DB_URL` with a URL that drops the flag.
+
+**Use the `local` profile, not `dev`.** `application-dev.properties`
+points at `jdbc:h2:mem:antivirus_v3`, an in-memory database private to
+that one JVM — the agent (a separate process) can never see it no matter
+what `DB_URL` you give it, since H2's `mem:` mode isn't cross-process
+without a TCP server. `application-local.properties` is the one built
+for this pairing (file-based, `AUTO_SERVER=TRUE`, same default DB name
+the agent expects). Running `dev` alongside the agent won't error, it'll
+just look like the agent is silently doing nothing: `DomainSyncTask`
+only logs when the domain set changes, so against an empty database
+that never changes, you'd only ever see that one startup log line and
+nothing after — easy to mistake for "the agent isn't polling" when it's
+actually polling a completely different, permanently-empty database.
+
+```powershell
+mvn clean spring-boot:run "-Dspring-boot.run.profiles=local"
+```
+
+### End-to-end test: block a domain and watch the agent enforce it
+
+This drives the real web app API (auth, CSRF, validation) rather than
+writing to the database directly, so it actually proves the full pipeline
+works, not just the agent in isolation. Requires the web app (`local`
+profile) and the agent both already running per above.
+
+```powershell
+$base = "http://localhost:8080"
+
+# 1. CSRF + session
+$csrf = Invoke-RestMethod -Uri "$base/api/auth/csrf" -Method Get -SessionVariable session
+$token = $csrf.token
+
+# 2. Login (replace with your real local admin credentials)
+$loginBody = @{ username = "admin"; password = "YOUR_LOCAL_ADMIN_PASSWORD" }
+Invoke-RestMethod -Uri "$base/api/auth/login" -Method Post -WebSession $session `
+  -Headers @{ "X-XSRF-TOKEN" = $token } `
+  -ContentType "application/x-www-form-urlencoded" -Body $loginBody
+
+# 3. Re-fetch the CSRF token — Spring Security rotates it on successful
+#    login, so the pre-login token from step 1 will 403 on every POST
+#    from here on if you reuse it.
+$csrf = Invoke-RestMethod -Uri "$base/api/auth/csrf" -Method Get -WebSession $session
+$token = $csrf.token
+
+# 4. Confirm you're actually authenticated as ADMIN
+Invoke-RestMethod -Uri "$base/api/auth/me" -WebSession $session
+
+# 5. Block a domain
+$blockBody = @{ domain = "github.com" } | ConvertTo-Json
+Invoke-RestMethod -Uri "$base/api/network-security/block" -Method Post -WebSession $session `
+  -Headers @{ "X-XSRF-TOKEN" = $token } -ContentType "application/json" -Body $blockBody
+
+# 6. Wait past one poll cycle, then check the hosts file directly
+Start-Sleep -Seconds 6
+Get-Content D:\github\Antivirus\test-hosts.txt
+# expect a new line: 127.0.0.1 github.com # ANTIVIRUS_BLOCKED_DOMAIN
+
+# 7. Status should now show the agent reachable, hosts file writable,
+#    and the domain listed
+Invoke-RestMethod -Uri "$base/api/network-security/status" -WebSession $session | ConvertTo-Json -Depth 5
+
+# 8. Unblock and confirm the agent removes the line again
+$unblockBody = @{ domain = "github.com" } | ConvertTo-Json
+Invoke-RestMethod -Uri "$base/api/network-security/unblock" -Method Post -WebSession $session `
+  -Headers @{ "X-XSRF-TOKEN" = $token } -ContentType "application/json" -Body $unblockBody
+Start-Sleep -Seconds 6
+Get-Content D:\github\Antivirus\test-hosts.txt
+```
+
+The agent's log should print `"hosts file updated with 1 blocked domain(s)"`
+after step 5, and `"...0 blocked domain(s)"` after step 8.
+
+**Use `Invoke-RestMethod`, not `curl.exe`, for the JSON-body requests.**
+PowerShell reconstructs the command line when handing arguments to a
+native executable like `curl.exe`, and embedded `\"` sequences in a
+`-d '{\"domain\":\"...\"}'` argument frequently get mangled in that
+handoff — the request either never carries valid JSON or silently fails
+domain validation, with no obvious error since `curl.exe -s` still exits
+0. `Invoke-RestMethod -Body (... | ConvertTo-Json)` builds the request
+directly with no subprocess or command-line parsing involved, and throws
+a real, visible exception on a non-2xx response instead of failing
+silently.
+
+### Troubleshooting
+
+- **Only one `"hosts file updated"` log line, ever, no matter what you
+  block.** Check the web app's active profile is `local`, not `dev` (see
+  above). `DomainSyncTask` only logs when the domain set changes since
+  the last poll, so silence after the first line usually means the agent
+  and the web app are reading two different databases, not that polling
+  stopped.
+- **`hostsFileAccessible: false` / `hasAdminPrivileges: false` in
+  `/api/network-security/status`.** `HostsFileWriter.isWritable()`
+  requires the target file to already exist (`Files.exists(hostsPath)`),
+  it won't create one. Re-run the `Out-File` throwaway-hosts-file command
+  above before starting the agent — this file doesn't persist across
+  fresh clones/sessions the way the H2 file database does.
+- **`403` on every POST after a successful login.** The CSRF token
+  rotates on login; you're reusing the pre-login token. Re-fetch
+  `/api/auth/csrf` once, immediately after login, and use that value for
+  every subsequent state-changing request in the same session.
+- **Leftover `HOSTS_FILE_PATH`/`POLL_INTERVAL_SECONDS`/`DB_URL` env vars
+  from an earlier test.** `AgentConfig.get()` checks `System.getenv()`
+  before the properties file or built-in default, unconditionally, on
+  every call — including from `AgentConfigTest`'s `fromProperties()`
+  construction. A value set with `$env:VAR = "..."` in a PowerShell
+  session persists for every command after it, Maven's test JVM
+  included, and can make `AgentConfigTest` fail with no code change
+  involved. `Remove-Item Env:\VAR_NAME` before re-running `mvn test` if
+  its assertions suddenly don't match the documented defaults.
 
 ## Linux deployment order
 
