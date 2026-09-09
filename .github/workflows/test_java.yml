@@ -9,7 +9,7 @@ jobs:
     test_java:
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v4 # Updated to v4 for 2026 standards
+            - uses: actions/checkout@v7 # Updated to v4 for 2026 standards
 
             - name: Set up JDK 21
               uses: actions/setup-java@v4 # Updated to v4
