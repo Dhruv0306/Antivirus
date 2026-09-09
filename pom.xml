@@ -19,7 +19,7 @@
         <spring-framework.version>7.0.9</spring-framework.version>
         <spring-security.version>7.1.1</spring-security.version>
         <tomcat.version>11.0.25</tomcat.version>
-        <jackson.version>2.22.1</jackson.version>
+        <jackson.version>2.22.2</jackson.version>
         <log4j.version>2.26.1</log4j.version>
     </properties>
 
