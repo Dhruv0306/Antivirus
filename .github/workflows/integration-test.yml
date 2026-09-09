@@ -21,7 +21,7 @@ jobs:
 
             # Cache the Dependency-Check data directory to speed up the NVD update process
             - name: Cache OWASP Dependency Check Data
-              uses: actions/cache@v4
+              uses: actions/cache@v6
               with:
                   path: ~/.m2/repository/org/owasp/dependency-check-data
                   key: ${{ runner.os }}-odc-${{ github.run_number }}
