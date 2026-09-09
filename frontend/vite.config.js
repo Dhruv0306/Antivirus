@@ -42,5 +42,6 @@ export default defineConfig(({ mode }) => ({
         globals: true,
         setupFiles: ['./src/setupTests.js'],
         css: false,
+        pool: 'threads',
     },
 }));
