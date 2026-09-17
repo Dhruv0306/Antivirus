@@ -31,7 +31,16 @@ jobs:
             - name: Run full end-to-end integration suite
               env:
                   NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
-              run: mvn -B verify -Pintegration -DnvdApiKey="$NVD_API_KEY"
+              run: |
+                  if [ -n "${{ secrets.NVD_API_KEY }}" ]; then
+                    export NVD_API_KEY="${{ secrets.NVD_API_KEY }}"
+                    echo "NVD_API_KEY is set"
+                    mvn -B verify -Pintegration -DnvdApiKey="$NVD_API_KEY"
+                  else
+                    unset NVD_API_KEY
+                    echo "NVD_API_KEY is not set"
+                    mvn -B verify -Pintegration -DautoUpdate=false
+                  fi
 
             - name: Upload failsafe reports
               if: always()
@@ -40,7 +49,7 @@ jobs:
                   name: integration-test-reports
                   path: target/failsafe-reports/
                   retention-days: 14
-            
+
             - name: Notify on failure
               if: failure()
               run: |

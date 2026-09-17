@@ -34,9 +34,15 @@ jobs:
             # in CI. This workflow calls the goal directly so it always runs,
             # independent of whether the other workflows change phase.
             - name: Run OWASP dependency-check
-              env:
-                  NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
-              run: mvn -B org.owasp:dependency-check-maven:check -DnvdApiKey="$NVD_API_KEY" -DnodeAuditAnalyzerEnabled=false --file pom.xml
+              run: |
+                  if [ -n "${{ secrets.NVD_API_KEY }}" ]; then
+                      export NVD_API_KEY="${{ secrets.NVD_API_KEY }}"
+                      echo "NVD_API_KEY is set"
+                      mvn -B org.owasp:dependency-check-maven:check -DnvdApiKey="$NVD_API_KEY" -DnodeAuditAnalyzerEnabled=false --file pom.xml
+                  else
+                      echo "NVD_API_KEY is not set"
+                      mvn -B org.owasp:dependency-check-maven:check -DautoUpdate=false -DnodeAuditAnalyzerEnabled=false --file pom.xml
+                  fi
 
             - name: Upload dependency-check report
               if: always()
