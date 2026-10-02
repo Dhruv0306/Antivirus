@@ -18,6 +18,31 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Security
 
+## [1.1.1] - 2026-10-02
+
+Maintenance release: dependency and CI tooling updates since v1.1.0, plus the fixes needed to keep the frontend building and testing on the new toolchain. No application source changes, no API changes and no database migrations. Building the frontend now requires Node 22 or newer (see Changed).
+
+### Changed
+- **Backend:** Spring Boot parent 4.1.0 to 4.1.1, Tomcat 11.0.25 to 11.0.26, Jackson 2.22.1 to 2.22.3, commons-io 2.18.0 to 2.22.0
+- **Backend build tooling:** OWASP dependency-check-maven 12.2.2 to 13.0.0, SpotBugs Maven plugin 4.9.8.4 to 4.10.4.1, Find Security Bugs 1.12.0 to 1.14.0
+- **system-agent:** H2 2.4.240 to 2.5.252, JUnit 5.11.3 to 6.1.3, Mockito 5.14.2 to 5.24.0, Flyway (test scope only) 12.4.0 to 13.8.0, maven-compiler-plugin 3.13.0 to 3.16.0, maven-surefire-plugin 3.5.2 to 3.6.0, maven-assembly-plugin 3.7.1 to 3.8.0
+- **Frontend (major version bumps):** React and React DOM 18 to 19, MUI 6 to 9, React Router 6 to 7, Vite 6 to 8, Vitest 4 to 5, jsdom 29 to 30, `@vitejs/plugin-react` 4 to 6, Testing Library jest-dom 6 to 7, axios 1.8 to 1.20
+- **Frontend build requirement:** `frontend/package.json` now declares an `engines.node` range (`^22.22.2 || ^24.15.0 || >=26.0.0`), required by jsdom 30. `test_frontend.yml` now runs on Node 22 instead of Node 20
+- **CI:** GitHub Actions updated to `actions/checkout@v7`, `setup-java@v6`, `setup-node@v7`, `setup-python@v7`, `cache@v6` and `upload-artifact@v7`
+- **CI:** the OWASP dependency-check and integration-test workflows now handle a missing `NVD_API_KEY` explicitly, running with the NVD update disabled instead of failing on an empty key
+- **CI:** added Dependabot configuration covering Maven (root and `system-agent`), npm and GitHub Actions
+- Aligned the root `pom.xml`, `system-agent/pom.xml`, `frontend/package.json` and `frontend/package-lock.json` versions with the release tag (previously 1.0.0, 1.0.0 and 0.1.0)
+
+### Fixed
+- Frontend test and build failures caused by the build-and-test dependency bump: `esbuild` is now an explicit devDependency (Vite 8 no longer bundles it), the custom JSX-in-`.js` plugin runs with `enforce: 'pre'` so Vite 8's built-in transform no longer races it, and production `console` and `debugger` stripping moved to terser because the previous `esbuild.drop` setting became a silent no-op under Vite 8
+- TruffleHog secret scan failing on a documentation example database URL in an error message (`DatasourceSafetyConfig.java`); the file is now excluded through `.trufflehog-exclude`
+
+### Removed
+- Outdated `wiki-staging/` pages (architecture, deployment, getting started, security model, scanning and verdicts, testing)
+
+[Unreleased]: https://github.com/Dhruv0306/Antivirus/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/Dhruv0306/Antivirus/compare/v1.1.0...v1.1.1
+
 ## [1.1.0] - 2026-09-09
 
 Detection-engine hardening, a large expansion of automated test coverage, and a full frontend visual redesign. No breaking changes to the API or database schema (one additive migration).
@@ -50,7 +75,6 @@ Detection-engine hardening, a large expansion of automated test coverage, and a 
 ### Removed
 - Outdated H1 rollout and staging-validation runbooks, superseded by a new real-world-testing improvement plan (`docs/plans/real-world-testing-phase-plan.md`)
 
-[Unreleased]: https://github.com/Dhruv0306/Antivirus/compare/v1.1.0...HEAD
 [1.1.0]: https://github.com/Dhruv0306/Antivirus/compare/v1.0.0...v1.1.0
 
 ## [1.0.0] - 2026-08-31
