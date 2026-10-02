@@ -22,7 +22,15 @@ jobs:
             # genuine finding here (a live, working credential committed to
             # the repo) is urgent regardless of whether findings have been
             # triaged yet.
+            # .trufflehog-exclude holds one narrow path regex for a known
+            # false positive: DatasourceSafetyConfig.java contains an example
+            # database URL inside an error message. It is not a credential,
+            # but the JDBC detector reports it as "unknown". Do not paste
+            # that URL into this comment: this file is scanned too. The line
+            # lives in commit history, so an inline
+            # trufflehog:ignore or a source edit cannot clear it: any new
+            # branch push (e.g. every Dependabot branch) scans full history.
             - name: Secret scanning
               uses: trufflesecurity/trufflehog@main
               with:
-                  extra_args: --results=verified,unknown
+                  extra_args: --results=verified,unknown --exclude-paths=.trufflehog-exclude
