@@ -1,6 +1,6 @@
 # Pressure and accuracy metrics
 
-_Last generated: 2026-10-19 13:51:55 (UTC), by `.github/workflows/pressure-test.yml`._
+_Last generated: 2026-10-20 13:35:58 (UTC), by `.github/workflows/pressure-test.yml`._
 
 Regenerated automatically on every scheduled or manually-dispatched run of the pressure suite (`mvn verify -Ppressure`). See the `*IT.java` classes under `src/test/java/com/antivirus/pressure/` for what each number below actually measures, and `scripts/generate_pressure_report.py` for how this file and the per-section `pressure-metrics-*.svg` images in README.md are rendered from the raw JSON in `target/pressure-metrics/`.
 
@@ -12,12 +12,12 @@ Regenerated automatically on every scheduled or manually-dispatched run of the p
 | Requests per client | 5 |
 | Total requests | 500 |
 | Error rate (unauthenticated burst) | 0.00% |
-| Max latency under load | 495 ms |
+| Max latency under load | 246 ms |
 | Concurrent authenticated scans | 20 |
 | Error rate (concurrent scans) | 0.00% |
 | Scan history entries after burst | 20 |
 | Rate-limiter burst size | 30 |
-| Requests rejected (HTTP 429) | 21 |
+| Requests rejected (HTTP 429) | 26 |
 
 ## Detection accuracy (synthetic labeled corpus)
 
