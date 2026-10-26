@@ -28,26 +28,36 @@ jobs:
                   java-version: "21"
                   cache: "maven"
 
-            # Cache the Dependency-Check data directory to speed up the NVD update process
-            - name: Cache OWASP Dependency Check Data
-              uses: actions/cache@v6
-              with:
-                  path: ~/.m2/repository/org/owasp/dependency-check-data
-                  key: ${{ runner.os }}-odc-${{ github.run_number }}
-                  restore-keys: |
-                      ${{ runner.os }}-odc-
+            # abuse.ch retired the keyless MalwareBazaar export URLs (they
+            # now answer HTTP 410 Gone). Exports require a free Auth-Key,
+            # supplied here from the ABUSECH_AUTH_KEY repository secret.
+            # Fail fast with a clear message when it is missing, instead of
+            # letting the test fail later with an unrelated "0 hashes".
+            - name: Require abuse.ch Auth-Key
+              env:
+                    ABUSECH_AUTH_KEY: ${{ secrets.ABUSECH_AUTH_KEY }}
+              run: |
+                  if [ -z "$ABUSECH_AUTH_KEY" ]; then
+                      echo "::error::Repository secret ABUSECH_AUTH_KEY is not set. Create a free Auth-Key at https://auth.abuse.ch/ and add it under Settings > Secrets and variables > Actions."
+                      exit 1
+                  fi
 
             # Deliberately its own profile (live-feed-check), never
             # -Ppressure: this test hits real internet infrastructure
-            # (bazaar.abuse.ch) and must never be able to block a PR merge
-            # if that third party is briefly slow or down. See the
+            # (abuse.ch MalwareBazaar) and must never be able to block a PR
+            # merge if that third party is briefly slow or down. See the
             # class-level Javadoc on ThreatIntelLiveFeedIT for the full
             # rationale, and docs/plans/real-world-testing-phase-plan.md,
             # Phase 3.
+            #
+            # dependency-check is bound to the verify lifecycle globally, so
+            # it is skipped here: it spent about 70 s of a 100 s run on an NVD
+            # update that has nothing to do with this check, and
+            # dependency_check.yml already covers it.
             - name: Check live MalwareBazaar feed integration
               env:
-                    NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
-              run: mvn -B verify -Plive-feed-check -DnvdApiKey="$NVD_API_KEY" --file pom.xml
+                    ABUSECH_AUTH_KEY: ${{ secrets.ABUSECH_AUTH_KEY }}
+              run: mvn -B verify -Plive-feed-check -Ddependency-check.skip=true --file pom.xml
 
             - name: Upload failsafe reports
               if: always()
@@ -60,4 +70,4 @@ jobs:
             - name: Notify on failure
               if: failure()
               run: |
-                  echo "::error::The live MalwareBazaar recent-feed check failed. This means either the feed is down, or its export format changed and ThreatIntelSignatureService.extractSha256Signatures() needs updating, either way it's worth a look before assuming known-hash detection still works in production. See the failsafe-reports artifact and the job log above for the parsed hash count."
+                  echo "::error::The live MalwareBazaar recent-feed check failed. Check the job log for the HTTP status first: 401/403 means the ABUSECH_AUTH_KEY secret is invalid or revoked, 410 means abuse.ch retired the endpoint being called, and a 200 with a low hash count means the export format changed and ThreatIntelSignatureService.extractSha256Signatures() needs updating. Either way it is worth a look before assuming known-hash detection still works in production. See the failsafe-reports artifact for the parsed hash count."

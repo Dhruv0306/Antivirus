@@ -5,6 +5,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -157,6 +158,71 @@ class ThreatIntelSignatureServiceTest {
         List<String> lines = Files.readAllLines(cacheFile);
         assertTrue(lines.contains(cachedHash));
         assertTrue(lines.contains(fetchedHash));
+    }
+
+    // ── abuse.ch Auth-Key handling ──────────────────────────────────
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void refreshFromRemote_ShouldSubstituteAuthKeyIntoFeedUrl() throws Exception {
+        ReflectionTestUtils.setField(service, "feedUrlsConfig", ThreatIntelSignatureService.DEFAULT_FEED_URL);
+        ReflectionTestUtils.setField(service, "authKey", " testkey123 ");
+        stubFeedResponse(200, "2f081ff5029565aef3c185f676430418a54b114bf75c640dd858e4d38f12de02\n");
+
+        int count = service.refreshFromRemote();
+
+        assertEquals(1, count);
+        ArgumentCaptor<HttpRequest> captor = ArgumentCaptor.forClass(HttpRequest.class);
+        verify(httpClient).send(captor.capture(), any(HttpResponse.BodyHandler.class));
+        assertEquals("https://mb-api.abuse.ch/v2/files/exports/testkey123/recent.csv",
+                captor.getValue().uri().toString());
+    }
+
+    @Test
+    void refreshFromRemote_ShouldSkipKeyedFeedWithoutCallingNetworkWhenKeyMissing() {
+        ReflectionTestUtils.setField(service, "feedUrlsConfig", ThreatIntelSignatureService.DEFAULT_FEED_URL);
+        ReflectionTestUtils.setField(service, "authKey", "");
+
+        int count = service.refreshFromRemote();
+
+        assertEquals(0, count);
+        verifyNoInteractions(httpClient);
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void refreshFromRemote_ShouldLeaveFeedUrlsWithoutPlaceholderUntouched() throws Exception {
+        ReflectionTestUtils.setField(service, "authKey", "testkey123");
+        stubFeedResponse(200, "");
+
+        service.refreshFromRemote();
+
+        ArgumentCaptor<HttpRequest> captor = ArgumentCaptor.forClass(HttpRequest.class);
+        verify(httpClient).send(captor.capture(), any(HttpResponse.BodyHandler.class));
+        assertEquals("https://example.invalid/feed.txt", captor.getValue().uri().toString());
+    }
+
+    @Test
+    void redact_ShouldMaskRawAndEncodedKeyAndTolerateBlankInput() {
+        assertEquals("GET https://h/***/x failed",
+                ThreatIntelSignatureService.redact("GET https://h/abc123/x failed", "abc123"));
+        assertEquals("a***b", ThreatIntelSignatureService.redact("a%2Fk%3Db", "/k="));
+        assertEquals("unchanged", ThreatIntelSignatureService.redact("unchanged", ""));
+        assertEquals("unchanged", ThreatIntelSignatureService.redact("unchanged", null));
+        assertNull(ThreatIntelSignatureService.redact(null, "abc123"));
+    }
+
+    @Test
+    void extractSha256Signatures_ShouldParseCsvRowsAndIgnoreOtherHashColumns() {
+        String sha256 = "2f081ff5029565aef3c185f676430418a54b114bf75c640dd858e4d38f12de02";
+        String md5 = "d41d8cd98f00b204e9800998ecf8427e";
+        String sha3 = "a".repeat(96);
+        String csv = "# first_seen_utc,sha256_hash,md5_hash,sha1_hash,sha3_384\n"
+                + "\"2026-10-25 09:00:00\",\"" + sha256 + "\",\"" + md5 + "\",\"" + sha3 + "\"\n";
+
+        Set<String> found = ThreatIntelSignatureService.extractSha256Signatures(csv);
+
+        assertEquals(Set.of(sha256), found);
     }
 
     // ── extractSha256Signatures() ───────────────────────────────────
