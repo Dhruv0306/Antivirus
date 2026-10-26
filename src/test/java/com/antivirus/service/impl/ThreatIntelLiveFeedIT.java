@@ -9,6 +9,8 @@ import java.nio.file.Path;
 import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * Phase 3: nightly-only integrity check for the real, live MalwareBazaar
@@ -33,6 +35,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * there is no second, potentially-stale copy of the parsing logic to keep
  * in sync.
  *
+ * Needs a free abuse.ch Auth-Key in the ABUSECH_AUTH_KEY environment
+ * variable (abuse.ch retired the keyless export URLs, they answer HTTP
+ * 410). In GitHub Actions a missing key fails the test; locally it skips.
+ *
  * Read-only and hash-only: no fetched hash is ever asserted against,
  * inspected, or persisted anywhere this test controls (the cache file is
  * redirected to a JUnit @TempDir specifically so this never touches the
@@ -44,11 +50,18 @@ class ThreatIntelLiveFeedIT {
 
     @Test
     void liveMalwareBazaarFeedReturnsANonTrivialHashCount(@TempDir Path tempDir) {
+        String authKey = System.getenv("ABUSECH_AUTH_KEY");
+        boolean hasKey = authKey != null && !authKey.isBlank();
+        if (!hasKey && "true".equals(System.getenv("GITHUB_ACTIONS"))) {
+            fail("ABUSECH_AUTH_KEY is not set; add it as a repository secret (free key at https://auth.abuse.ch/).");
+        }
+        assumeTrue(hasKey, "ABUSECH_AUTH_KEY not set, skipping live MalwareBazaar check");
+
         ThreatIntelSignatureService service = new ThreatIntelSignatureService();
         ReflectionTestUtils.setField(service, "threatIntelHttpClient",
                 HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(15)).build());
-        ReflectionTestUtils.setField(service, "feedUrlsConfig",
-                "https://bazaar.abuse.ch/export/txt/sha256/recent/");
+        ReflectionTestUtils.setField(service, "feedUrlsConfig", ThreatIntelSignatureService.DEFAULT_FEED_URL);
+        ReflectionTestUtils.setField(service, "authKey", authKey);
         // Redirect the cache file to a throwaway temp path: refreshFromRemote()
         // persists whatever it fetches, and this test must never write into
         // the real data/threat-intel-signatures.sha256 file that ships with
@@ -66,9 +79,10 @@ class ThreatIntelLiveFeedIT {
         // real production detection gap that would otherwise go unnoticed
         // until someone asked why a known hash wasn't being caught.
         assertTrue(fetchedCount >= 50,
-                "MalwareBazaar's recent SHA-256 feed returned only " + fetchedCount + " parsed hashes, "
-                        + "expected at least 50. This likely means the feed's export format changed and "
-                        + "ThreatIntelSignatureService.extractSha256Signatures() needs updating, or the "
-                        + "feed is genuinely down, either way this needs a human look, not a silent retry.");
+                "MalwareBazaar's recent feed returned only " + fetchedCount + " parsed hashes, "
+                        + "expected at least 50. Check the HTTP status in the log first: 401/403 means a bad "
+                        + "Auth-Key, 410 means the endpoint was retired. With a 200, the export format likely "
+                        + "changed and ThreatIntelSignatureService.extractSha256Signatures() needs updating. "
+                        + "Either way this needs a human look, not a silent retry.");
     }
 }

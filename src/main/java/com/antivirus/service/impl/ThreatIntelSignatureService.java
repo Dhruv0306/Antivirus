@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -70,11 +71,27 @@ public class ThreatIntelSignatureService {
     @Autowired
     private HttpClient threatIntelHttpClient;
 
-    // NB: the abuse.ch MalwareBazaar "recent" export needs the trailing
-    // /recent/ segment. The bare /export/txt/sha256/ path (without it) is
-    // not the correct endpoint, verify in a browser before changing this.
-    @Value("${app.threat-intel.urls:https://bazaar.abuse.ch/export/txt/sha256/recent/}")
+    /** Token replaced with the abuse.ch Auth-Key when a feed URL is requested. */
+    static final String AUTH_KEY_PLACEHOLDER = "{authKey}";
+
+    /**
+     * abuse.ch retired the keyless MalwareBazaar export URLs (they now answer
+     * HTTP 410 Gone). Exports require a free Auth-Key (https://auth.abuse.ch/)
+     * which goes in the URL path. recent.csv covers the last 48 hours.
+     */
+    static final String DEFAULT_FEED_URL =
+            "https://mb-api.abuse.ch/v2/files/exports/" + AUTH_KEY_PLACEHOLDER + "/recent.csv";
+
+    // Feed URLs may contain {authKey}; it is substituted at request time and
+    // the key is never logged (only the template is).
+    @Value("${app.threat-intel.urls:https://mb-api.abuse.ch/v2/files/exports/{authKey}/recent.csv}")
     private String feedUrlsConfig;
+
+    // abuse.ch Auth-Key. Property app.threat-intel.auth-key, falling back to
+    // the ABUSECH_AUTH_KEY environment variable. Blank means keyed feeds are
+    // skipped with a warning instead of calling a URL that cannot succeed.
+    @Value("${app.threat-intel.auth-key:${ABUSECH_AUTH_KEY:}}")
+    private String authKey = "";
 
     @Value("${app.threat-intel.cache-file:data/threat-intel-signatures.sha256}")
     private String cacheFileConfig;
@@ -145,8 +162,20 @@ public class ThreatIntelSignatureService {
     int refreshFromRemote() {
         Set<String> fetched = new LinkedHashSet<>();
         for (String feedUrl : resolveFeedUrls()) {
+            // feedUrl is the configured template and is the only form that is
+            // ever logged; requestUrl may contain the Auth-Key.
+            String requestUrl = feedUrl;
+            if (feedUrl.contains(AUTH_KEY_PLACEHOLDER)) {
+                if (!hasAuthKey()) {
+                    logger.warn("Threat-intel feed {} needs an abuse.ch Auth-Key (set app.threat-intel.auth-key "
+                            + "or ABUSECH_AUTH_KEY, free key at https://auth.abuse.ch/); skipping", feedUrl);
+                    continue;
+                }
+                requestUrl = feedUrl.replace(AUTH_KEY_PLACEHOLDER,
+                        URLEncoder.encode(authKey.trim(), StandardCharsets.UTF_8));
+            }
             try {
-                HttpRequest request = HttpRequest.newBuilder(URI.create(feedUrl))
+                HttpRequest request = HttpRequest.newBuilder(URI.create(requestUrl))
                         .timeout(Duration.ofSeconds(10))
                         .header("User-Agent", "SecureGuard-Antivirus/1.0")
                         .GET()
@@ -155,15 +184,17 @@ public class ThreatIntelSignatureService {
                         request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
 
                 if (response.statusCode() / 100 != 2) {
-                    logger.warn("Threat-intel feed {} returned HTTP {}", feedUrl, response.statusCode());
+                    logger.warn("Threat-intel feed {} returned HTTP {}{}",
+                            feedUrl, response.statusCode(), statusHint(response.statusCode()));
                     continue;
                 }
                 fetched.addAll(extractSha256Signatures(response.body()));
             } catch (Exception e) {
                 // Deliberately broad: a bad feed must never take down the
                 // refresh task or, via an uncaught exception on this
-                // executor, the JVM's default handler.
-                logger.warn("Failed to load threat-intel feed {}: {}", feedUrl, e.getMessage());
+                // executor, the JVM's default handler. The message is
+                // redacted because exceptions often echo the request URL.
+                logger.warn("Failed to load threat-intel feed {}: {}", feedUrl, redact(e.getMessage(), authKey));
             }
         }
 
@@ -181,6 +212,28 @@ public class ThreatIntelSignatureService {
             logger.warn("No threat-intel signatures were returned by the configured feeds");
         }
         return fetched.size();
+    }
+
+    private boolean hasAuthKey() {
+        return authKey != null && !authKey.isBlank();
+    }
+
+    private static String statusHint(int status) {
+        return switch (status) {
+            case 401, 403 -> " (abuse.ch rejected the Auth-Key; check it is valid and not revoked)";
+            case 410 -> " (endpoint retired by abuse.ch; check the URL against https://bazaar.abuse.ch/export/)";
+            default -> "";
+        };
+    }
+
+    /** Replaces every occurrence of the Auth-Key (raw or URL-encoded) with ***. */
+    static String redact(String text, String key) {
+        if (text == null || key == null || key.isBlank()) {
+            return text;
+        }
+        String trimmed = key.trim();
+        return text.replace(trimmed, "***")
+                .replace(URLEncoder.encode(trimmed, StandardCharsets.UTF_8), "***");
     }
 
     private Set<String> loadCache() {
