@@ -187,8 +187,16 @@ jobs:
                   # reports them as warnings on stderr, so a plain exit-code
                   # check is not enough (verified locally: a deliberately
                   # broken unit with an invalid directive still exits 0).
-                  # Fail the build on any diagnostic output at all.
-                  output=$(systemd-analyze verify /tmp/antivirus-agent.service 2>&1)
+                  # Fail the build on any diagnostic output about OUR unit.
+                  # Diagnostics about the runner image's own vendor units
+                  # (/usr/lib/systemd/..., e.g. systemd 259 warning that
+                  # CPUAccounting= was removed in xfs_scrub_all.service or
+                  # walinuxagent.service) are image noise we don't own and
+                  # can't fix, so they are dropped. Everything else still
+                  # fails, including anything that isn't a recognizable
+                  # vendor-path line.
+                  raw=$(systemd-analyze verify /tmp/antivirus-agent.service 2>&1)
+                  output=$(printf '%s\n' "$raw" | grep -Ev '^(/usr)?/lib/systemd/' | sed '/^$/d' || true)
                   if [ -n "$output" ]; then
                       echo "$output"
                       echo "FAIL: systemd-analyze verify produced diagnostic output, treating any output as a failure"
