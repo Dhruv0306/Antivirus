@@ -70,10 +70,41 @@ jobs:
             - name: Assert agent user can write, an unrelated user cannot
               run: |
                   set -e
-                  sudo -u antivirus-agent test -w /opt/agent-sim/hosts
+                  # Probe with a real write-mode open, not `test -w`. The
+                  # agent's access comes ONLY from a named-user POSIX ACL
+                  # entry (see provision-hosts-acl.sh). GNU `test -w`
+                  # honors ACLs, but ubuntu-latest is moving to Ubuntu
+                  # 26.04, whose default `test` is the Rust uutils one, and
+                  # that one only looks at the owner/group/other mode bits,
+                  # so it reports a file as unwritable even though the ACL
+                  # grants rw (reproduced locally: GNU rc=0, uutils rc=1,
+                  # the kernel agrees with GNU). Opening the file for
+                  # append writes zero bytes, and lets the kernel make the
+                  # real access decision, so this checks the actual
+                  # capability and not one tool's opinion of it.
+                  can_write() { sudo -u "$1" sh -c ': >> "$0"' /opt/agent-sim/hosts 2>/dev/null; }
+                  can_read()  { sudo -u "$1" sh -c ': < "$0"'  /opt/agent-sim/hosts 2>/dev/null; }
+
+                  if ! can_write antivirus-agent; then
+                      echo "FAIL: antivirus-agent should be able to write the throwaway hosts file"
+                      getfacl -p /opt/agent-sim/hosts
+                      exit 1
+                  fi
                   echo "OK: antivirus-agent can write the throwaway hosts file"
-                  if sudo -u nobody test -w /opt/agent-sim/hosts; then
+
+                  # Positive control for the negative check below: 'nobody'
+                  # must be able to READ the file (as with the real
+                  # /etc/hosts). Otherwise an unreachable path would make
+                  # the write check pass without the ACL scoping ever being
+                  # exercised.
+                  if ! can_read nobody; then
+                      echo "FAIL: 'nobody' cannot read the file, so the write check below would pass vacuously"
+                      namei -l /opt/agent-sim/hosts
+                      exit 1
+                  fi
+                  if can_write nobody; then
                       echo "FAIL: unrelated user 'nobody' should NOT be able to write this file"
+                      getfacl -p /opt/agent-sim/hosts
                       exit 1
                   fi
                   echo "OK: unrelated user cannot write, ACL grant is correctly scoped"
@@ -156,8 +187,16 @@ jobs:
                   # reports them as warnings on stderr, so a plain exit-code
                   # check is not enough (verified locally: a deliberately
                   # broken unit with an invalid directive still exits 0).
-                  # Fail the build on any diagnostic output at all.
-                  output=$(systemd-analyze verify /tmp/antivirus-agent.service 2>&1)
+                  # Fail the build on any diagnostic output about OUR unit.
+                  # Diagnostics about the runner image's own vendor units
+                  # (/usr/lib/systemd/..., e.g. systemd 259 warning that
+                  # CPUAccounting= was removed in xfs_scrub_all.service or
+                  # walinuxagent.service) are image noise we don't own and
+                  # can't fix, so they are dropped. Everything else still
+                  # fails, including anything that isn't a recognizable
+                  # vendor-path line.
+                  raw=$(systemd-analyze verify /tmp/antivirus-agent.service 2>&1)
+                  output=$(printf '%s\n' "$raw" | grep -Ev '^(/usr)?/lib/systemd/' | sed '/^$/d' || true)
                   if [ -n "$output" ]; then
                       echo "$output"
                       echo "FAIL: systemd-analyze verify produced diagnostic output, treating any output as a failure"
