@@ -124,7 +124,7 @@ Antivirus/
 ├── frontend/
 │   └── src/{components,api,theme,utils,context}/
 ├── docs/
-│   ├── plans/              # the H1 privilege-split design, rollout runbook, staging checklist, retrospective
+│   ├── plans/              # the H1 privilege-split design, rollout runbook, staging checklist, retrospective, Rust clients follow-ups
 │   └── deployment/         # provision-agent-db-role.sql
 └── .github/workflows/      # CI: build, unit tests, security scans, release
 ```
@@ -166,6 +166,8 @@ See `system-agent/deploy/README.md`. It can run standalone against the same loca
 | Frontend env vars | `frontend/.env.example` (copy to `.env.development` for local overrides; Vite does not read `.env.dev`) |
 
 Key environment variables: `DB_URL`, `DB_USERNAME`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `CORS_ALLOWED_ORIGINS`, `TRUSTED_PROXY_IPS`, `QUARANTINE_DIR`, `SYSTEM_SCAN_RESULT_CHUNK_SIZE`.
+
+**Threat-intel feed (abuse.ch Auth-Key).** The known-malware hash feed comes from MalwareBazaar, which now requires a free Auth-Key (the old keyless URL answers HTTP 410). Create one at <https://auth.abuse.ch/> and set it as `ABUSECH_AUTH_KEY` (or `app.threat-intel.auth-key`), the same way as `ADMIN_USERNAME`. Without a key the feed is skipped and a warning says so; hashes already cached stay. The key is never logged. The nightly feed check reads it from the `ABUSECH_AUTH_KEY` repository secret. See `docs/plans/rust-clients-follow-ups.md` for the rest of what the Rust clients work found in this repository.
 
 ## Database and migrations
 
