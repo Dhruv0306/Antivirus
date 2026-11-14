@@ -44,9 +44,24 @@ jobs:
               run: sudo apt-get update && sudo apt-get install -y upx-ucl
 
             - name: Run pressure/load/accuracy suite
-              env:
-                  NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
-              run: mvn -B verify -Ppressure -DnvdApiKey="$NVD_API_KEY"
+              run: set +e
+                  if [ -n "${{secrets.NVD_API_KEY}}" ]; then
+                  export NVD_API_KEY="${{secrets.NVD_API_KEY}}"
+                  echo "NVD_API_KEY is set"
+                  mvn -B verify -Ppressure -DnvdApiDelay=6000 -DnvdMaxRetryCount=20
+                  else
+                  unset NVD_API_KEY
+                  echo "NVD_API_KEY is not set"
+                  mvn -B verify -Ppressure -DnvdApiDelay=6000 -DnvdMaxRetryCount=20
+                  fi
+
+                  status=${PIPESTATUS[0]}
+
+                  if [ $status -eq 0 ]; then
+                  exit 0
+                  fi
+
+                  exit "$status"
 
             - name: Upload failsafe reports
               if: always()
