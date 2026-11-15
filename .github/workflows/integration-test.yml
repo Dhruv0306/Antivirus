@@ -35,11 +35,11 @@ jobs:
                   if [ -n "${{ secrets.NVD_API_KEY }}" ]; then
                     export NVD_API_KEY="${{ secrets.NVD_API_KEY }}"
                     echo "NVD_API_KEY is set"
-                    mvn -B verify -Pintegration -DnvdApiKey="$NVD_API_KEY"
+                    mvn -B verify -Pintegration -DnvdApiKey="$NVD_API_KEY" -DnvdApiDelay=6000 -DnvdMaxRetryCount=20
                   else
                     unset NVD_API_KEY
                     echo "NVD_API_KEY is not set"
-                    mvn -B verify -Pintegration -DautoUpdate=false
+                    mvn -B verify -Pintegration -DautoUpdate=false -DnvdApiDelay=6000 -DnvdMaxRetryCount=20
                   fi
 
             - name: Upload failsafe reports
