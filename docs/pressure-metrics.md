@@ -1,6 +1,6 @@
 # Pressure and accuracy metrics
 
-_Last generated: 2026-11-21 16:01:24 (UTC), by `.github/workflows/pressure-test.yml`._
+_Last generated: 2026-11-22 16:04:25 (UTC), by `.github/workflows/pressure-test.yml`._
 
 Regenerated automatically on every scheduled or manually-dispatched run of the pressure suite (`mvn verify -Ppressure`). See the `*IT.java` classes under `src/test/java/com/antivirus/pressure/` for what each number below actually measures, and `scripts/generate_pressure_report.py` for how this file and the per-section `pressure-metrics-*.svg` images in README.md are rendered from the raw JSON in `target/pressure-metrics/`.
 
